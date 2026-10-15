@@ -1,0 +1,2924 @@
+<roblox version="4">
+  <Item class="Lighting" referent="0">
+    <Properties>
+      <string name="Name">Lighting</string>
+      <float name="Brightness">2</float>
+      <float name="ClockTime">18.5</float>
+    </Properties>
+  </Item>
+  <Item class="ReplicatedStorage" referent="1">
+    <Properties>
+      <string name="Name">ReplicatedStorage</string>
+    </Properties>
+    <Item class="Folder" referent="2">
+      <Properties>
+        <string name="Name">CatchShared</string>
+      </Properties>
+      <Item class="ModuleScript" referent="3">
+        <Properties>
+          <string name="Name">Catalog</string>
+          <string name="Source"><![CDATA[-- Original cosmetics, all cosmetic-only. Enter real experience pass IDs here.
+-- The Robux price shown here is a design price: set the matching price in Creator
+-- Dashboard. Roblox's purchase prompt remains the authority for charged prices.
+local Catalog = {}
+Catalog.Categories = {
+	{id="skins",label="Skins"}, {id="masks",label="Masks"},
+	{id="trails",label="Trails"}, {id="emotes",label="Emotes"},
+	{id="tagEffects",label="Tag effects"}, {id="victories",label="Victories"},
+	{id="nameplates",label="Nameplates"}, {id="bundles",label="Bundles"},
+	{id="vip",label="VIP"},
+}
+local entries = {
+	{id="skin_courier",category="skins",name="Midnight Courier",description="Asymmetric messenger straps, amber headphones and city-ready high tops.",currency="Free",price=0,rarity="Common",accent={255,190,95}},
+	{id="skin_rooftop",category="skins",name="Rooftop Ace",description="An aqua parkour jacket, utility harness and bold runner fins. Reach level 5.",currency="Milestone",price=0,milestone={stat="level",value=5},rarity="Rare",accent={73,234,219}},
+	{id="skin_gardener",category="skins",name="Skygarden Keeper",description="Botanical shoulder leaves, a canvas apron and a pocket of rooftop flowers.",currency="Coins",price=650,rarity="Rare",accent={152,219,151}},
+	{id="skin_shadow",category="skins",name="Shadow Runner",description="A sculpted midnight hood, split cape and violet stealth harness.",currency="Robux",price=299,gamePassId=0,rarity="Epic",accent={164,129,255}},
+	{id="skin_golden",category="skins",name="Golden Phantom",description="Art deco gilded armor, a floating halo and a royal black coat.",currency="Robux",price=599,gamePassId=0,rarity="Legendary",accent={255,204,91}},
+	{id="skin_neon",category="skins",name="Neon Outlaw",description="An oversized tech collar, cyan light piping and a magenta back reactor.",currency="Robux",price=399,gamePassId=0,rarity="Epic",accent={62,233,255}},
+	{id="skin_crimson",category="skins",name="Crimson Hunter",description="Angular red pauldrons, a high tactical collar and a split battle sash.",currency="Robux",price=499,gamePassId=0,rarity="Epic",accent={255,88,109}},
+	{id="mask_street",category="masks",name="Street Signal",description="A clean teal respirator with bright side filters. Yours from the start.",currency="Free",price=0,rarity="Common",accent={88,228,206}},
+	{id="mask_visor",category="masks",name="Prism Visor",description="A luminous wraparound lens with independent temple plates.",currency="Coins",price=180,rarity="Rare",accent={94,218,255}},
+	{id="mask_phantom",category="masks",name="Phantom Mask",description="An ivory asymmetrical phantom face with a violet tear detail.",currency="Robux",price=149,gamePassId=0,rarity="Epic",accent={202,188,255}},
+	{id="mask_kitsune",category="masks",name="Kitsune Mask",description="Sculpted fox ears, an ivory muzzle and vermilion markings.",currency="Robux",price=199,gamePassId=0,rarity="Epic",accent={255,119,104}},
+	{id="mask_skull",category="masks",name="Gold Skull Mask",description="A gilded skull silhouette with dark orbital sockets and individual teeth.",currency="Robux",price=349,gamePassId=0,rarity="Legendary",accent={255,204,91}},
+	{id="trail_cyan",category="trails",name="Afterglow",description="A restrained cyan ribbon that wakes up while you sprint.",currency="Coins",price=250,rarity="Rare",accent={87,238,237}},
+	{id="trail_sunset",category="trails",name="Sunset Circuit",description="Warm coral light for runners who have earned 20 wins.",currency="Milestone",price=0,milestone={stat="wins",value=20},rarity="Epic",accent={255,140,117}},
+	{id="tag_spark",category="tagEffects",name="Signal Burst",description="A crisp cyan pulse on every successful catch.",currency="Free",price=0,rarity="Common",accent={81,231,240}},
+	{id="tag_bloom",category="tagEffects",name="Cherry Bloom",description="A coral burst of city petals. Unlock after 50 tags.",currency="Milestone",price=0,milestone={stat="tags",value=50},rarity="Epic",accent={255,128,174}},
+	{id="victory_wave",category="victories",name="City Salute",description="Wave to the whole skyline from the winners' podium.",currency="Free",price=0,rarity="Common",accent={121,228,231}},
+	{id="victory_spin",category="victories",name="Victory Lap",description="An animated podium turn with neon confetti.",currency="Coins",price=350,rarity="Rare",accent={255,190,95}},
+	{id="emote_wave",category="emotes",name="Hey, Neighbor",description="A friendly wave in the lobby or after a round.",currency="Free",price=0,rarity="Common",accent={112,215,242}},
+	{id="emote_dance",category="emotes",name="Rooftop Shuffle",description="A quick shoulder-and-step dance for your crew.",currency="Coins",price=220,rarity="Rare",accent={221,151,255}},
+	{id="name_rookie",category="nameplates",name="CITY NEWCOMER",description="Every rooftop legend starts somewhere.",currency="Free",price=0,rarity="Common",accent={172,193,208}},
+	{id="name_survivor",category="nameplates",name="UNTOUCHABLE",description="Earn 10 wins and let your name do the talking.",currency="Milestone",price=0,milestone={stat="wins",value=10},rarity="Rare",accent={87,238,237}},
+	{id="name_legend",category="nameplates",name="SKYLINE LEGEND",description="Reach level 30. A badge of long-term city mastery.",currency="Milestone",price=0,milestone={stat="level",value=30},rarity="Legendary",accent={255,204,91}},
+	{id="bundle_night",category="bundles",name="Nightfall Collection",description="Shadow Runner, Phantom Mask and Afterglow trail. Appearance only.",currency="Robux",price=649,gamePassId=0,grants={"skin_shadow","mask_phantom","trail_cyan"},rarity="Legendary",accent={164,129,255}},
+	{id="vip_founder",category="vip",name="Neon Social Club",description="Neon Outlaw, Prism Visor and Rooftop Shuffle. No XP, speed or currency boosts.",currency="Robux",price=699,gamePassId=0,grants={"skin_neon","mask_visor","emote_dance"},rarity="Legendary",accent={255,204,91}},
+}
+Catalog.Items = {}
+for order, item in ipairs(entries) do
+	item.order = order
+	Catalog.Items[item.id] = item
+end
+Catalog.DefaultEquipment = {
+	skins="skin_courier", masks="", trails="", tagEffects="tag_spark",
+	victories="victory_wave", emotes="emote_wave", nameplates="name_rookie",
+}
+function Catalog.Get(id) return Catalog.Items[id] end
+function Catalog.ForCategory(category)
+	local result = {}
+	for _, item in ipairs(entries) do
+		if item.category == category then table.insert(result, item) end
+	end
+	return result
+end
+function Catalog.IsEquippable(category)
+	return Catalog.DefaultEquipment[category] ~= nil
+end
+function Catalog.DefaultOwned()
+	local owned = {}
+	for _, item in ipairs(entries) do
+		if item.currency == "Free" then owned[item.id] = true end
+	end
+	return owned
+end
+return Catalog
+]]></string>
+        </Properties>
+      </Item>
+      <Item class="ModuleScript" referent="4">
+        <Properties>
+          <string name="Name">Config</string>
+          <string name="Source"><![CDATA[-- Shared tunables. Prices and pass IDs live in Catalog.lua.
+local Config = {
+	GameName = "CATCH ME IF YOU CAN",
+	Version = "0.1.0",
+	Round = {
+		MaxPlayers = 12, MinimumPlayers = 2, Duration = 180, Intermission = 16,
+		ResultsDuration = 10, HeadStart = 5, FinalSeconds = 30, RespawnDelay = 2,
+		StudioSolo = true,
+	},
+	Movement = {
+		WalkSpeed = 17, RunnerSprint = 26, HunterSprint = 27, Acceleration = 7,
+		JumpPower = 48, SlideSpeed = 35, SlideDuration = 0.65, SlideCooldown = 3,
+		VaultCooldown = 1.1, VaultDistance = 5, VaultHeight = 4.5,
+		TagRange = 5.8, TagCooldown = 0.65,
+	},
+	Persistence = {
+		StoreName = "CatchMeIfYouCan_v1", AutosaveSeconds = 60, Retries = 3,
+		UseStudioDataStores = false, SessionLockSeconds = 180,
+	},
+	Progression = {
+		RoundXP = 45, WinXP = 80, TagXP = 25, SurvivalXPPerSecond = 0.4,
+		RoundCoins = 12, WinCoins = 25, TagCoins = 6,
+	},
+	-- Only set IDs for audio you own or have permission to use in this experience.
+	-- Zero disables that sound gracefully; all actions also have visual feedback.
+	Audio = {
+		Music = 0, Sprint = 0, Slide = 0, Vault = 0, Tag = 0, Win = 0, Lose = 0,
+		Level = 0, Countdown = 0, Final = 0, Purchase = 0,
+	},
+}
+return table.freeze(Config)
+]]></string>
+        </Properties>
+      </Item>
+      <Item class="ModuleScript" referent="5">
+        <Properties>
+          <string name="Name">Rules</string>
+          <string name="Source"><![CDATA[-- Pure domain rules. Works in Roblox and in the standalone Luau test runner.
+local Catalog = if script then require(script.Parent.Catalog) else require("./Catalog")
+local Rules = {}
+local MAX_NUMBER = 1000000000
+local function integer(value, fallback, maximum)
+	if type(value) ~= "number" or value ~= value or math.abs(value) == math.huge then return fallback end
+	return math.clamp(math.floor(value), 0, maximum or MAX_NUMBER)
+end
+function Rules.HunterCount(count)
+	count = integer(count, 0, 12)
+	if count < 2 then return 0 end
+	return if count >= 7 then 2 else 1
+end
+function Rules.XPForLevel(level)
+	level = math.clamp(integer(level, 1, 10000), 1, 10000)
+	return 100 * (level - 1) + 25 * (level - 1) * (level - 1)
+end
+function Rules.LevelFromXP(xp)
+	xp = integer(xp, 0)
+	return math.floor((-100 + math.sqrt(10000 + 100 * xp)) / 50) + 1
+end
+function Rules.Rank(rating)
+	rating = integer(rating, 1000)
+	if rating >= 1800 then return "Skyline Elite" end
+	if rating >= 1500 then return "Diamond" end
+	if rating >= 1250 then return "Gold" end
+	if rating >= 1000 then return "Silver" end
+	return "Bronze"
+end
+function Rules.DayKey(timestamp)
+	return os.date("!%Y-%m-%d", timestamp or os.time())
+end
+function Rules.DailyQuests(_dayKey)
+	return {
+		{id="play_3",text="Finish 3 competitive rounds",stat="rounds",goal=3,xp=100,coins=40},
+		{id="tag_5",text="Catch 5 runners",stat="tags",goal=5,xp=125,coins=50},
+		{id="survive_120",text="Survive for 120 seconds",stat="survived",goal=120,xp=100,coins=40},
+	}
+end
+function Rules.NewProfile(now)
+	return {
+		schemaVersion=1, coins=0, xp=0, level=1, rating=1000, streak=0, bestStreak=0,
+		stats={rounds=0,wins=0,hunterWins=0,runnerWins=0,tags=0,survived=0},
+		owned=Catalog.DefaultOwned(), equipped=table.clone(Catalog.DefaultEquipment),
+		settings={music=true,sfx=true,reducedMotion=false,cameraShake=true},
+		daily={day=Rules.DayKey(now),progress={rounds=0,tags=0,survived=0},claimed={}},
+		achievements={},
+	}
+end
+function Rules.NormalizeProfile(raw, now)
+	local result = Rules.NewProfile(now)
+	if type(raw) ~= "table" then return result end
+	for _, key in ipairs({"coins","xp","rating","streak","bestStreak"}) do
+		result[key] = integer(raw[key], result[key])
+	end
+	result.level = Rules.LevelFromXP(result.xp)
+	result.bestStreak = math.max(result.bestStreak, result.streak)
+	if type(raw.stats) == "table" then
+		for key in pairs(result.stats) do result.stats[key] = integer(raw.stats[key], 0) end
+	end
+	if type(raw.owned) == "table" then
+		for id, owned in pairs(raw.owned) do
+			if type(id) == "string" and Catalog.Get(id) and owned == true then result.owned[id] = true end
+		end
+	end
+	if type(raw.equipped) == "table" then
+		for category in pairs(result.equipped) do
+			local id = raw.equipped[category]
+			local item = type(id) == "string" and Catalog.Get(id)
+			if id == "" then result.equipped[category] = ""
+			elseif item and item.category == category and result.owned[id] then result.equipped[category] = id end
+		end
+	end
+	if type(raw.settings) == "table" then
+		for key in pairs(result.settings) do
+			if type(raw.settings[key]) == "boolean" then result.settings[key] = raw.settings[key] end
+		end
+	end
+	if type(raw.daily) == "table" and raw.daily.day == result.daily.day then
+		if type(raw.daily.progress) == "table" then
+			for key in pairs(result.daily.progress) do result.daily.progress[key] = integer(raw.daily.progress[key], 0) end
+		end
+		if type(raw.daily.claimed) == "table" then
+			for _, quest in ipairs(Rules.DailyQuests(result.daily.day)) do
+				if raw.daily.claimed[quest.id] == true then result.daily.claimed[quest.id] = true end
+			end
+		end
+	end
+	if type(raw.achievements) == "table" then
+		for id, value in pairs(raw.achievements) do
+			if type(id) == "string" and #id < 80 and (value == true or type(value) == "number") then
+				result.achievements[id] = if value == true then true else integer(value, 0)
+			end
+		end
+	end
+	return result
+end
+function Rules.QuestProgress(profile, quest)
+	local progress = profile.daily and profile.daily.progress or {}
+	return math.clamp(integer(progress[quest.stat], 0), 0, quest.goal)
+end
+function Rules.RoundReward(summary, config)
+	if summary.practice then return {xp=0,coins=0,rating=0} end
+	local progression = config.Progression or config
+	local tags = if summary.role == "Hunter" then integer(summary.tags, 0, 10) else 0
+	local survived = if summary.role == "Runner" then integer(summary.survived, 0, 180) else 0
+	local win = summary.win == true
+	return {
+		xp=math.floor(progression.RoundXP + tags * progression.TagXP + survived * progression.SurvivalXPPerSecond + (if win then progression.WinXP else 0)),
+		coins=progression.RoundCoins + tags * progression.TagCoins + (if win then progression.WinCoins else 0),
+		rating=if win then 24 else -14,
+	}
+end
+return Rules
+]]></string>
+        </Properties>
+      </Item>
+    </Item>
+  </Item>
+  <Item class="ServerScriptService" referent="6">
+    <Properties>
+      <string name="Name">ServerScriptService</string>
+    </Properties>
+    <Item class="Folder" referent="7">
+      <Properties>
+        <string name="Name">CatchServer</string>
+      </Properties>
+      <Item class="Script" referent="8">
+        <Properties>
+          <string name="Name">Main</string>
+          <token name="RunContext">0</token>
+          <string name="Source"><![CDATA[-- The server is the only authority for rounds, movement intent, inventory and rewards.
+local Players = game:GetService("Players")
+local ReplicatedStorage = game:GetService("ReplicatedStorage")
+Players.CharacterAutoLoads = false
+local shared = ReplicatedStorage:WaitForChild("CatchShared")
+local Config = require(shared.Config)
+local Catalog = require(shared.Catalog)
+local Rules = require(shared.Rules)
+local MapBuilder = require(script.Parent.World.MapBuilder)
+
+local remotesFolder = Instance.new("Folder")
+remotesFolder.Name = "CatchRemotes"
+local remotes = {}
+for _, name in ipairs({"State", "Action", "Profile", "Notice", "Query"}) do
+	local remote = Instance.new(if name == "Query" then "RemoteFunction" else "RemoteEvent")
+	remote.Name = name
+	remote.Parent = remotesFolder
+	remotes[name] = remote
+end
+local ctx = {Config=Config, Catalog=Catalog, Rules=Rules, Remotes=remotes, Services={}}
+ctx.World = MapBuilder.Build()
+for _, name in ipairs({"DataService", "CosmeticService", "ShopService", "MovementService", "RoundService"}) do
+	ctx.Services[name] = require(script.Parent.Services[name]).new(ctx)
+end
+
+local limits = {
+	Sprint={capacity=6,refill=4}, Slide={capacity=3,refill=1}, Vault={capacity=5,refill=3},
+	Tag={capacity=5,refill=4}, Equip={capacity=4,refill=2}, Buy={capacity=2,refill=0.5},
+	ClaimQuest={capacity=3,refill=1}, Settings={capacity=4,refill=2}, Emote={capacity=2,refill=0.5},
+}
+local buckets = {}
+local queryTimes = {}
+local function allow(player, action)
+	local rule = limits[action]
+	if not rule then return false end
+	local byPlayer = buckets[player]
+	if not byPlayer then byPlayer = {}; buckets[player] = byPlayer end
+	local now = os.clock()
+	local bucket = byPlayer[action] or {tokens=rule.capacity,time=now}
+	byPlayer[action] = bucket
+	bucket.tokens = math.min(rule.capacity, bucket.tokens + (now-bucket.time)*rule.refill)
+	bucket.time = now
+	if bucket.tokens < 1 then return false end
+	bucket.tokens -= 1
+	return true
+end
+local function validPayload(payload)
+	if type(payload) ~= "table" then return false end
+	local count = 0
+	for key, value in pairs(payload) do
+		count += 1
+		if count > 8 or type(key) ~= "string" or #key > 30 then return false end
+		if type(value) == "string" then
+			if #value > 80 then return false end
+		elseif type(value) ~= "boolean" then return false end
+	end
+	return true
+end
+local function dispatch(player, action, payload)
+	if type(action) ~= "string" or #action > 20 or not allow(player, action) then return end
+	payload = payload or {}
+	if not validPayload(payload) or not ctx.Services.DataService:Ready(player) then return end
+	if action == "Sprint" or action == "Slide" or action == "Vault" then
+		ctx.Services.MovementService:Handle(player, action, payload)
+	elseif action == "Tag" then
+		ctx.Services.RoundService:TryTag(player)
+	elseif action == "Equip" then
+		if type(payload.category)=="string" and type(payload.id)=="string" then ctx.Services.DataService:Equip(player,payload.category,payload.id) end
+	elseif action == "Buy" then
+		if type(payload.id)=="string" then ctx.Services.ShopService:Purchase(player,payload.id) end
+	elseif action == "ClaimQuest" then
+		if type(payload.id)=="string" then ctx.Services.DataService:ClaimQuest(player,payload.id) end
+	elseif action == "Settings" then
+		ctx.Services.DataService:UpdateSettings(player, payload)
+	elseif action == "Emote" then
+		if type(payload.id)=="string" then ctx.Services.CosmeticService:Emote(player,payload.id) end
+	end
+end
+remotes.Action.OnServerEvent:Connect(function(player, action, payload)
+	local ok, err = pcall(dispatch, player, action, payload)
+	if not ok then warn("[Catch] Action failed:", action, err) end
+end)
+remotes.Query.OnServerInvoke = function(player)
+	local now = os.clock()
+	if queryTimes[player] and now-queryTimes[player] < 0.75 then return nil end
+	queryTimes[player] = now
+	return {state=ctx.Services.RoundService:Snapshot(),profile=ctx.Services.DataService:Snapshot(player)}
+end
+Players.PlayerRemoving:Connect(function(player) buckets[player]=nil; queryTimes[player]=nil end)
+for _, name in ipairs({"DataService", "CosmeticService", "ShopService", "MovementService", "RoundService"}) do
+	local service = ctx.Services[name]
+	if service.Start then service:Start() end
+end
+-- Publish only after handlers and service state are initialized.
+remotesFolder.Parent = ReplicatedStorage
+print("[Catch] Neon Heights initialized. " .. Config.Version)
+]]></string>
+        </Properties>
+      </Item>
+      <Item class="Folder" referent="9">
+        <Properties>
+          <string name="Name">Services</string>
+        </Properties>
+        <Item class="ModuleScript" referent="10">
+          <Properties>
+            <string name="Name">DataService</string>
+            <string name="Source"><![CDATA[-- Server-owned profiles. Every persistent write holds a renewable UpdateAsync lease.
+-- Gameplay mutations never yield; saves take immutable snapshots and preserve newer edits.
+local Players = game:GetService("Players")
+local DataStoreService = game:GetService("DataStoreService")
+local HttpService = game:GetService("HttpService")
+local RunService = game:GetService("RunService")
+
+local DataService = {}
+DataService.__index = DataService
+
+local FORMAT = "CatchMeIfYouCan.profile.v1"
+local MAX_COUNTER = 1000000000
+local ACHIEVEMENTS = {
+	{ id = "first_round", name = "First chase", stat = "rounds", goal = 1 },
+	{ id = "first_win", name = "First victory", stat = "wins", goal = 1 },
+	{ id = "tag_10", name = "Tracker", stat = "tags", goal = 10 },
+	{ id = "survivor_600", name = "Untouchable", stat = "survived", goal = 600 },
+	{ id = "veteran_25", name = "City regular", stat = "rounds", goal = 25 },
+	{ id = "streak_3", name = "On a roll", stat = "bestStreak", goal = 3 },
+}
+
+local function clone(value)
+	if type(value) ~= "table" then return value end
+	local copy = {}
+	for key, child in pairs(value) do copy[key] = clone(child) end
+	return copy
+end
+
+local function number(value, minimum, maximum)
+	if type(value) ~= "number" or value ~= value or math.abs(value) == math.huge then return minimum end
+	return math.clamp(math.floor(value), minimum, maximum)
+end
+
+local function add(value, amount)
+	return number(value + amount, 0, MAX_COUNTER)
+end
+
+-- A future schema, malformed record, or unknown envelope is never replaced with defaults.
+local function decode(raw)
+	if raw == nil then return nil, nil end
+	if type(raw) ~= "table" then return nil, "unsupported" end
+	if raw._format == FORMAT then
+		if type(raw.profile) ~= "table" or raw.profile.schemaVersion ~= 1 then return nil, "unsupported" end
+		if raw.session ~= nil then
+			if type(raw.session) ~= "table" or type(raw.session.id) ~= "string"
+				or type(raw.session.expiresAt) ~= "number" or raw.session.expiresAt ~= raw.session.expiresAt
+				or math.abs(raw.session.expiresAt) == math.huge then return nil, "unsupported" end
+		end
+		return raw, nil
+	end
+	-- Supports the documented initial flat schema without accepting unrelated tables.
+	if raw._format == nil and raw.schemaVersion == 1 and type(raw.stats) == "table"
+		and type(raw.owned) == "table" and type(raw.equipped) == "table" then
+		return { _format = FORMAT, profile = raw }, nil
+	end
+	return nil, "unsupported"
+end
+
+function DataService.new(ctx)
+	local self = setmetatable({}, DataService)
+	self.ctx = ctx
+	self.records = {}
+	self.sessionId = (game.JobId ~= "" and game.JobId or "studio") .. ":" .. HttpService:GenerateGUID(false)
+	self.config = ctx.Config.Persistence
+	self.sessionOnly = RunService:IsStudio() and self.config.UseStudioDataStores ~= true
+	self.closing = false
+	self.activeLoads = 0
+	if not self.sessionOnly then
+		local ok, store = pcall(function() return DataStoreService:GetDataStore(self.config.StoreName) end)
+		if ok then self.store = store end
+	end
+	return self
+end
+
+function DataService:_Notice(player, text, kind)
+	if player.Parent == Players then self.ctx.Remotes.Notice:FireClient(player, { kind = kind or "toast", text = text }) end
+end
+
+function DataService:_Sanitize(raw)
+	local profile = self.ctx.Rules.NormalizeProfile(raw, os.time())
+	for id in pairs(profile.owned) do
+		if not self.ctx.Catalog.Get(id) then profile.owned[id] = nil end
+	end
+	for id in pairs(self.ctx.Catalog.DefaultOwned()) do profile.owned[id] = true end
+	for category, id in pairs(profile.equipped) do
+		local item = self.ctx.Catalog.Get(id)
+		if not self.ctx.Catalog.IsEquippable(category) then
+			profile.equipped[category] = nil
+		elseif id ~= "" and (not item or item.category ~= category or not profile.owned[id]) then
+			profile.equipped[category] = self.ctx.Catalog.DefaultEquipment[category] or ""
+		end
+	end
+	return profile
+end
+
+function DataService:_Dirty(record)
+	record.revision += 1
+	if record.writable then record.saveMessage = "Changes pending autosave." end
+end
+
+function DataService:_RollDay(record)
+	local day = self.ctx.Rules.DayKey(os.time())
+	if record.profile.daily.day ~= day then
+		record.profile.daily = { day = day, progress = { rounds = 0, tags = 0, survived = 0 }, claimed = {} }
+		self:_Dirty(record)
+	end
+end
+
+function DataService:_Leaderboard(player, profile)
+	local folder = player:FindFirstChild("leaderstats")
+	if not folder then folder = Instance.new("Folder"); folder.Name = "leaderstats"; folder.Parent = player end
+	local values = { Level = profile.level, Wins = profile.stats.wins, Tags = profile.stats.tags, Rating = profile.rating }
+	for name, value in pairs(values) do
+		local stat = folder:FindFirstChild(name)
+		if not stat then stat = Instance.new("IntValue"); stat.Name = name; stat.Parent = folder end
+		if stat:IsA("IntValue") then stat.Value = value end
+	end
+end
+
+function DataService:_Unlocks(record, notify)
+	local profile = record.profile
+	local changed = false
+	for _, definition in ipairs(ACHIEVEMENTS) do
+		local progress = profile.stats[definition.stat] or profile[definition.stat] or 0
+		if progress >= definition.goal and not profile.achievements[definition.id] then
+			profile.achievements[definition.id] = true
+			changed = true
+			if notify then self:_Notice(record.player, "Achievement: " .. definition.name, "unlock") end
+		end
+	end
+	for id, item in pairs(self.ctx.Catalog.Items) do
+		local milestone = item.milestone
+		if milestone and not profile.owned[id] then
+			local progress = profile.stats[milestone.stat] or profile[milestone.stat] or 0
+			if progress >= milestone.value then
+				profile.owned[id] = true
+				for _, grantedId in ipairs(item.grants or {}) do
+					if self.ctx.Catalog.Get(grantedId) then profile.owned[grantedId] = true end
+				end
+				changed = true
+				if notify then self:_Notice(record.player, "Unlocked " .. item.name, "unlock") end
+			end
+		end
+	end
+	if changed then self:_Dirty(record) end
+end
+
+function DataService:_Load(player)
+	if self.records[player] or self.closing then return end
+	local record = {
+		player = player, loaded = false, accepting = true, departed = false, writable = false,
+		revision = 0, savedRevision = 0, awarded = {}, receipts = {}, saving = false,
+		persistence = self.sessionOnly and "session" or "unavailable",
+	}
+	self.records[player] = record
+	self.activeLoads += 1
+	local loadedProfile, receiptList
+	local failure = "unavailable"
+	if self.store then
+		for attempt = 1, number(self.config.Retries or 3, 1, 5) do
+			if self.closing or record.departed then break end
+			local denied
+			local ok, result = pcall(function()
+				return self.store:UpdateAsync("player_" .. player.UserId, function(raw)
+					denied = nil
+					local current, decodeError = decode(raw)
+					if decodeError then denied = decodeError; return nil end
+					local now = os.time()
+					if current and current.session and current.session.id ~= self.sessionId
+						and current.session.expiresAt > now then denied = "locked"; return nil end
+					local profile = self:_Sanitize(current and current.profile or self.ctx.Rules.NewProfile(now))
+					local receipts = {}
+					for _, receipt in ipairs(current and type(current.receipts) == "table" and current.receipts or {}) do
+						if type(receipt) == "string" and #receipt <= 160 and #receipts < 40 then table.insert(receipts, receipt) end
+					end
+					return {
+						_format = FORMAT, profile = profile, receipts = receipts, updatedAt = now,
+						session = { id = self.sessionId, expiresAt = now + number(self.config.SessionLockSeconds or 180, 90, 600) },
+					}
+				end)
+			end)
+			if ok and result and not denied then
+				loadedProfile, receiptList = result.profile, result.receipts
+				record.writable = true
+				record.persistence = "saved"
+				record.saveMessage = "Saved."
+				break
+			end
+			failure = denied or "unavailable"
+			if denied then break end
+			if attempt < number(self.config.Retries or 3, 1, 5) then task.wait(2 ^ (attempt - 1)) end
+		end
+	end
+	if not loadedProfile then
+		loadedProfile = self.ctx.Rules.NewProfile(os.time())
+		if self.sessionOnly then
+			record.saveMessage = "Studio session only. Progress resets when this test ends."
+		elseif failure == "locked" then
+			record.saveMessage = "Your profile is active on another server. This session will not save; rejoin after leaving that server."
+		elseif failure == "unsupported" then
+			record.saveMessage = "Stored data needs a newer compatible server. Existing data is protected; this session will not save."
+		else
+			record.saveMessage = "Data storage is unavailable. This session will not save; rejoin to retry loading."
+		end
+	end
+	record.profile = self:_Sanitize(loadedProfile)
+	record.receipts = receiptList or {}
+	for _, receipt in ipairs(record.receipts) do record.awarded[receipt] = true end
+	record.loaded = true
+	self:_RollDay(record)
+	self:_Unlocks(record, false)
+	self.activeLoads -= 1
+	if record.departed or self.closing or player.Parent ~= Players then
+		record.accepting = false
+		self:_SaveRecord(record, true)
+		if self.records[player] == record then self.records[player] = nil end
+		return
+	end
+	self:_Leaderboard(player, record.profile)
+	player:SetAttribute("DataReady", true)
+	self:Send(player)
+	if record.persistence ~= "saved" then self:_Notice(player, record.saveMessage) end
+	local cosmeticService = self.ctx.Services.CosmeticService
+	if cosmeticService and player.Character then task.defer(function() cosmeticService:Apply(player) end) end
+end
+
+function DataService:Get(player)
+	local record = self.records[player]
+	return record and record.loaded and record.profile or nil
+end
+
+function DataService:Ready(player)
+	local record = self.records[player]
+	return record ~= nil and record.loaded and record.accepting and not self.closing
+end
+
+function DataService:Snapshot(player)
+	local record = self.records[player]
+	if not record or not record.loaded then return { loaded = false, persistence = "unavailable", saveMessage = "Loading profile…" } end
+	self:_RollDay(record)
+	local snapshot = clone(record.profile)
+	snapshot.loaded = true
+	snapshot.persistence = record.persistence
+	snapshot.saveMessage = record.saveMessage
+	snapshot.rank = self.ctx.Rules.Rank(snapshot.rating)
+	snapshot.quests = {}
+	for _, quest in ipairs(self.ctx.Rules.DailyQuests(snapshot.daily.day)) do
+		table.insert(snapshot.quests, {
+			id = quest.id, text = quest.text, progress = self.ctx.Rules.QuestProgress(snapshot, quest), goal = quest.goal,
+			claimed = snapshot.daily.claimed[quest.id] == true, xp = quest.xp, coins = quest.coins,
+		})
+	end
+	return snapshot
+end
+
+function DataService:Send(player)
+	if player.Parent == Players then self.ctx.Remotes.Profile:FireClient(player, self:Snapshot(player)) end
+end
+
+function DataService:_AfterProgress(record, previousLevel)
+	local profile = record.profile
+	profile.level = self.ctx.Rules.LevelFromXP(profile.xp)
+	self:_Unlocks(record, true)
+	self:_Leaderboard(record.player, profile)
+	self:Send(record.player)
+	if profile.level > previousLevel then self:_Notice(record.player, "Level " .. profile.level .. " reached!", "level") end
+end
+
+function DataService:AwardRound(player, summary)
+	if not self:Ready(player) or type(summary) ~= "table" or summary.practice == true then return false, "No progression in practice." end
+	if (summary.role ~= "Hunter" and summary.role ~= "Runner") or type(summary.win) ~= "boolean"
+		or type(summary.roundId) ~= "number" or summary.roundId ~= number(summary.roundId, 1, MAX_COUNTER) then return false, "Invalid round." end
+	local record = self.records[player]
+	local receipt = self.sessionId .. ":" .. tostring(summary.roundId)
+	if record.awarded[receipt] then return false, "Round already rewarded." end
+	local safe = {
+		role = summary.role, win = summary.win, practice = false, roundId = summary.roundId,
+		tags = summary.role == "Hunter" and number(summary.tags, 0, self.ctx.Config.Round.MaxPlayers) or 0,
+		survived = summary.role == "Runner" and number(summary.survived, 0, self.ctx.Config.Round.Duration) or 0,
+	}
+	local reward = self.ctx.Rules.RoundReward(safe, self.ctx.Config)
+	-- Record receipt before changing balances; this section contains no yielding calls.
+	record.awarded[receipt] = true
+	table.insert(record.receipts, receipt)
+	if #record.receipts > 40 then table.remove(record.receipts, 1) end
+	self:_RollDay(record)
+	local profile, previousLevel = record.profile, record.profile.level
+	profile.coins = add(profile.coins, number(reward.coins, 0, MAX_COUNTER))
+	profile.xp = add(profile.xp, number(reward.xp, 0, MAX_COUNTER))
+	profile.rating = number(profile.rating + number(reward.rating, -1000, 1000), 0, MAX_COUNTER)
+	profile.stats.rounds = add(profile.stats.rounds, 1)
+	profile.stats.tags = add(profile.stats.tags, safe.tags)
+	profile.stats.survived = add(profile.stats.survived, safe.survived)
+	profile.daily.progress.rounds = add(profile.daily.progress.rounds, 1)
+	profile.daily.progress.tags = add(profile.daily.progress.tags, safe.tags)
+	profile.daily.progress.survived = add(profile.daily.progress.survived, safe.survived)
+	if safe.win then
+		profile.stats.wins = add(profile.stats.wins, 1)
+		local stat = safe.role == "Hunter" and "hunterWins" or "runnerWins"
+		profile.stats[stat] = add(profile.stats[stat], 1)
+		profile.streak = add(profile.streak, 1)
+		profile.bestStreak = math.max(profile.bestStreak, profile.streak)
+	else profile.streak = 0 end
+	self:_Dirty(record)
+	self:_AfterProgress(record, previousLevel)
+	task.defer(function() self:Save(player) end)
+	return true
+end
+
+function DataService:Grant(player, ids, source)
+	if not self:Ready(player) then return false, "Profile is not ready." end
+	if type(ids) ~= "table" then return false, "Invalid grant." end
+	local record = self.records[player]
+	local changed = false
+	for _, id in ipairs(ids) do
+		local item = type(id) == "string" and self.ctx.Catalog.Get(id)
+		if item then
+			if not record.profile.owned[id] then record.profile.owned[id] = true; changed = true end
+			for _, grantedId in ipairs(item.grants or {}) do
+				if self.ctx.Catalog.Get(grantedId) and not record.profile.owned[grantedId] then
+					record.profile.owned[grantedId] = true; changed = true
+				end
+			end
+		end
+	end
+	if changed then
+		self:_Dirty(record)
+		self:Send(player)
+		if source then self:_Notice(player, source, "unlock") end
+		task.defer(function() self:Save(player) end)
+	end
+	return true, changed and "Granted." or "Already owned."
+end
+
+function DataService:_PurchaseWithCoins(player, id)
+	if not self:Ready(player) then return false, "Profile is not ready." end
+	local item = self.ctx.Catalog.Get(id)
+	if not item or item.currency ~= "Coins" or type(item.price) ~= "number"
+		or item.price ~= number(item.price, 0, MAX_COUNTER) then return false, "Item cannot be purchased with coins." end
+	local record = self.records[player]
+	local profile = record.profile
+	if profile.owned[id] then return false, "You already own this cosmetic." end
+	if profile.coins < item.price then return false, "You need " .. (item.price - profile.coins) .. " more coins." end
+	-- Debit and ownership are one non-yielding transaction. Never trust a client price.
+	profile.coins -= item.price
+	profile.owned[id] = true
+	for _, grantedId in ipairs(item.grants or {}) do
+		if self.ctx.Catalog.Get(grantedId) then profile.owned[grantedId] = true end
+	end
+	self:_Dirty(record)
+	self:Send(player)
+	task.defer(function() self:Save(player) end)
+	local suffix = record.writable and " Saving progress…" or " Session only; progress will not save."
+	return true, "Purchased " .. item.name .. "." .. suffix
+end
+
+function DataService:Equip(player, category, id)
+	if not self:Ready(player) then return false, "Profile is not ready." end
+	if type(category) ~= "string" or type(id) ~= "string" or not self.ctx.Catalog.IsEquippable(category) then return false, "Invalid equipment slot." end
+	local record = self.records[player]
+	if id ~= "" then
+		local item = self.ctx.Catalog.Get(id)
+		if not item or item.category ~= category or not record.profile.owned[id] then return false, "You do not own that cosmetic." end
+	end
+	if record.profile.equipped[category] == id then return true end
+	record.profile.equipped[category] = id
+	self:_Dirty(record)
+	self:Send(player)
+	local cosmetics = self.ctx.Services.CosmeticService
+	if cosmetics then cosmetics:Apply(player) end
+	return true
+end
+
+function DataService:UpdateSettings(player, settings)
+	if not self:Ready(player) or type(settings) ~= "table" then return false, "Profile is not ready." end
+	local record = self.records[player]
+	local changed = false
+	for _, key in ipairs({ "music", "sfx", "reducedMotion", "cameraShake" }) do
+		if type(settings[key]) == "boolean" and record.profile.settings[key] ~= settings[key] then
+			record.profile.settings[key] = settings[key]; changed = true
+		end
+	end
+	if changed then self:_Dirty(record); self:Send(player) end
+	return true
+end
+
+function DataService:ClaimQuest(player, id)
+	if not self:Ready(player) or type(id) ~= "string" then return false, "Profile is not ready." end
+	local record = self.records[player]
+	self:_RollDay(record)
+	local profile = record.profile
+	for _, quest in ipairs(self.ctx.Rules.DailyQuests(profile.daily.day)) do
+		if quest.id == id then
+			if profile.daily.claimed[id] then return false, "Reward already claimed." end
+			if self.ctx.Rules.QuestProgress(profile, quest) < quest.goal then return false, "Quest is still in progress." end
+			local previousLevel = profile.level
+			profile.daily.claimed[id] = true
+			profile.coins = add(profile.coins, quest.coins)
+			profile.xp = add(profile.xp, quest.xp)
+			self:_Dirty(record)
+			self:_AfterProgress(record, previousLevel)
+			self:_Notice(player, "Quest claimed: +" .. quest.coins .. " coins · +" .. quest.xp .. " XP", "unlock")
+			task.defer(function() self:Save(player) end)
+			return true
+		end
+	end
+	return false, "Unknown quest."
+end
+
+function DataService:_SaveRecord(record, release)
+	if not record.loaded or not record.writable or not self.store then return false, record.saveMessage end
+	-- Concurrent autosave, reward, leave, and shutdown requests share this single writer.
+	while record.saving do task.wait(0.05) end
+	if not record.writable or record.released then return false, record.saveMessage end
+	record.saving = true
+	local revision = record.revision
+	local snapshot = self:_Sanitize(clone(record.profile))
+	local receipts = clone(record.receipts)
+	local succeeded = false
+	local denied
+	for attempt = 1, number(self.config.Retries or 3, 1, 5) do
+		local ok, result = pcall(function()
+			return self.store:UpdateAsync("player_" .. record.player.UserId, function(raw)
+				denied = nil
+				local current, decodeError = decode(raw)
+				if decodeError then denied = decodeError; return nil end
+				if not current or not current.session or current.session.id ~= self.sessionId then denied = "lease"; return nil end
+				local now = os.time()
+				return {
+					_format = FORMAT, profile = snapshot, receipts = receipts, updatedAt = now,
+					session = not release and { id = self.sessionId, expiresAt = now + number(self.config.SessionLockSeconds or 180, 90, 600) } or nil,
+				}
+			end)
+		end)
+		if ok and result and not denied then succeeded = true; break end
+		if denied then break end
+		if attempt < number(self.config.Retries or 3, 1, 5) then task.wait(2 ^ (attempt - 1)) end
+	end
+	if succeeded then
+		record.savedRevision = math.max(record.savedRevision, revision)
+		record.persistence = "saved"
+		record.saveMessage = record.revision == revision and "Saved." or "Changes pending autosave."
+		if release then record.released = true; record.writable = false end
+	else
+		record.persistence = "unavailable"
+		if denied then
+			record.writable = false
+			record.saveMessage = "Profile access changed on the server. Further changes will not save; rejoin to reload safely."
+		else record.saveMessage = "Saving failed. Your latest changes are not saved; the server will retry." end
+	end
+	record.saving = false
+	if not record.departed and not self.closing then self:Send(record.player) end
+	return succeeded, record.saveMessage
+end
+
+function DataService:Save(player)
+	local record = self.records[player]
+	if not record then return false, "Profile is not loaded." end
+	return self:_SaveRecord(record, false)
+end
+
+function DataService:Start()
+	if self.started then return end
+	self.started = true
+	Players.PlayerAdded:Connect(function(player) task.spawn(function() self:_Load(player) end) end)
+	Players.PlayerRemoving:Connect(function(player)
+		local record = self.records[player]
+		if not record then return end
+		record.departed = true
+		record.accepting = false
+		if record.loaded then
+			self:_SaveRecord(record, true)
+			if self.records[player] == record then self.records[player] = nil end
+		end
+	end)
+	for _, player in ipairs(Players:GetPlayers()) do task.spawn(function() self:_Load(player) end) end
+	task.spawn(function()
+		local interval = math.min(number(self.config.AutosaveSeconds or 60, 15, 120), number(self.config.SessionLockSeconds or 180, 90, 600) / 3)
+		while not self.closing do
+			task.wait(interval)
+			if self.closing then break end
+			for _, record in pairs(self.records) do
+				if record.loaded and not record.departed then task.spawn(function() self:_SaveRecord(record, false) end) end
+			end
+		end
+	end)
+	game:BindToClose(function()
+		self.closing = true
+		local waiting = 0
+		for _, record in pairs(self.records) do
+			record.accepting = false
+			if record.loaded then
+				waiting += 1
+				task.spawn(function() self:_SaveRecord(record, true); waiting -= 1 end)
+			end
+		end
+		local deadline = os.clock() + 25
+		while (waiting > 0 or self.activeLoads > 0) and os.clock() < deadline do task.wait(0.1) end
+	end)
+end
+
+return DataService
+]]></string>
+          </Properties>
+        </Item>
+        <Item class="ModuleScript" referent="11">
+          <Properties>
+            <string name="Name">MovementService</string>
+            <string name="Source"><![CDATA[-- Clients send intentions only. The server chooses speed, geometry, and cooldowns.
+local Players = game:GetService("Players")
+local RunService = game:GetService("RunService")
+local Workspace = game:GetService("Workspace")
+
+local MovementService = {}
+MovementService.__index = MovementService
+
+local function now()
+	return Workspace:GetServerTimeNow()
+end
+
+local function horizontal(vector)
+	return Vector3.new(vector.X, 0, vector.Z)
+end
+
+local function finiteVector(vector)
+	return vector.X == vector.X and vector.Y == vector.Y and vector.Z == vector.Z
+		and math.abs(vector.X) < 1e7 and math.abs(vector.Y) < 1e7 and math.abs(vector.Z) < 1e7
+end
+
+local function avatar(player)
+	local character = player.Character
+	local humanoid = character and character:FindFirstChildOfClass("Humanoid")
+	local root = character and character:FindFirstChild("HumanoidRootPart")
+	if humanoid and humanoid.Health > 0 and root then
+		return character, humanoid, root
+	end
+	return nil
+end
+
+local function rayParameters(character)
+	local parameters = RaycastParams.new()
+	parameters.FilterType = Enum.RaycastFilterType.Exclude
+	parameters.FilterDescendantsInstances = { character }
+	parameters.RespectCanCollide = true
+	return parameters
+end
+
+function MovementService.new(ctx)
+	return setmetatable({ ctx = ctx, states = {}, connections = {}, accumulator = 0 }, MovementService)
+end
+
+function MovementService:_state(player)
+	local state = self.states[player]
+	if not state then
+		state = {
+			sprint = false,
+			slideUntil = 0,
+			vaultUntil = 0,
+			lastSlide = -math.huge,
+			lastVault = -math.huge,
+			modeId = 0,
+			lastTime = now(),
+			credit = 12,
+		}
+		self.states[player] = state
+	end
+	return state
+end
+
+function MovementService:_clearMotion(player, state)
+	state.modeId += 1
+	state.sprint = false
+	state.slideUntil, state.vaultUntil = 0, 0
+	local character = player.Character
+	if character then
+		character:SetAttribute("Sprinting", false)
+		character:SetAttribute("Sliding", false)
+		character:SetAttribute("Vaulting", false)
+		local root = character:FindFirstChild("HumanoidRootPart")
+		if root then
+			root.Anchored = character:GetAttribute("RoundFrozen") == true
+			if not root.Anchored then
+				pcall(function()
+					root:SetNetworkOwnershipAuto()
+				end)
+			end
+		end
+	end
+end
+
+-- Only server code calls this immediately after its own spawn/teleport.
+function MovementService:ResetPlayer(player)
+	local state = self:_state(player)
+	self:_clearMotion(player, state)
+	local character, humanoid, root = avatar(player)
+	state.character = character
+	state.lastTime = now()
+	state.lastSlide, state.lastVault = -math.huge, -math.huge
+	state.airStart = nil
+	state.groundY = root and root.Position.Y or 0
+	state.credit = self.ctx.Config.Movement.RunnerSprint * 0.4 + 3
+	state.lastPosition = root and root.Position or nil
+	state.safeCFrame = root and root.CFrame or nil
+	state.rejectUntil = 0
+	if character then
+		local frozen = character:GetAttribute("RoundFrozen") == true
+		humanoid.WalkSpeed = frozen and 0 or self.ctx.Config.Movement.WalkSpeed
+		humanoid.JumpPower = frozen and 0 or self.ctx.Config.Movement.JumpPower
+		humanoid.AutoRotate = not frozen
+	end
+end
+
+function MovementService:_grounded(character, humanoid, root)
+	local distance = humanoid.HipHeight + root.Size.Y * 0.5 + 1.25
+	local hit = Workspace:Raycast(root.Position, Vector3.new(0, -distance, 0), rayParameters(character))
+	return hit ~= nil and hit.Normal.Y > 0.3, hit
+end
+
+function MovementService:_allowedSpeed(player, state)
+	local config = self.ctx.Config.Movement
+	if state.slideUntil > now() then
+		return config.SlideSpeed + 5
+	end
+	if state.sprint then
+		return (self.ctx.Services.RoundService:GetRole(player) == "Hunter" and config.HunterSprint or config.RunnerSprint) + 5
+	end
+	return config.WalkSpeed + 5
+end
+
+function MovementService:_correct(player, state, root)
+	if state.safeCFrame then
+		root.CFrame = state.safeCFrame
+		root.AssemblyLinearVelocity = Vector3.zero
+		root.AssemblyAngularVelocity = Vector3.zero
+	end
+	state.lastPosition = root.Position
+	state.lastTime = now()
+	state.credit = 2
+	state.rejectUntil = now() + 0.35
+	state.airStart = nil
+	state.groundY = root.Position.Y
+	self:_clearMotion(player, state)
+	return false
+end
+
+-- Called both by Heartbeat and immediately before every tag/range-sensitive intent.
+function MovementService:ValidatePosition(player)
+	local character, humanoid, root = avatar(player)
+	if not character then
+		return false
+	end
+	local state = self:_state(player)
+	if state.character ~= character or not state.lastPosition then
+		self:ResetPlayer(player)
+		return false
+	end
+	local timestamp = now()
+	if timestamp < (state.rejectUntil or 0) then
+		return false
+	end
+	if not finiteVector(root.Position) or not finiteVector(root.AssemblyLinearVelocity) then
+		return self:_correct(player, state, root)
+	end
+	-- A vault has a server-owned, anchored trajectory and a strict expiration.
+	if state.vaultUntil > timestamp and root.Anchored then
+		state.lastPosition, state.safeCFrame, state.lastTime = root.Position, root.CFrame, timestamp
+		return true
+	end
+	local dt = math.max(timestamp - state.lastTime, 0)
+	if dt < 0.015 then
+		-- Do not mint extra distance allowance by spamming the Tag remote.
+		return (root.Position - state.lastPosition).Magnitude <= 2
+	end
+	local speed = self:_allowedSpeed(player, state)
+	state.credit = math.min(speed * 0.55 + 3, state.credit + speed * math.min(dt, 0.75))
+	local difference = root.Position - state.lastPosition
+	local traveled = horizontal(difference).Magnitude
+	if traveled > state.credit or math.abs(difference.Y) > 110 * math.min(dt, 0.75) + 8 then
+		return self:_correct(player, state, root)
+	end
+	local bounds = self.ctx.World.Bounds
+	if bounds and (root.Position.X < bounds.min.X - 20 or root.Position.X > bounds.max.X + 20
+		or root.Position.Z < bounds.min.Z - 20 or root.Position.Z > bounds.max.Z + 20
+		or root.Position.Y > bounds.max.Y + 30) then
+		-- Lobby can be intentionally outside the arena bounds.
+		if self.ctx.Services.RoundService:IsActive(player) then
+			return self:_correct(player, state, root)
+		end
+	end
+	local grounded = self:_grounded(character, humanoid, root)
+	local climbing = humanoid:GetState() == Enum.HumanoidStateType.Climbing
+	if grounded or climbing then
+		state.airStart = nil
+		state.groundY = root.Position.Y
+	else
+		state.airStart = state.airStart or timestamp
+		local jumpRise = (self.ctx.Config.Movement.JumpPower ^ 2) / (2 * math.max(Workspace.Gravity, 1)) + 7
+		if root.Position.Y - (state.groundY or root.Position.Y) > jumpRise then
+			return self:_correct(player, state, root)
+		end
+		-- Long descents are valid. Hovering beyond a full jump is not.
+		if timestamp - state.airStart > 2.4 and root.AssemblyLinearVelocity.Y > -7 then
+			return self:_correct(player, state, root)
+		end
+	end
+	state.credit -= traveled
+	state.lastPosition, state.lastTime = root.Position, timestamp
+	-- Retain a grounded recovery point so a flight correction cannot bless a hover.
+	if grounded or climbing then
+		state.safeCFrame = root.CFrame
+	end
+	return true
+end
+
+function MovementService:_canMove(player)
+	local character, humanoid, root = avatar(player)
+	if not character or character:GetAttribute("RoundFrozen") or humanoid.Sit then
+		return nil
+	end
+	if not self:ValidatePosition(player) then
+		return nil
+	end
+	return character, humanoid, root
+end
+
+function MovementService:_ack(player, action, cooldown)
+	self.ctx.Remotes.Notice:FireClient(player, { kind = "ability", action = action, cooldown = cooldown })
+end
+
+function MovementService:_slide(player)
+	local character, humanoid, root = self:_canMove(player)
+	if not character then
+		return
+	end
+	local state, config = self:_state(player), self.ctx.Config.Movement
+	local timestamp = now()
+	if timestamp - state.lastSlide < config.SlideCooldown or state.vaultUntil > timestamp or state.slideUntil > timestamp then
+		return
+	end
+	if not self:_grounded(character, humanoid, root) or (not state.sprint and horizontal(root.AssemblyLinearVelocity).Magnitude < 6) then
+		return
+	end
+	local direction = horizontal(root.CFrame.LookVector)
+	if direction.Magnitude < 0.1 then
+		return
+	end
+	direction = direction.Unit
+	-- Do not propel a player into a wall or launch a slide through thin geometry.
+	local wall = Workspace:Raycast(root.Position - Vector3.new(0, 0.8, 0), direction * 3, rayParameters(character))
+	if wall and math.abs(wall.Normal.Y) < 0.65 then
+		return
+	end
+	state.lastSlide, state.slideUntil = timestamp, timestamp + config.SlideDuration
+	state.slideDirection = direction
+	state.credit = math.max(state.credit, config.SlideSpeed * 0.25)
+	character:SetAttribute("Sliding", true)
+	pcall(function()
+		root:SetNetworkOwner(nil)
+	end)
+	self:_ack(player, "Slide", config.SlideCooldown)
+end
+
+function MovementService:_clearBox(character, cframe, size)
+	local params = OverlapParams.new()
+	params.FilterType = Enum.RaycastFilterType.Exclude
+	params.FilterDescendantsInstances = { character }
+	params.RespectCanCollide = true
+	for _, part in ipairs(Workspace:GetPartBoundsInBox(cframe, size, params)) do
+		if part.CanCollide then
+			return false
+		end
+	end
+	return true
+end
+
+function MovementService:_vault(player)
+	local character, humanoid, root = self:_canMove(player)
+	if not character then
+		return
+	end
+	local state, config = self:_state(player), self.ctx.Config.Movement
+	local timestamp = now()
+	if timestamp - state.lastVault < config.VaultCooldown or state.slideUntil > timestamp or state.vaultUntil > timestamp then
+		return
+	end
+	-- Accept the beginning of a normal jump too: Space intentionally preserves Jump.
+	local grounded = self:_grounded(character, humanoid, root)
+	if not grounded and (not state.airStart or timestamp - state.airStart > 0.22) then
+		return
+	end
+	local direction = horizontal(root.CFrame.LookVector)
+	if direction.Magnitude < 0.1 then
+		return
+	end
+	direction = direction.Unit
+	local params = rayParameters(character)
+	local front = Workspace:Raycast(root.Position - Vector3.new(0, 1, 0), direction * config.VaultDistance, params)
+	if not front or not front.Instance.Anchored or math.abs(front.Normal.Y) > 0.45 then
+		return
+	end
+	local groundOffset = humanoid.HipHeight + root.Size.Y * 0.5
+	local topOrigin = front.Position + direction * 0.7 + Vector3.new(0, config.VaultHeight + 1, 0)
+	local top = Workspace:Raycast(topOrigin, Vector3.new(0, -config.VaultHeight - 2, 0), params)
+	if not top or top.Normal.Y < 0.7 then
+		return
+	end
+	local height = top.Position.Y - (root.Position.Y - groundOffset)
+	if height < 0.5 or height > config.VaultHeight then
+		return
+	end
+	local beyond = front.Position + direction * 3.2
+	local landing = Workspace:Raycast(Vector3.new(beyond.X, top.Position.Y + 2, beyond.Z), Vector3.new(0, -9, 0), params)
+	if not landing or landing.Normal.Y < 0.65 then
+		return
+	end
+	local destination = Vector3.new(beyond.X, landing.Position.Y + groundOffset + 0.15, beyond.Z)
+	if horizontal(destination - root.Position).Magnitude > config.VaultDistance + 3.5 then
+		return
+	end
+	local elevatedY = math.max(root.Position.Y, destination.Y, top.Position.Y + groundOffset + 0.4)
+	local elevatedStart = Vector3.new(root.Position.X, elevatedY, root.Position.Z)
+	local elevatedEnd = Vector3.new(destination.X, elevatedY, destination.Z)
+	local boxSize = Vector3.new(2.1, math.max(3, groundOffset * 2 - 0.5), 2.1)
+	local facing = CFrame.lookAt(Vector3.zero, direction)
+	local endCF = CFrame.new(destination) * facing
+	if not self:_clearBox(character, endCF, boxSize)
+		or not self:_clearBox(character, CFrame.new(elevatedStart) * facing, boxSize)
+		or not self:_clearBox(character, CFrame.new(elevatedEnd) * facing, boxSize) then
+		return
+	end
+	local elevatedStartCF = CFrame.new(elevatedStart) * facing
+	local pathHit = Workspace:Blockcast(elevatedStartCF, boxSize, elevatedEnd - elevatedStart, params)
+	local lift = elevatedStart - root.Position
+	local ceiling = lift.Magnitude > 0.05 and Workspace:Blockcast(root.CFrame, boxSize, lift, params)
+	if pathHit or ceiling then
+		return
+	end
+	state.lastVault = timestamp
+	state.vaultUntil = timestamp + 0.48
+	state.modeId += 1
+	local modeId = state.modeId
+	character:SetAttribute("Vaulting", true)
+	root.Anchored = true
+	root.AssemblyLinearVelocity = Vector3.zero
+	local startPosition = root.Position
+	self:_ack(player, "Vault", config.VaultCooldown)
+	task.spawn(function()
+		local duration = 0.4
+		while now() - timestamp < duration do
+			if player.Character ~= character or self.states[player] ~= state or state.modeId ~= modeId or humanoid.Health <= 0 then
+				break
+			end
+			local alpha = math.clamp((now() - timestamp) / duration, 0, 1)
+			local position
+			if alpha < 0.28 then
+				position = startPosition:Lerp(elevatedStart, alpha / 0.28)
+			elseif alpha < 0.76 then
+				position = elevatedStart:Lerp(elevatedEnd, (alpha - 0.28) / 0.48)
+			else
+				position = elevatedEnd:Lerp(destination, (alpha - 0.76) / 0.24)
+			end
+			root.CFrame = CFrame.new(position) * facing
+			RunService.Heartbeat:Wait()
+		end
+		if self.states[player] == state and state.modeId == modeId and player.Character == character then
+			if humanoid.Health > 0 then
+				root.CFrame = endCF
+			end
+			root.Anchored = character:GetAttribute("RoundFrozen") == true
+			root.AssemblyLinearVelocity = Vector3.zero
+			state.vaultUntil = 0
+			state.lastPosition, state.safeCFrame, state.lastTime = root.Position, root.CFrame, now()
+			state.groundY, state.airStart = root.Position.Y, nil
+			state.credit = config.WalkSpeed * 0.4 + 3
+			character:SetAttribute("Vaulting", false)
+			if not root.Anchored then
+				pcall(function()
+					root:SetNetworkOwnershipAuto()
+				end)
+			end
+		end
+	end)
+end
+
+function MovementService:Handle(player, action, payload)
+	if action == "Sprint" then
+		if type(payload) ~= "table" or type(payload.active) ~= "boolean" then
+			return
+		end
+		local state = self:_state(player)
+		if not payload.active then
+			state.sprint = false
+			if player.Character then
+				player.Character:SetAttribute("Sprinting", false)
+			end
+			return
+		end
+		local character = self:_canMove(player)
+		if character then
+			state.sprint = true
+			character:SetAttribute("Sprinting", true)
+		end
+	elseif action == "Slide" then
+		self:_slide(player)
+	elseif action == "Vault" then
+		self:_vault(player)
+	end
+end
+
+function MovementService:_step(player, dt)
+	local character, humanoid, root = avatar(player)
+	if not character then
+		return
+	end
+	local state = self:_state(player)
+	if state.character ~= character then
+		self:ResetPlayer(player)
+	end
+	local config, timestamp = self.ctx.Config.Movement, now()
+	local frozen = character:GetAttribute("RoundFrozen") == true
+	if frozen then
+		root.Anchored = true
+		humanoid.WalkSpeed, humanoid.JumpPower = 0, 0
+		state.lastPosition, state.lastTime = root.Position, timestamp
+		return
+	end
+	if not self:ValidatePosition(player) then
+		return
+	end
+	local targetSpeed = state.sprint and (self.ctx.Services.RoundService:GetRole(player) == "Hunter" and config.HunterSprint or config.RunnerSprint) or config.WalkSpeed
+	humanoid.WalkSpeed += (targetSpeed - humanoid.WalkSpeed) * math.min(1, config.Acceleration * dt)
+	humanoid.JumpPower = config.JumpPower
+	if state.slideUntil > timestamp then
+		local direction = state.slideDirection
+		local distance = config.SlideSpeed * dt + 1.7
+		local wall = Workspace:Raycast(root.Position - Vector3.new(0, 0.8, 0), direction * distance, rayParameters(character))
+		if wall and math.abs(wall.Normal.Y) < 0.65 then
+			state.slideUntil = 0
+		else
+			local progress = math.clamp((timestamp - state.lastSlide) / config.SlideDuration, 0, 1)
+			local slideSpeed = config.SlideSpeed * (1 - 0.28 * progress)
+			root.AssemblyLinearVelocity = direction * slideSpeed + Vector3.new(0, root.AssemblyLinearVelocity.Y, 0)
+		end
+	end
+	if character:GetAttribute("Sliding") and state.slideUntil <= timestamp then
+		character:SetAttribute("Sliding", false)
+		local velocity = horizontal(root.AssemblyLinearVelocity)
+		if velocity.Magnitude > targetSpeed then
+			root.AssemblyLinearVelocity = velocity.Unit * targetSpeed + Vector3.new(0, root.AssemblyLinearVelocity.Y, 0)
+		end
+		if not root.Anchored then
+			pcall(function()
+				root:SetNetworkOwnershipAuto()
+			end)
+		end
+	end
+	-- A fallen avatar is eliminated through the same death path as a reset.
+	local bounds = self.ctx.World.Bounds
+	if bounds and root.Position.Y < bounds.min.Y - 35 then
+		humanoid.Health = 0
+	end
+end
+
+function MovementService:Start()
+	if self.started then
+		return
+	end
+	self.started = true
+	Players.PlayerRemoving:Connect(function(player)
+		local state = self.states[player]
+		if state then
+			self:_clearMotion(player, state)
+		end
+		self.states[player] = nil
+	end)
+	RunService.Heartbeat:Connect(function(dt)
+		self.accumulator += dt
+		if self.accumulator < 0.08 then
+			return
+		end
+		local elapsed = self.accumulator
+		self.accumulator = 0
+		for _, player in ipairs(Players:GetPlayers()) do
+			local ok, err = xpcall(function()
+				self:_step(player, math.min(elapsed, 0.25))
+			end, debug.traceback)
+			if not ok then
+				warn("[Catch] Movement update failed: " .. tostring(err))
+			end
+		end
+	end)
+end
+
+return MovementService
+]]></string>
+          </Properties>
+        </Item>
+        <Item class="ModuleScript" referent="12">
+          <Properties>
+            <string name="Name">RoundService</string>
+            <string name="Source"><![CDATA[-- Server-owned roster, timers, tags, respawns, and progression summaries.
+local Players = game:GetService("Players")
+local RunService = game:GetService("RunService")
+local Workspace = game:GetService("Workspace")
+
+local RoundService = {}
+RoundService.__index = RoundService
+
+local function now()
+	return Workspace:GetServerTimeNow()
+end
+
+local function liveCharacter(player)
+	local character = player.Character
+	local humanoid = character and character:FindFirstChildOfClass("Humanoid")
+	local root = character and character:FindFirstChild("HumanoidRootPart")
+	if character and humanoid and humanoid.Health > 0 and root then
+		return character, humanoid, root
+	end
+	return nil
+end
+
+function RoundService.new(ctx)
+	return setmetatable({
+		ctx = ctx,
+		phase = "Waiting",
+		endsAt = 0,
+		roundId = 0,
+		practice = false,
+		roster = {},
+		winners = {},
+		resultText = "Waiting for players",
+		tagTimes = {},
+		loading = {},
+		connections = {},
+		characterConnections = {},
+		departing = {},
+		hunterTurns = {},
+		random = Random.new(),
+		startedAt = 0,
+		lastBroadcast = 0,
+	}, RoundService)
+end
+
+function RoundService:_playingPhase()
+	return self.phase == "HeadStart" or self.phase == "Active"
+end
+
+function RoundService:GetRole(player)
+	local entry = self.roster[player.UserId]
+	if self:_playingPhase() then
+		if entry and entry.alive then
+			return entry.role
+		end
+		return "Spectator"
+	end
+	return "Lobby"
+end
+
+function RoundService:IsActive(player)
+	local entry = self.roster[player.UserId]
+	return self:_playingPhase() and entry ~= nil and entry.alive and not self.departing[player]
+end
+
+function RoundService:_counts()
+	local runners, hunters = 0, 0
+	for _, entry in pairs(self.roster) do
+		if entry.alive and entry.player.Parent == Players and not self.departing[entry.player] then
+			if entry.role == "Runner" then
+				runners += 1
+			else
+				hunters += 1
+			end
+		end
+	end
+	return runners, hunters
+end
+
+function RoundService:Snapshot()
+	local runners = self:_counts()
+	local list = {}
+	for _, player in ipairs(Players:GetPlayers()) do
+		if not self.departing[player] then
+			local entry = self.roster[player.UserId]
+			table.insert(list, {
+				userId = player.UserId,
+				name = player.Name,
+				displayName = player.DisplayName,
+				role = self:GetRole(player),
+				alive = entry ~= nil and entry.alive and self:_playingPhase(),
+			})
+		end
+	end
+	table.sort(list, function(a, b)
+		return a.userId < b.userId
+	end)
+	return {
+		phase = self.phase,
+		endsAt = self.endsAt,
+		roundId = self.roundId,
+		practice = self.practice,
+		finalChase = self.phase == "Active" and self.endsAt - now() <= self.ctx.Config.Round.FinalSeconds,
+		lastRunner = self:_playingPhase() and runners == 1 and not self.practice,
+		aliveRunners = runners,
+		players = list,
+		winners = table.clone(self.winners),
+		resultText = self.resultText,
+		mapName = "NEON HEIGHTS",
+	}
+end
+
+function RoundService:_broadcast()
+	self.lastBroadcast = now()
+	self.ctx.Remotes.State:FireAllClients(self:Snapshot())
+end
+
+function RoundService:_notice(player, payload)
+	if player.Parent == Players and not self.departing[player] then
+		self.ctx.Remotes.Notice:FireClient(player, payload)
+	end
+end
+
+function RoundService:_setCharacterRole(player, character)
+	local role = self:GetRole(player)
+	player:SetAttribute("RoundRole", role)
+	character:SetAttribute("RoundRole", role)
+	local held = self.phase == "HeadStart" and role == "Hunter"
+	character:SetAttribute("RoundFrozen", held)
+	local humanoid = character:FindFirstChildOfClass("Humanoid")
+	local root = character:FindFirstChild("HumanoidRootPart")
+	if root then
+		root.Anchored = held
+		root.AssemblyLinearVelocity = Vector3.zero
+		root.AssemblyAngularVelocity = Vector3.zero
+	end
+	if humanoid then
+		humanoid.AutoRotate = not held
+		humanoid.UseJumpPower = true
+		humanoid.JumpPower = held and 0 or self.ctx.Config.Movement.JumpPower
+		humanoid.WalkSpeed = held and 0 or self.ctx.Config.Movement.WalkSpeed
+	end
+	local movement = self.ctx.Services.MovementService
+	if movement then
+		movement:ResetPlayer(player)
+	end
+end
+
+function RoundService:_destination(player)
+	local entry = self.roster[player.UserId]
+	if self:IsActive(player) and entry then
+		return entry.spawn
+	end
+	-- Keep a dozen avatars from sharing one exact collision point.
+	local offset = (math.abs(player.UserId) % 9) - 4
+	return self.ctx.World.LobbySpawn * CFrame.new(offset * 2.5, 0, 0)
+end
+
+function RoundService:_place(player, character)
+	local root = character:FindFirstChild("HumanoidRootPart")
+	local humanoid = character:FindFirstChildOfClass("Humanoid")
+	if not root or not humanoid or humanoid.Health <= 0 then
+		return
+	end
+	character:PivotTo(self:_destination(player))
+	self:_setCharacterRole(player, character)
+	local forceField = character:FindFirstChildOfClass("ForceField")
+	if forceField then
+		forceField:Destroy()
+	end
+end
+
+function RoundService:_load(player)
+	if self.loading[player] or player.Parent ~= Players or self.departing[player] then
+		return
+	end
+	self.loading[player] = true
+	task.spawn(function()
+		local ok, err = pcall(function()
+			player:LoadCharacterAsync()
+		end)
+		self.loading[player] = nil
+		if not ok and player.Parent == Players then
+			warn("[Catch] Character load failed for user " .. player.UserId .. ": " .. tostring(err))
+			self:_notice(player, { kind = "toast", text = "Avatar is still loading. Retrying shortly." })
+			task.delay(3, function()
+				if player.Parent == Players and not liveCharacter(player) then
+					self:_load(player)
+				end
+			end)
+		end
+	end)
+end
+
+function RoundService:_onCharacter(player, character)
+	local previous = self.characterConnections[player]
+	if previous then
+		previous:Disconnect()
+		self.characterConnections[player] = nil
+	end
+	task.spawn(function()
+		local humanoid = character:WaitForChild("Humanoid", 10)
+		local root = character:WaitForChild("HumanoidRootPart", 10)
+		if not humanoid or not root or player.Character ~= character or player.Parent ~= Players then
+			return
+		end
+		self:_place(player, character)
+		self.characterConnections[player] = humanoid.Died:Connect(function()
+			if player.Character ~= character then
+				return
+			end
+			self:_eliminate(player, "reset")
+			task.delay(self.ctx.Config.Round.RespawnDelay, function()
+				if player.Parent == Players and player.Character == character then
+					self:_load(player)
+				end
+			end)
+		end)
+	end)
+end
+
+function RoundService:_onPlayer(player)
+	self.departing[player] = nil
+	local connection = player.CharacterAdded:Connect(function(character)
+		self:_onCharacter(player, character)
+	end)
+	self.connections[player] = connection
+	if player.Character then
+		self:_onCharacter(player, player.Character)
+	else
+		self:_load(player)
+	end
+	player:SetAttribute("RoundRole", self:GetRole(player))
+	self:_broadcast()
+end
+
+function RoundService:_eligible()
+	local eligible = {}
+	local data = self.ctx.Services.DataService
+	for _, player in ipairs(Players:GetPlayers()) do
+		if not self.departing[player] and data:Ready(player) and liveCharacter(player) then
+			table.insert(eligible, player)
+		end
+	end
+	-- Late players still enter a full next round, with a hard cap matching place settings.
+	table.sort(eligible, function(a, b)
+		return a.UserId < b.UserId
+	end)
+	while #eligible > self.ctx.Config.Round.MaxPlayers do
+		table.remove(eligible)
+	end
+	return eligible
+end
+
+function RoundService:_hasEnough(eligible)
+	return #eligible >= self.ctx.Config.Round.MinimumPlayers
+		or (#eligible == 1 and RunService:IsStudio() and self.ctx.Config.Round.StudioSolo)
+end
+
+function RoundService:_startRound(eligible)
+	self.roundId += 1
+	self.roster = {}
+	self.tagTimes = {}
+	self.winners = {}
+	self.practice = #eligible == 1
+	self.startedAt = now()
+	self.phase = "HeadStart"
+	self.endsAt = now() + self.ctx.Config.Round.HeadStart
+	self.resultText = self.practice and "STUDIO PRACTICE · no rewards" or "Runners, find your route!"
+	local cosmetic = self.ctx.Services.CosmeticService
+	if cosmetic then
+		cosmetic:ShowWinners({})
+	end
+	-- Shuffle ties, then prefer players who have spent fewer rounds hunting.
+	for index = #eligible, 2, -1 do
+		local swap = self.random:NextInteger(1, index)
+		eligible[index], eligible[swap] = eligible[swap], eligible[index]
+	end
+	local tieBreak = {}
+	for index, player in ipairs(eligible) do
+		tieBreak[player] = index
+	end
+	table.sort(eligible, function(a, b)
+		local aTurns, bTurns = self.hunterTurns[a.UserId] or 0, self.hunterTurns[b.UserId] or 0
+		if aTurns == bTurns then
+			return tieBreak[a] < tieBreak[b]
+		end
+		return aTurns < bTurns
+	end)
+	local hunters = self.practice and 0 or self.ctx.Rules.HunterCount(#eligible)
+	local runnerIndex, hunterIndex = 0, 0
+	for index, player in ipairs(eligible) do
+		local role = index <= hunters and "Hunter" or "Runner"
+		local spawns, spawnIndex
+		if role == "Hunter" then
+			hunterIndex += 1
+			spawns, spawnIndex = self.ctx.World.HunterSpawns, hunterIndex
+			self.hunterTurns[player.UserId] = (self.hunterTurns[player.UserId] or 0) + 1
+		else
+			runnerIndex += 1
+			spawns, spawnIndex = self.ctx.World.RunnerSpawns, runnerIndex
+		end
+		local spawn = spawns[((spawnIndex - 1) % #spawns) + 1]
+		self.roster[player.UserId] = {
+			player = player,
+			role = role,
+			alive = true,
+			tags = 0,
+			joinedAt = self.startedAt,
+			spawn = spawn,
+		}
+	end
+	for _, player in ipairs(Players:GetPlayers()) do
+		if player.Character then
+			self:_place(player, player.Character)
+		end
+	end
+	self:_broadcast()
+	self.ctx.Remotes.Notice:FireAllClients({ kind = "round", text = self.resultText })
+end
+
+function RoundService:_activate()
+	self.phase = "Active"
+	self.startedAt = now()
+	self.endsAt = self.startedAt + self.ctx.Config.Round.Duration
+	self.resultText = self.practice and "Explore NEON HEIGHTS · practice awards no XP or coins" or "The chase is on!"
+	for _, entry in pairs(self.roster) do
+		entry.joinedAt = self.startedAt
+		if entry.player.Character then
+			-- Releasing hunters also clears any stale movement requests during the hold.
+			self:_setCharacterRole(entry.player, entry.player.Character)
+		end
+	end
+	self:_broadcast()
+	self.ctx.Remotes.Notice:FireAllClients({ kind = "round", text = self.resultText })
+end
+
+function RoundService:_endRound(winningRole, reason)
+	if not self:_playingPhase() then
+		return
+	end
+	local endedAt = now()
+	self.phase = "Results" -- Guard reentry before touching avatars or awarding data.
+	self.endsAt = endedAt + self.ctx.Config.Round.ResultsDuration
+	self.winners = {}
+	self.resultText = self.practice and (reason or "Practice complete · no progression awarded")
+		or (reason or (winningRole == "Hunter" and "Hunters caught every runner!" or "Runners escaped!"))
+	local winningPlayers = {}
+	for _, entry in pairs(self.roster) do
+		local player = entry.player
+		local connected = player.Parent == Players and not self.departing[player]
+		-- Eliminated runners do not receive a survival victory when a teammate escapes.
+		local won = not self.practice and entry.role == winningRole and (entry.role == "Hunter" or entry.alive)
+		if connected and won then
+			table.insert(self.winners, player.UserId)
+			table.insert(winningPlayers, player)
+		end
+		if connected then
+			local survived = entry.role == "Runner"
+				and math.clamp((entry.eliminatedAt or endedAt) - self.startedAt, 0, self.ctx.Config.Round.Duration)
+				or 0
+			local summary = {
+				role = entry.role,
+				win = won,
+				tags = entry.tags,
+				survived = survived,
+				practice = self.practice,
+				roundId = self.roundId,
+			}
+			task.spawn(function()
+				local ok, err = pcall(function()
+					self.ctx.Services.DataService:AwardRound(player, summary)
+				end)
+				if not ok then
+					warn("[Catch] Round award failed: " .. tostring(err))
+				end
+			end)
+		end
+	end
+	table.sort(self.winners)
+	for _, player in ipairs(Players:GetPlayers()) do
+		if not self.departing[player] then
+			local character = liveCharacter(player)
+			if character then
+				self:_place(player, character)
+			else
+				self:_load(player)
+			end
+		end
+	end
+	local cosmetic = self.ctx.Services.CosmeticService
+	if cosmetic then
+		cosmetic:ShowWinners(winningPlayers)
+	end
+	self:_broadcast()
+	self.ctx.Remotes.Notice:FireAllClients({ kind = "round", text = self.resultText })
+end
+
+function RoundService:_checkWin()
+	if not self:_playingPhase() then
+		return
+	end
+	local runners, hunters = self:_counts()
+	if runners == 0 then
+		self:_endRound("Hunter", self.practice and "Practice ended · try another route next round" or "Hunters caught every runner!")
+	elseif not self.practice and hunters == 0 then
+		self:_endRound("Runner", "Runners win · no hunters remain")
+	elseif self.phase == "Active" and now() >= self.endsAt then
+		self:_endRound("Runner", self.practice and "Practice complete · no XP or coins awarded" or "Time is up · runners escaped!")
+	end
+end
+
+function RoundService:_eliminate(player, reason)
+	local entry = self.roster[player.UserId]
+	if not self:_playingPhase() or not entry or not entry.alive then
+		return
+	end
+	entry.alive = false
+	entry.eliminatedAt = now()
+	player:SetAttribute("RoundRole", "Spectator")
+	if player.Character then
+		self:_setCharacterRole(player, player.Character)
+	end
+	if reason ~= "left" then
+		self:_notice(player, {
+			kind = "toast",
+			text = reason == "tag" and "Caught! Watch the chase, then run again next round."
+				or "Round ended for you. You will return to the lobby.",
+		})
+	end
+	self:_checkWin()
+	if self:_playingPhase() then
+		self:_broadcast()
+	end
+end
+
+function RoundService:TryTag(player)
+	if self.phase ~= "Active" or self:GetRole(player) ~= "Hunter" or not self:IsActive(player) then
+		return false
+	end
+	local character, _, root = liveCharacter(player)
+	if not character or character:GetAttribute("Vaulting") or character:GetAttribute("RoundFrozen") then
+		return false
+	end
+	local movement = self.ctx.Services.MovementService
+	if movement and not movement:ValidatePosition(player) then
+		return false
+	end
+	local timestamp = now()
+	local cooldown = self.ctx.Config.Movement.TagCooldown
+	if timestamp - (self.tagTimes[player] or -math.huge) < cooldown then
+		return false
+	end
+	self.tagTimes[player] = timestamp
+	self:_notice(player, { kind = "ability", action = "Tag", cooldown = cooldown })
+	local closest, closestDistance
+	local rayParams = RaycastParams.new()
+	rayParams.FilterType = Enum.RaycastFilterType.Exclude
+	rayParams.FilterDescendantsInstances = { character }
+	rayParams.RespectCanCollide = true
+	for _, entry in pairs(self.roster) do
+		if entry.role == "Runner" and entry.alive and not self.departing[entry.player] then
+			local targetCharacter, _, targetRoot = liveCharacter(entry.player)
+			if targetCharacter and (not movement or movement:ValidatePosition(entry.player)) then
+				local delta = targetRoot.Position - root.Position
+				local distance = delta.Magnitude
+				if distance <= self.ctx.Config.Movement.TagRange and (not closestDistance or distance < closestDistance) then
+					local hit = Workspace:Raycast(root.Position, delta, rayParams)
+					if not hit or hit.Instance:IsDescendantOf(targetCharacter) then
+						closest = entry
+						closestDistance = distance
+					end
+				end
+			end
+		end
+	end
+	if not closest then
+		return false
+	end
+	local hunter = self.roster[player.UserId]
+	hunter.tags += 1
+	local target = closest.player
+	local targetCharacter, _, targetRoot = liveCharacter(target)
+	local cosmetic = self.ctx.Services.CosmeticService
+	if cosmetic and cosmetic.TagEffect then
+		cosmetic:TagEffect(player, target)
+	elseif targetRoot then
+		self.ctx.Remotes.Notice:FireAllClients({ kind = "tag", position = targetRoot.Position, userId = player.UserId })
+	end
+	self:_eliminate(target, "tag")
+	-- A tagged avatar immediately leaves the arena; no invisible blockers or second tags.
+	if targetCharacter and target.Character == targetCharacter then
+		self:_place(target, targetCharacter)
+	end
+	return true
+end
+
+function RoundService:_step()
+	if self.phase == "Waiting" then
+		local eligible = self:_eligible()
+		if self:_hasEnough(eligible) then
+			self.phase = "Intermission"
+			self.endsAt = now() + self.ctx.Config.Round.Intermission
+			self.practice = #eligible == 1
+			self.resultText = self.practice and "Studio solo practice starts soon · no rewards" or "Next chase starts soon"
+			self:_broadcast()
+		end
+	elseif self.phase == "Intermission" then
+		local eligible = self:_eligible()
+		if not self:_hasEnough(eligible) then
+			self.phase, self.endsAt = "Waiting", 0
+			self.practice = false
+			self.resultText = "Waiting for at least two ready players"
+			self:_broadcast()
+		elseif now() >= self.endsAt then
+			self:_startRound(eligible)
+		end
+	elseif self.phase == "HeadStart" then
+		self:_checkWin()
+		if self.phase == "HeadStart" and now() >= self.endsAt then
+			self:_activate()
+		end
+	elseif self.phase == "Active" then
+		self:_checkWin()
+	elseif self.phase == "Results" and now() >= self.endsAt then
+		self.phase, self.endsAt = "Waiting", 0
+		self.roster, self.winners = {}, {}
+		self.practice = false
+		self.resultText = "Waiting for players"
+		local cosmetic = self.ctx.Services.CosmeticService
+		if cosmetic then
+			cosmetic:ShowWinners({})
+		end
+		self:_broadcast()
+	end
+	if now() - self.lastBroadcast >= 1 then
+		self:_broadcast()
+	end
+end
+
+function RoundService:Start()
+	if self.started then
+		return
+	end
+	self.started = true
+	Players.CharacterAutoLoads = false
+	Players.PlayerAdded:Connect(function(player)
+		self:_onPlayer(player)
+	end)
+	Players.PlayerRemoving:Connect(function(player)
+		self.departing[player] = true
+		self:_eliminate(player, "left")
+		self.tagTimes[player], self.loading[player], self.hunterTurns[player.UserId] = nil, nil, nil
+		if self.connections[player] then
+			self.connections[player]:Disconnect()
+			self.connections[player] = nil
+		end
+		if self.characterConnections[player] then
+			self.characterConnections[player]:Disconnect()
+			self.characterConnections[player] = nil
+		end
+		self:_broadcast()
+		-- Keep the departure marker only while a removed player's callbacks can still run.
+		task.delay(10, function()
+			self.departing[player] = nil
+		end)
+	end)
+	for _, player in ipairs(Players:GetPlayers()) do
+		self:_onPlayer(player)
+	end
+	task.spawn(function()
+		while self.started do
+			local ok, err = xpcall(function()
+				self:_step()
+			end, debug.traceback)
+			if not ok then
+				warn("[Catch] Round step failed: " .. tostring(err))
+			end
+			task.wait(0.2)
+		end
+	end)
+end
+
+return RoundService
+]]></string>
+          </Properties>
+        </Item>
+        <Item class="ModuleScript" referent="13">
+          <Properties>
+            <string name="Name">ShopService</string>
+            <string name="Source"><![CDATA[-- All prices, ownership, entitlements, and marketplace verification stay on the server.
+local MarketplaceService = game:GetService("MarketplaceService")
+local Players = game:GetService("Players")
+
+local ShopService = {}
+ShopService.__index = ShopService
+
+local function validPass(id)
+	return type(id) == "number" and id > 0 and id < 9007199254740991 and id % 1 == 0
+end
+
+function ShopService.new(ctx)
+	return setmetatable({ ctx = ctx, busy = {}, pending = {}, verified = {}, lastPrompt = {} }, ShopService)
+end
+
+function ShopService:_Notice(player, text)
+	if player.Parent == Players then self.ctx.Remotes.Notice:FireClient(player, { kind = "purchase", text = text }) end
+end
+
+function ShopService:_PassItems(passId)
+	local ids = {}
+	for id, item in pairs(self.ctx.Catalog.Items) do
+		if item.currency == "Robux" and item.gamePassId == passId then table.insert(ids, id) end
+	end
+	return ids
+end
+
+function ShopService:_Verify(player, passId, afterPurchase)
+	local data = self.ctx.Services.DataService
+	if not validPass(passId) or #self:_PassItems(passId) == 0 or not data:Ready(player) then return false, "unavailable" end
+	self.verified[player] = self.verified[player] or {}
+	if self.verified[player][passId] then
+		data:Grant(player, self:_PassItems(passId))
+		return true
+	end
+	local successfulQuery = false
+	for attempt = 1, afterPurchase and 3 or 1 do
+		local ok, owns = pcall(function() return MarketplaceService:UserOwnsGamePassAsync(player.UserId, passId) end)
+		if player.Parent ~= Players or not data:Ready(player) then return false, "unavailable" end
+		if ok then
+			successfulQuery = true
+			if owns then
+				self.verified[player] = self.verified[player] or {}
+				self.verified[player][passId] = true
+				local granted = data:Grant(player, self:_PassItems(passId), afterPurchase and "Purchase verified. Your cosmetics are ready." or nil)
+				return granted
+			end
+		end
+		if afterPurchase and attempt < 3 then task.wait(attempt) end
+	end
+	return false, successfulQuery and "not_owned" or "unavailable"
+end
+
+function ShopService:Purchase(player, id)
+	local data = self.ctx.Services.DataService
+	if not data:Ready(player) then self:_Notice(player, "Your profile is still loading."); return false end
+	local item = type(id) == "string" and self.ctx.Catalog.Get(id)
+	if not item then self:_Notice(player, "This item is unavailable."); return false end
+	local profile = data:Get(player)
+	if profile.owned[id] then self:_Notice(player, "You already own " .. item.name .. ". Equip it from your inventory."); return true end
+	if item.currency == "Free" then
+		local ok = data:Grant(player, { id }, "Added " .. item.name .. " to your inventory.")
+		return ok
+	elseif item.currency == "Coins" then
+		local ok, message = data:_PurchaseWithCoins(player, id)
+		self:_Notice(player, message)
+		return ok
+	elseif item.currency == "Milestone" then
+		local milestone = item.milestone
+		if not milestone then self:_Notice(player, "This reward is unavailable."); return false end
+		local progress = profile.stats[milestone.stat] or profile[milestone.stat] or 0
+		if progress >= milestone.value then return data:Grant(player, { id }, "Unlocked " .. item.name .. ".") end
+		self:_Notice(player, "Reach " .. milestone.value .. " " .. milestone.stat .. " to unlock this cosmetic.")
+		return false
+	elseif item.currency ~= "Robux" then
+		self:_Notice(player, "This item is unavailable.")
+		return false
+	end
+	if not validPass(item.gamePassId) then
+		self:_Notice(player, "This Robux cosmetic is not configured for sale yet.")
+		return false
+	end
+	if self.busy[player] or self.pending[player] then self:_Notice(player, "Finish your current purchase first."); return false end
+	if os.clock() - (self.lastPrompt[player] or -100) < 3 then self:_Notice(player, "Please wait a moment before trying again."); return false end
+	self.busy[player] = true
+	local owns, reason = self:_Verify(player, item.gamePassId, false)
+	if player.Parent ~= Players then self.busy[player] = nil; return false end
+	if owns then
+		self.busy[player] = nil
+		self:_Notice(player, "Ownership verified. " .. item.name .. " is in your inventory.")
+		return true
+	end
+	if reason == "unavailable" then
+		self.busy[player] = nil
+		self:_Notice(player, "Roblox could not verify your ownership. Please try again shortly.")
+		return false
+	end
+	self.pending[player] = item.gamePassId
+	self.lastPrompt[player] = os.clock()
+	local ok = pcall(function() MarketplaceService:PromptGamePassPurchase(player, item.gamePassId) end)
+	self.busy[player] = nil
+	if not ok then
+		self.pending[player] = nil
+		self:_Notice(player, "Roblox could not open the purchase prompt. Please try again later.")
+		return false
+	end
+	self:_Notice(player, "Confirm the price and purchase in the Roblox prompt.")
+	return true
+end
+
+function ShopService:_Refresh(player)
+	local data = self.ctx.Services.DataService
+	while player.Parent == Players and not data:Ready(player) do task.wait(0.2) end
+	if player.Parent ~= Players then return end
+	local seen = {}
+	local failed = false
+	for _, item in pairs(self.ctx.Catalog.Items) do
+		if item.currency == "Robux" and validPass(item.gamePassId) and not seen[item.gamePassId] then
+			seen[item.gamePassId] = true
+			local _, reason = self:_Verify(player, item.gamePassId, false)
+			if reason == "unavailable" then failed = true end
+			if player.Parent ~= Players then return end
+		end
+	end
+	if failed then self:_Notice(player, "Some pass ownership checks are unavailable. Rejoin or select the item later to retry.") end
+end
+
+function ShopService:Start()
+	if self.started then return end
+	self.started = true
+	MarketplaceService.PromptGamePassPurchaseFinished:Connect(function(player, passId, wasPurchased)
+		if self.pending[player] == passId then self.pending[player] = nil end
+		if not wasPurchased or not validPass(passId) or #self:_PassItems(passId) == 0 then return end
+		-- The prompt result is an intent signal. Grant only after a server ownership query.
+		task.spawn(function()
+			local verified = self:_Verify(player, passId, true)
+			if not verified then self:_Notice(player, "Purchase verification is delayed. Rejoin to restore owned passes; you do not need to buy again.") end
+		end)
+	end)
+	Players.PlayerAdded:Connect(function(player) task.spawn(function() self:_Refresh(player) end) end)
+	Players.PlayerRemoving:Connect(function(player)
+		self.busy[player] = nil
+		self.pending[player] = nil
+		self.verified[player] = nil
+		self.lastPrompt[player] = nil
+	end)
+	for _, player in ipairs(Players:GetPlayers()) do task.spawn(function() self:_Refresh(player) end) end
+end
+
+return ShopService
+]]></string>
+          </Properties>
+        </Item>
+      </Item>
+      <Item class="Folder" referent="14">
+        <Properties>
+          <string name="Name">World</string>
+        </Properties>
+      </Item>
+    </Item>
+  </Item>
+  <Item class="SoundService" referent="15">
+    <Properties>
+      <string name="Name">SoundService</string>
+      <bool name="RespectFilteringEnabled">true</bool>
+    </Properties>
+  </Item>
+  <Item class="StarterPlayer" referent="16">
+    <Properties>
+      <string name="Name">StarterPlayer</string>
+      <float name="CameraMaxZoomDistance">20</float>
+      <float name="CameraMinZoomDistance">7</float>
+      <float name="CharacterJumpPower">48</float>
+      <bool name="CharacterUseJumpPower">true</bool>
+      <float name="CharacterWalkSpeed">17</float>
+      <bool name="LoadCharacterAppearance">false</bool>
+    </Properties>
+    <Item class="StarterPlayerScripts" referent="17">
+      <Properties>
+        <string name="Name">StarterPlayerScripts</string>
+      </Properties>
+      <Item class="Folder" referent="18">
+        <Properties>
+          <string name="Name">CatchClient</string>
+        </Properties>
+        <Item class="Folder" referent="19">
+          <Properties>
+            <string name="Name">Controllers</string>
+          </Properties>
+          <Item class="ModuleScript" referent="20">
+            <Properties>
+              <string name="Name">EffectsController</string>
+              <string name="Source"><![CDATA[-- All feedback is cosmetic. No asset IDs or sounds are assumed to be owned.
+local Players = game:GetService("Players")
+local RunService = game:GetService("RunService")
+local SoundService = game:GetService("SoundService")
+local TweenService = game:GetService("TweenService")
+local Debris = game:GetService("Debris")
+
+local EffectsController = {}
+EffectsController.__index = EffectsController
+
+local CYAN = Color3.fromRGB(75, 236, 235)
+local GOLD = Color3.fromRGB(255, 203, 100)
+local CORAL = Color3.fromRGB(255, 105, 117)
+local WHITE = Color3.fromRGB(237, 249, 255)
+
+local function tween(instance, duration, properties, style)
+	local animation = TweenService:Create(instance,
+		TweenInfo.new(duration, style or Enum.EasingStyle.Quad, Enum.EasingDirection.Out), properties)
+	animation:Play()
+	return animation
+end
+
+function EffectsController.new(ctx)
+	return setmetatable({
+		ctx = ctx,
+		player = Players.LocalPlayer,
+		connections = {},
+		sounds = {},
+		lastTag = 0,
+		elapsed = 0,
+		sequence = 0,
+		random = Random.new(),
+	}, EffectsController)
+end
+
+function EffectsController:_settings()
+	return self.ctx.Profile.settings or {}
+end
+
+function EffectsController:_sound(name, volume)
+	if self:_settings().sfx == false then
+		return
+	end
+	local id = tonumber((self.ctx.Config.Audio or {})[name])
+	if not id or id <= 0 or id ~= math.floor(id) then
+		return
+	end
+	local sound = Instance.new("Sound")
+	sound.Name = "Catch" .. name
+	sound.SoundId = "rbxassetid://" .. tostring(id)
+	sound.Volume = volume or 0.4
+	sound.Parent = SoundService
+	self.sounds[sound] = true
+	sound.Ended:Once(function()
+		self.sounds[sound] = nil
+		sound:Destroy()
+	end)
+	sound.Destroying:Once(function()
+		self.sounds[sound] = nil
+	end)
+	sound:Play()
+	Debris:AddItem(sound, 15)
+end
+
+function EffectsController:_music()
+	if not self.music then
+		local id = tonumber((self.ctx.Config.Audio or {}).Music)
+		if not id or id <= 0 or id ~= math.floor(id) then
+			return
+		end
+		self.music = Instance.new("Sound")
+		self.music.Name = "CatchMusic"
+		self.music.SoundId = "rbxassetid://" .. tostring(id)
+		self.music.Looped = true
+		self.music.Volume = 0.18
+		self.music.Parent = SoundService
+	end
+	if self:_settings().music == false then
+		self.music:Pause()
+	elseif not self.music.IsPlaying then
+		if self.music.TimePosition > 0 then
+			self.music:Resume()
+		else
+			self.music:Play()
+		end
+	end
+end
+
+function EffectsController:_pulse(color, strength)
+	if not self.gui or not self.gui.Parent then
+		return
+	end
+	local reduced = self:_settings().reducedMotion == true
+	local frame = Instance.new("Frame")
+	frame.Name = "EdgePulse"
+	frame.Size = UDim2.new(1, -12, 1, -12)
+	frame.Position = UDim2.fromOffset(6, 6)
+	frame.BackgroundTransparency = 1
+	frame.BorderSizePixel = 0
+	frame.Parent = self.gui
+	local corner = Instance.new("UICorner")
+	corner.CornerRadius = UDim.new(0, 14)
+	corner.Parent = frame
+	local stroke = Instance.new("UIStroke")
+	stroke.Color = color
+	stroke.Thickness = reduced and 2 or 4
+	stroke.Transparency = 1 - math.clamp(strength or 0.7, 0, 0.8)
+	stroke.Parent = frame
+	tween(stroke, reduced and 0.5 or 0.8, { Transparency = 1, Thickness = 1 })
+	Debris:AddItem(frame, 0.9)
+end
+
+function EffectsController:_banner(text, color, duration, large)
+	if not self.gui or not self.gui.Parent then
+		return
+	end
+	self.sequence += 1
+	if self.banner then
+		self.banner:Destroy()
+	end
+	local label = Instance.new("TextLabel")
+	label.Name = "ChaseCue"
+	label.AnchorPoint = Vector2.new(0.5, 0.5)
+	label.Position = UDim2.fromScale(0.5, 0.32)
+	label.Size = UDim2.new(0.85, 0, 0, large and 110 or 42)
+	label.BackgroundTransparency = 1
+	label.Text = text
+	label.Font = Enum.Font.GothamBlack
+	label.TextColor3 = color
+	label.TextSize = large and 82 or 25
+	label.TextStrokeColor3 = Color3.fromRGB(14, 23, 40)
+	label.TextStrokeTransparency = 0.3
+	label.TextTransparency = 0
+	label.Parent = self.gui
+	self.banner = label
+	local scale = Instance.new("UIScale")
+	scale.Scale = self:_settings().reducedMotion and 1 or 0.92
+	scale.Parent = label
+	if not self:_settings().reducedMotion then
+		tween(scale, 0.18, { Scale = 1 }, Enum.EasingStyle.Back)
+	end
+	task.delay(duration or 0.65, function()
+		if label.Parent then
+			tween(label, 0.25, { TextTransparency = 1, TextStrokeTransparency = 1 })
+			Debris:AddItem(label, 0.3)
+		end
+	end)
+end
+
+function EffectsController:_confetti(color)
+	if self:_settings().reducedMotion or not self.gui then
+		return
+	end
+	for index = 1, 22 do
+		local shard = Instance.new("Frame")
+		shard.Name = "Confetti"
+		shard.AnchorPoint = Vector2.new(0.5, 0.5)
+		shard.Size = UDim2.fromOffset(self.random:NextInteger(4, 8), self.random:NextInteger(8, 15))
+		shard.BackgroundColor3 = index % 3 == 0 and WHITE or color
+		shard.BorderSizePixel = 0
+		shard.Rotation = self.random:NextInteger(-90, 90)
+		local left = index % 2 == 0
+		shard.Position = UDim2.fromScale(left and 0 or 1, self.random:NextNumber(0.4, 0.7))
+		shard.Parent = self.gui
+		local duration = self.random:NextNumber(0.85, 1.35)
+		tween(shard, duration, {
+			Position = UDim2.fromScale(left and self.random:NextNumber(0.15, 0.42)
+				or self.random:NextNumber(0.58, 0.85), self.random:NextNumber(0.08, 0.3)),
+			Rotation = shard.Rotation + self.random:NextInteger(-160, 160),
+			BackgroundTransparency = 1,
+		})
+		Debris:AddItem(shard, duration + 0.1)
+	end
+end
+
+function EffectsController:_worldBurst(position, color, bloom)
+	if typeof(position) ~= "Vector3" or self:_settings().reducedMotion or not self.worldEffects then
+		return
+	end
+	local camera = workspace.CurrentCamera
+	if not camera or (camera.CFrame.Position - position).Magnitude > 160 then
+		return
+	end
+	local count = bloom and 14 or 9
+	for index = 1, count do
+		local angle = index / count * math.pi * 2
+		local direction = Vector3.new(math.cos(angle), self.random:NextNumber(-0.1, 0.8), math.sin(angle))
+		local spark = Instance.new("Part")
+		spark.Name = "TagSpark"
+		spark.Size = bloom and Vector3.new(0.22, 0.22, 0.22) or Vector3.new(0.13, 0.45, 0.13)
+		spark.Shape = bloom and Enum.PartType.Ball or Enum.PartType.Block
+		spark.Material = Enum.Material.Neon
+		spark.Color = index % 3 == 0 and WHITE or color
+		spark.CanCollide = false
+		spark.CanTouch = false
+		spark.CanQuery = false
+		spark.CastShadow = false
+		spark.Anchored = true
+		spark.CFrame = CFrame.new(position + direction * 0.3)
+		spark.Parent = self.worldEffects
+		tween(spark, 0.48, {
+			Position = position + direction * (bloom and 4 or 3),
+			Transparency = 1,
+			Size = Vector3.new(0.03, 0.03, 0.03),
+		})
+		Debris:AddItem(spark, 0.55)
+	end
+end
+
+function EffectsController:_countdown()
+	local state = self.ctx.State
+	if not state.endsAt or (state.phase ~= "Active" and state.phase ~= "HeadStart") then
+		return
+	end
+	local seconds = math.ceil(state.endsAt - workspace:GetServerTimeNow())
+	local threshold = state.phase == "HeadStart" and 3 or 5
+	if seconds < 1 or seconds > threshold then
+		return
+	end
+	local key = tostring(state.roundId) .. state.phase .. tostring(seconds)
+	if self.countdownKey == key then
+		return
+	end
+	self.countdownKey = key
+	self:_sound("Countdown", 0.25)
+	self:_banner(tostring(seconds), state.phase == "HeadStart" and CYAN or CORAL, 0.35, true)
+end
+
+function EffectsController:OnState(state)
+	local previousPhase = self.phase
+	local changedRound = self.roundId ~= state.roundId
+	if changedRound then
+		self.countdownKey = nil
+		self.finalShown = false
+	end
+	if state.phase == "Active" and previousPhase == "HeadStart" then
+		self:_banner("CHASE ON", CYAN, 0.7, false)
+		self:_pulse(CYAN, 0.5)
+	end
+	if state.phase == "Active" and state.finalChase and not self.finalShown then
+		self.finalShown = true
+		self:_banner(state.lastRunner and "LAST RUNNER" or "FINAL CHASE", CORAL, 1.1, false)
+		self:_pulse(CORAL, 0.7)
+		self:_sound("Final", 0.4)
+	end
+	if state.phase == "Results" and (previousPhase ~= "Results" or changedRound) then
+		local winner = table.find(state.winners or {}, self.player.UserId) ~= nil
+		local participant = false
+		for _, entry in ipairs(state.players or {}) do
+			if entry.userId == self.player.UserId then
+				participant = entry.role == "Runner" or entry.role == "Hunter"
+				break
+			end
+		end
+		if winner and not state.practice then
+			self:_pulse(GOLD, 0.75)
+			self:_confetti(GOLD)
+			self:_sound("Win", 0.5)
+		elseif participant and not state.practice then
+			self:_sound("Lose", 0.35)
+		end
+	end
+	self.phase = state.phase
+	self.roundId = state.roundId
+end
+
+function EffectsController:OnProfile(_profile)
+	self:_music()
+	if self:_settings().sfx == false then
+		for sound in pairs(self.sounds) do
+			sound:Stop()
+			sound:Destroy()
+		end
+		table.clear(self.sounds)
+	end
+	if self:_settings().reducedMotion and self.worldEffects then
+		self.worldEffects:ClearAllChildren()
+	end
+end
+
+function EffectsController:OnNotice(notice)
+	if notice.kind == "tag" then
+		local now = os.clock()
+		if now - self.lastTag < 0.07 then
+			return
+		end
+		self.lastTag = now
+		local bloom = notice.action == "tag_bloom"
+		self:_worldBurst(notice.position, bloom and GOLD or CYAN, bloom)
+		if notice.userId == self.player.UserId then
+			self:_pulse(CYAN, 0.65)
+			self:_sound("Tag", 0.45)
+		end
+	elseif notice.kind == "level" or notice.kind == "unlock" then
+		self:_pulse(GOLD, 0.6)
+		self:_confetti(GOLD)
+		self:_sound("Level", 0.4)
+	elseif notice.kind == "purchase" and notice.success == true then
+		self:_pulse(CYAN, 0.45)
+		self:_sound("Purchase", 0.3)
+	elseif notice.kind == "ability" and notice.success ~= false then
+		if notice.action == "Slide" or notice.action == "Vault" then
+			self:_sound(notice.action, 0.25)
+		end
+	end
+end
+
+function EffectsController:Start()
+	if self.started then
+		return
+	end
+	self.started = true
+	self.gui = Instance.new("ScreenGui")
+	self.gui.Name = "CatchFeedback"
+	self.gui.IgnoreGuiInset = true
+	self.gui.ResetOnSpawn = false
+	self.gui.DisplayOrder = 25
+	self.gui.ZIndexBehavior = Enum.ZIndexBehavior.Sibling
+	self.gui.Parent = self.player:WaitForChild("PlayerGui")
+	self.worldEffects = Instance.new("Folder")
+	self.worldEffects.Name = "CatchLocalEffects_" .. self.player.UserId
+	self.worldEffects.Parent = workspace
+	table.insert(self.connections, RunService.Heartbeat:Connect(function(dt)
+		self.elapsed += dt
+		if self.elapsed >= 0.1 then
+			self.elapsed = 0
+			self:_countdown()
+		end
+	end))
+	self:_music()
+	self:OnState(self.ctx.State)
+end
+
+function EffectsController:Destroy()
+	for _, connection in ipairs(self.connections) do
+		connection:Disconnect()
+	end
+	table.clear(self.connections)
+	for sound in pairs(self.sounds) do
+		sound:Destroy()
+	end
+	table.clear(self.sounds)
+	if self.music then
+		self.music:Destroy()
+	end
+	if self.gui then
+		self.gui:Destroy()
+	end
+	if self.worldEffects then
+		self.worldEffects:Destroy()
+	end
+end
+
+return EffectsController
+]]></string>
+            </Properties>
+          </Item>
+          <Item class="ModuleScript" referent="21">
+            <Properties>
+              <string name="Name">MovementController</string>
+              <string name="Source"><![CDATA[-- Input is intent only. Speed, collision, cooldowns and tagging are server-owned.
+local Players = game:GetService("Players")
+local ContextActionService = game:GetService("ContextActionService")
+local RunService = game:GetService("RunService")
+local UserInputService = game:GetService("UserInputService")
+
+local MovementController = {}
+MovementController.__index = MovementController
+
+local ACTIONS = { "CatchSprint", "CatchSlide", "CatchVault", "CatchTag" }
+local READY_ATTRIBUTES = {
+	Slide = "CatchSlideReadyAt",
+	Vault = "CatchVaultReadyAt",
+	Tag = "CatchTagReadyAt",
+}
+
+local function disconnectAll(connections)
+	for _, connection in ipairs(connections) do
+		connection:Disconnect()
+	end
+	table.clear(connections)
+end
+
+function MovementController.new(ctx)
+	return setmetatable({
+		ctx = ctx,
+		player = Players.LocalPlayer,
+		connections = {},
+		characterConnections = {},
+		pose = {},
+		sprintRequested = false,
+		lastVaultIntent = 0,
+		lastSlideIntent = 0,
+		lastTagIntent = 0,
+		bobTime = 0,
+		cameraOffset = Vector3.zero,
+		lean = Vector3.zero,
+		role = "Lobby",
+		bindName = "CatchMovementFeedback",
+	}, MovementController)
+end
+
+function MovementController:_settings()
+	return self.ctx.Profile.settings or {}
+end
+
+function MovementController:_canAct()
+	return self.humanoid ~= nil
+		and self.humanoid.Health > 0
+		and self.role ~= "Spectator"
+		and not self.player:GetAttribute("CatchMenuOpen")
+		and UserInputService:GetFocusedTextBox() == nil
+end
+
+function MovementController:_sprint(active)
+	active = active == true and self:_canAct()
+	if self.sprintRequested == active then
+		return
+	end
+	self.sprintRequested = active
+	self.ctx.Remotes.Action:FireServer("Sprint", { active = active })
+	ContextActionService:SetTitle("CatchSprint", active and "RUN ON" or "RUN")
+end
+
+function MovementController:_intent(action)
+	if not self:_canAct() then
+		return
+	end
+	-- This is only an input flood guard. The server decides whether the move is valid.
+	local field = "last" .. action .. "Intent"
+	local now = os.clock()
+	if now - (self[field] or 0) < 0.15 then
+		return
+	end
+	self[field] = now
+	self.ctx.Remotes.Action:FireServer(action, {})
+end
+
+function MovementController:GetCooldown(action)
+	local attribute = READY_ATTRIBUTES[action]
+	local readyAt = attribute and self.player:GetAttribute(attribute)
+	return type(readyAt) == "number" and math.max(0, readyAt - workspace:GetServerTimeNow()) or 0
+end
+
+function MovementController:_resetPose()
+	for _, record in ipairs(self.pose) do
+		if record.joint.Parent and record.last and record.joint.C0 == record.last then
+			record.joint.C0 = record.base
+		end
+		record.last = nil
+	end
+	self.lean = Vector3.zero
+end
+
+function MovementController:_releaseCamera()
+	if self.ownsCamera and self.camera and self.camera.Parent then
+		self.camera.FieldOfView = self.baseFov
+	end
+	if self.humanoid and self.humanoid.Parent and self.lastCameraOffset
+		and self.humanoid.CameraOffset == self.lastCameraOffset then
+		self.humanoid.CameraOffset = self.baseCameraOffset or Vector3.zero
+	end
+	self.ownsCamera = false
+	self.lastCameraOffset = nil
+	self.cameraOffset = Vector3.zero
+end
+
+function MovementController:OnCharacter(character)
+	if self.character == character then
+		return
+	end
+	self:_sprint(false)
+	self:_releaseCamera()
+	self:_resetPose()
+	disconnectAll(self.characterConnections)
+	table.clear(self.pose)
+	self.character = character
+	self.humanoid = nil
+	self.root = nil
+	if not character then
+		return
+	end
+	-- Waiting for avatar parts must not stall Query/state dispatch.
+	task.spawn(function()
+		local humanoid = character:WaitForChild("Humanoid", 10)
+		local root = character:WaitForChild("HumanoidRootPart", 10)
+		if self.character ~= character or not humanoid or not root or self.destroyed then
+			return
+		end
+		self.humanoid = humanoid
+		self.root = root
+		self.baseCameraOffset = humanoid.CameraOffset
+		self.bobTime = 0
+		for _, descendant in ipairs(character:GetDescendants()) do
+			if descendant:IsA("Motor6D") and descendant.Name == "Waist" then
+				table.insert(self.pose, { joint = descendant, base = descendant.C0 })
+			end
+		end
+		table.insert(self.characterConnections, humanoid.Died:Connect(function()
+			self:_sprint(false)
+			self:_releaseCamera()
+			self:_resetPose()
+		end))
+	end)
+end
+
+function MovementController:_feedback(dt)
+	dt = math.min(dt, 0.1)
+	local humanoid, root, character = self.humanoid, self.root, self.character
+	local camera = workspace.CurrentCamera
+	local settings = self:_settings()
+	local permitted = humanoid and root and character and humanoid.Health > 0
+		and self.role ~= "Spectator" and not settings.reducedMotion
+	if not permitted then
+		self:_releaseCamera()
+		self:_resetPose()
+		return
+	end
+	local moving = humanoid.MoveDirection.Magnitude > 0.1
+	local sprinting = character:GetAttribute("Sprinting") == true and moving
+	local sliding = character:GetAttribute("Sliding") == true
+	local vaulting = character:GetAttribute("Vaulting") == true
+	local grounded = humanoid.FloorMaterial ~= Enum.Material.Air
+	local smoothing = 1 - math.exp(-10 * dt)
+	local ownsSubject = camera and camera.CameraSubject == humanoid
+		and camera.CameraType ~= Enum.CameraType.Scriptable
+	if ownsSubject then
+		if self.camera ~= camera or not self.ownsCamera then
+			self:_releaseCamera()
+			self.camera = camera
+			self.baseFov = camera.FieldOfView
+			self.ownsCamera = true
+		end
+		local targetFov = self.baseFov + (sliding and 9 or (sprinting and 7 or 0))
+		camera.FieldOfView += (targetFov - camera.FieldOfView) * smoothing
+		local offset = Vector3.zero
+		if settings.cameraShake ~= false then
+			if moving and grounded and not sliding and not vaulting then
+				self.bobTime += dt * (sprinting and 13 or 9)
+				offset = Vector3.new(math.sin(self.bobTime * 0.5) * 0.025,
+					math.abs(math.sin(self.bobTime)) * 0.045, 0)
+			elseif sliding then
+				offset = Vector3.new(0, -0.5, 0)
+			end
+		end
+		self.cameraOffset = self.cameraOffset:Lerp(offset, smoothing)
+		self.lastCameraOffset = self.baseCameraOffset + self.cameraOffset
+		humanoid.CameraOffset = self.lastCameraOffset
+	else
+		-- UIController owns the spectator camera and its subject.
+		self:_releaseCamera()
+	end
+	if character:GetAttribute("CatchEmoting") then
+		self:_resetPose()
+		return
+	end
+	local direction = root.CFrame:VectorToObjectSpace(humanoid.MoveDirection)
+	local targetLean = Vector3.new(sliding and -0.26 or direction.Z * 0.065,
+		0, -direction.X * (sprinting and 0.075 or 0.045))
+	self.lean = self.lean:Lerp(targetLean, smoothing)
+	for _, record in ipairs(self.pose) do
+		local joint = record.joint
+		if joint.Parent then
+			-- Preserve any fresh avatar/emote base pose instead of accumulating offsets.
+			if joint.C0 ~= record.last then
+				record.base = joint.C0
+			end
+			if moving or sliding or self.lean.Magnitude > 0.001 then
+				record.last = record.base * CFrame.Angles(self.lean.X, self.lean.Y, self.lean.Z)
+				joint.C0 = record.last
+			elseif record.last then
+				joint.C0 = record.base
+				record.last = nil
+			end
+		end
+	end
+end
+
+function MovementController:OnState(state)
+	local previousRole = self.role
+	self.role = "Lobby"
+	for _, entry in ipairs(state.players or {}) do
+		if entry.userId == self.player.UserId then
+			self.role = entry.role
+			break
+		end
+	end
+	if self.role == "Spectator" or previousRole ~= self.role or self.phase ~= state.phase then
+		self:_sprint(false)
+	end
+	self.phase = state.phase
+end
+
+function MovementController:OnProfile(_profile)
+	if self:_settings().reducedMotion then
+		self:_releaseCamera()
+		self:_resetPose()
+	end
+end
+
+function MovementController:OnNotice(notice)
+	if notice.kind ~= "ability" or notice.success == false then
+		return
+	end
+	local attribute = READY_ATTRIBUTES[notice.action]
+	local cooldown = tonumber(notice.cooldown)
+	if attribute and cooldown and cooldown == cooldown and cooldown >= 0 and cooldown < 60 then
+		self.player:SetAttribute(attribute, workspace:GetServerTimeNow() + cooldown)
+	end
+end
+
+function MovementController:Start()
+	if self.started then
+		return
+	end
+	self.started = true
+	ContextActionService:BindAction("CatchSprint", function(_, state, input)
+		if state == Enum.UserInputState.Cancel then
+			self:_sprint(false)
+		elseif input.KeyCode == Enum.KeyCode.ButtonL3 or input.UserInputType == Enum.UserInputType.Touch then
+			if state == Enum.UserInputState.Begin then
+				self:_sprint(not self.sprintRequested)
+			end
+		elseif state == Enum.UserInputState.Begin then
+			self:_sprint(true)
+		elseif state == Enum.UserInputState.End then
+			self:_sprint(false)
+		end
+		return Enum.ContextActionResult.Sink
+	end, true, Enum.KeyCode.LeftShift, Enum.KeyCode.RightShift, Enum.KeyCode.ButtonL3)
+	ContextActionService:BindAction("CatchSlide", function(_, state)
+		if state == Enum.UserInputState.Begin then
+			self:_intent("Slide")
+		end
+		return self:_canAct() and Enum.ContextActionResult.Sink or Enum.ContextActionResult.Pass
+	end, true, Enum.KeyCode.C, Enum.KeyCode.ButtonB)
+	ContextActionService:BindAction("CatchVault", function(_, state)
+		if state == Enum.UserInputState.Begin then
+			self:_intent("Vault")
+		end
+		-- Roblox's normal jumping remains available when no vault obstacle is present.
+		return Enum.ContextActionResult.Pass
+	end, false, Enum.KeyCode.Space, Enum.KeyCode.ButtonA)
+	ContextActionService:BindAction("CatchTag", function(_, state)
+		if state == Enum.UserInputState.Begin then
+			self:_intent("Tag")
+		end
+		return self:_canAct() and Enum.ContextActionResult.Sink or Enum.ContextActionResult.Pass
+	end, true, Enum.KeyCode.F, Enum.KeyCode.ButtonR2)
+	ContextActionService:SetTitle("CatchSprint", "RUN")
+	ContextActionService:SetTitle("CatchSlide", "SLIDE")
+	ContextActionService:SetTitle("CatchTag", "TAG")
+	ContextActionService:SetPosition("CatchSprint", UDim2.new(1, -190, 1, -150))
+	ContextActionService:SetPosition("CatchSlide", UDim2.new(1, -110, 1, -150))
+	ContextActionService:SetPosition("CatchTag", UDim2.new(1, -190, 1, -225))
+	for _, action in ipairs(ACTIONS) do
+		local button = ContextActionService:GetButton(action)
+		if button then
+			button.Size = UDim2.fromOffset(64, 64)
+			button.ImageColor3 = Color3.fromRGB(31, 47, 65)
+		end
+	end
+	table.insert(self.connections, UserInputService.JumpRequest:Connect(function()
+		if UserInputService.TouchEnabled then
+			self:_intent("Vault")
+		end
+	end))
+	table.insert(self.connections, UserInputService.WindowFocusReleased:Connect(function()
+		self:_sprint(false)
+	end))
+	table.insert(self.connections, UserInputService.TextBoxFocused:Connect(function()
+		self:_sprint(false)
+	end))
+	table.insert(self.connections, self.player:GetAttributeChangedSignal("CatchMenuOpen"):Connect(function()
+		if self.player:GetAttribute("CatchMenuOpen") then
+			self:_sprint(false)
+		end
+	end))
+	table.insert(self.connections, self.player.CharacterAdded:Connect(function(character)
+		self:OnCharacter(character)
+	end))
+	table.insert(self.connections, self.player.CharacterRemoving:Connect(function(character)
+		if character == self.character then
+			self:OnCharacter(nil)
+		end
+	end))
+	RunService:BindToRenderStep(self.bindName, Enum.RenderPriority.Camera.Value - 1, function(dt)
+		self:_feedback(dt)
+	end)
+	self:OnCharacter(self.player.Character)
+	self:OnState(self.ctx.State)
+end
+
+function MovementController:Destroy()
+	self.destroyed = true
+	self:_sprint(false)
+	RunService:UnbindFromRenderStep(self.bindName)
+	for _, action in ipairs(ACTIONS) do
+		ContextActionService:UnbindAction(action)
+	end
+	self:OnCharacter(nil)
+	disconnectAll(self.connections)
+end
+
+return MovementController
+]]></string>
+            </Properties>
+          </Item>
+        </Item>
+        <Item class="LocalScript" referent="22">
+          <Properties>
+            <string name="Name">Main</string>
+            <string name="Source"><![CDATA[local Players = game:GetService("Players")
+local ReplicatedStorage = game:GetService("ReplicatedStorage")
+local shared = ReplicatedStorage:WaitForChild("CatchShared")
+local remoteFolder = ReplicatedStorage:WaitForChild("CatchRemotes")
+local ctx = {
+	Config=require(shared.Config), Catalog=require(shared.Catalog), Rules=require(shared.Rules),
+	Remotes={}, State={}, Profile={}, Controllers={}, Signals={},
+}
+for _, name in ipairs({"State","Action","Profile","Notice","Query"}) do ctx.Remotes[name] = remoteFolder:WaitForChild(name) end
+for _, name in ipairs({"UIController","MovementController","EffectsController"}) do
+	ctx.Controllers[name] = require(script.Parent.Controllers[name]).new(ctx)
+end
+local function deliver(method, value)
+	for name, controller in pairs(ctx.Controllers) do
+		if controller[method] then
+			local ok, err = pcall(controller[method],controller,value)
+			if not ok then warn("[Catch] " .. name .. "." .. method .. ": " .. tostring(err)) end
+		end
+	end
+end
+ctx.Remotes.State.OnClientEvent:Connect(function(state)
+	if type(state) ~= "table" then return end
+	ctx.State = state
+	deliver("OnState",state)
+end)
+ctx.Remotes.Profile.OnClientEvent:Connect(function(profile)
+	if type(profile) ~= "table" then return end
+	ctx.Profile = profile
+	deliver("OnProfile",profile)
+end)
+ctx.Remotes.Notice.OnClientEvent:Connect(function(notice)
+	if type(notice) == "table" then deliver("OnNotice",notice) end
+end)
+for _, name in ipairs({"UIController","MovementController","EffectsController"}) do
+	ctx.Controllers[name]:Start()
+end
+Players.LocalPlayer.CharacterAdded:Connect(function(character) deliver("OnCharacter",character) end)
+if Players.LocalPlayer.Character then deliver("OnCharacter",Players.LocalPlayer.Character) end
+-- Handles late clients and slow profile loads without treating absent data as saved.
+task.spawn(function()
+	while true do
+		local ok, response = pcall(function() return ctx.Remotes.Query:InvokeServer() end)
+		if ok and type(response)=="table" then
+			if type(response.state)=="table" then ctx.State=response.state; deliver("OnState",response.state) end
+			if type(response.profile)=="table" then ctx.Profile=response.profile; deliver("OnProfile",response.profile) end
+		end
+		if ctx.Profile.loaded then break end
+		task.wait(3)
+	end
+end)
+]]></string>
+          </Properties>
+        </Item>
+      </Item>
+    </Item>
+  </Item>
+  <Item class="Workspace" referent="23">
+    <Properties>
+      <string name="Name">Workspace</string>
+      <bool name="FilteringEnabled">true</bool>
+      <float name="Gravity">196.2</float>
+      <bool name="NeedsPivotMigration">false</bool>
+      <bool name="StreamingEnabled">true</bool>
+    </Properties>
+  </Item>
+</roblox>

@@ -1,0 +1,6 @@
+# Reproducible release outputs and local tools
+.tooling/
+*.rbxl.lock
+*.rbxlx.lock
+sourcemap.json
+.DS_Store

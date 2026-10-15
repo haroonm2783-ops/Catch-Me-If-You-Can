@@ -1,0 +1,25 @@
+{
+  "name": "Catch Me If You Can",
+  "tree": {
+    "$className": "DataModel",
+    "ReplicatedStorage": { "CatchShared": { "$path": "src/shared" } },
+    "ServerScriptService": { "CatchServer": { "$path": "src/server" } },
+    "StarterPlayer": {
+      "$className": "StarterPlayer",
+      "$properties": {
+        "CameraMinZoomDistance": 7,
+        "CameraMaxZoomDistance": 20,
+        "CharacterWalkSpeed": 17,
+        "CharacterUseJumpPower": true,
+        "CharacterJumpPower": 48,
+        "LoadCharacterAppearance": false
+      },
+      "StarterPlayerScripts": { "CatchClient": { "$path": "src/client" } }
+    },
+    "Workspace": {
+      "$properties": { "FilteringEnabled": true, "StreamingEnabled": true, "Gravity": 196.2 }
+    },
+    "SoundService": { "$properties": { "RespectFilteringEnabled": true } },
+    "Lighting": { "$properties": { "ClockTime": 18.5, "Brightness": 2 } }
+  }
+}

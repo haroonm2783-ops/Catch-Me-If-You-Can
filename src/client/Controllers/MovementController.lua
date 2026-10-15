@@ -1,0 +1,345 @@
+-- Input is intent only. Speed, collision, cooldowns and tagging are server-owned.
+local Players = game:GetService("Players")
+local ContextActionService = game:GetService("ContextActionService")
+local RunService = game:GetService("RunService")
+local UserInputService = game:GetService("UserInputService")
+
+local MovementController = {}
+MovementController.__index = MovementController
+
+local ACTIONS = { "CatchSprint", "CatchSlide", "CatchVault", "CatchTag" }
+local READY_ATTRIBUTES = {
+	Slide = "CatchSlideReadyAt",
+	Vault = "CatchVaultReadyAt",
+	Tag = "CatchTagReadyAt",
+}
+
+local function disconnectAll(connections)
+	for _, connection in ipairs(connections) do
+		connection:Disconnect()
+	end
+	table.clear(connections)
+end
+
+function MovementController.new(ctx)
+	return setmetatable({
+		ctx = ctx,
+		player = Players.LocalPlayer,
+		connections = {},
+		characterConnections = {},
+		pose = {},
+		sprintRequested = false,
+		lastVaultIntent = 0,
+		lastSlideIntent = 0,
+		lastTagIntent = 0,
+		bobTime = 0,
+		cameraOffset = Vector3.zero,
+		lean = Vector3.zero,
+		role = "Lobby",
+		bindName = "CatchMovementFeedback",
+	}, MovementController)
+end
+
+function MovementController:_settings()
+	return self.ctx.Profile.settings or {}
+end
+
+function MovementController:_canAct()
+	return self.humanoid ~= nil
+		and self.humanoid.Health > 0
+		and self.role ~= "Spectator"
+		and not self.player:GetAttribute("CatchMenuOpen")
+		and UserInputService:GetFocusedTextBox() == nil
+end
+
+function MovementController:_sprint(active)
+	active = active == true and self:_canAct()
+	if self.sprintRequested == active then
+		return
+	end
+	self.sprintRequested = active
+	self.ctx.Remotes.Action:FireServer("Sprint", { active = active })
+	ContextActionService:SetTitle("CatchSprint", active and "RUN ON" or "RUN")
+end
+
+function MovementController:_intent(action)
+	if not self:_canAct() then
+		return
+	end
+	-- This is only an input flood guard. The server decides whether the move is valid.
+	local field = "last" .. action .. "Intent"
+	local now = os.clock()
+	if now - (self[field] or 0) < 0.15 then
+		return
+	end
+	self[field] = now
+	self.ctx.Remotes.Action:FireServer(action, {})
+end
+
+function MovementController:GetCooldown(action)
+	local attribute = READY_ATTRIBUTES[action]
+	local readyAt = attribute and self.player:GetAttribute(attribute)
+	return type(readyAt) == "number" and math.max(0, readyAt - workspace:GetServerTimeNow()) or 0
+end
+
+function MovementController:_resetPose()
+	for _, record in ipairs(self.pose) do
+		if record.joint.Parent and record.last and record.joint.C0 == record.last then
+			record.joint.C0 = record.base
+		end
+		record.last = nil
+	end
+	self.lean = Vector3.zero
+end
+
+function MovementController:_releaseCamera()
+	if self.ownsCamera and self.camera and self.camera.Parent then
+		self.camera.FieldOfView = self.baseFov
+	end
+	if self.humanoid and self.humanoid.Parent and self.lastCameraOffset
+		and self.humanoid.CameraOffset == self.lastCameraOffset then
+		self.humanoid.CameraOffset = self.baseCameraOffset or Vector3.zero
+	end
+	self.ownsCamera = false
+	self.lastCameraOffset = nil
+	self.cameraOffset = Vector3.zero
+end
+
+function MovementController:OnCharacter(character)
+	if self.character == character then
+		return
+	end
+	self:_sprint(false)
+	self:_releaseCamera()
+	self:_resetPose()
+	disconnectAll(self.characterConnections)
+	table.clear(self.pose)
+	self.character = character
+	self.humanoid = nil
+	self.root = nil
+	if not character then
+		return
+	end
+	-- Waiting for avatar parts must not stall Query/state dispatch.
+	task.spawn(function()
+		local humanoid = character:WaitForChild("Humanoid", 10)
+		local root = character:WaitForChild("HumanoidRootPart", 10)
+		if self.character ~= character or not humanoid or not root or self.destroyed then
+			return
+		end
+		self.humanoid = humanoid
+		self.root = root
+		self.baseCameraOffset = humanoid.CameraOffset
+		self.bobTime = 0
+		for _, descendant in ipairs(character:GetDescendants()) do
+			if descendant:IsA("Motor6D") and descendant.Name == "Waist" then
+				table.insert(self.pose, { joint = descendant, base = descendant.C0 })
+			end
+		end
+		table.insert(self.characterConnections, humanoid.Died:Connect(function()
+			self:_sprint(false)
+			self:_releaseCamera()
+			self:_resetPose()
+		end))
+	end)
+end
+
+function MovementController:_feedback(dt)
+	dt = math.min(dt, 0.1)
+	local humanoid, root, character = self.humanoid, self.root, self.character
+	local camera = workspace.CurrentCamera
+	local settings = self:_settings()
+	local permitted = humanoid and root and character and humanoid.Health > 0
+		and self.role ~= "Spectator" and not settings.reducedMotion
+	if not permitted then
+		self:_releaseCamera()
+		self:_resetPose()
+		return
+	end
+	local moving = humanoid.MoveDirection.Magnitude > 0.1
+	local sprinting = character:GetAttribute("Sprinting") == true and moving
+	local sliding = character:GetAttribute("Sliding") == true
+	local vaulting = character:GetAttribute("Vaulting") == true
+	local grounded = humanoid.FloorMaterial ~= Enum.Material.Air
+	local smoothing = 1 - math.exp(-10 * dt)
+	local ownsSubject = camera and camera.CameraSubject == humanoid
+		and camera.CameraType ~= Enum.CameraType.Scriptable
+	if ownsSubject then
+		if self.camera ~= camera or not self.ownsCamera then
+			self:_releaseCamera()
+			self.camera = camera
+			self.baseFov = camera.FieldOfView
+			self.ownsCamera = true
+		end
+		local targetFov = self.baseFov + (sliding and 9 or (sprinting and 7 or 0))
+		camera.FieldOfView += (targetFov - camera.FieldOfView) * smoothing
+		local offset = Vector3.zero
+		if settings.cameraShake ~= false then
+			if moving and grounded and not sliding and not vaulting then
+				self.bobTime += dt * (sprinting and 13 or 9)
+				offset = Vector3.new(math.sin(self.bobTime * 0.5) * 0.025,
+					math.abs(math.sin(self.bobTime)) * 0.045, 0)
+			elseif sliding then
+				offset = Vector3.new(0, -0.5, 0)
+			end
+		end
+		self.cameraOffset = self.cameraOffset:Lerp(offset, smoothing)
+		self.lastCameraOffset = self.baseCameraOffset + self.cameraOffset
+		humanoid.CameraOffset = self.lastCameraOffset
+	else
+		-- UIController owns the spectator camera and its subject.
+		self:_releaseCamera()
+	end
+	if character:GetAttribute("CatchEmoting") then
+		self:_resetPose()
+		return
+	end
+	local direction = root.CFrame:VectorToObjectSpace(humanoid.MoveDirection)
+	local targetLean = Vector3.new(sliding and -0.26 or direction.Z * 0.065,
+		0, -direction.X * (sprinting and 0.075 or 0.045))
+	self.lean = self.lean:Lerp(targetLean, smoothing)
+	for _, record in ipairs(self.pose) do
+		local joint = record.joint
+		if joint.Parent then
+			-- Preserve any fresh avatar/emote base pose instead of accumulating offsets.
+			if joint.C0 ~= record.last then
+				record.base = joint.C0
+			end
+			if moving or sliding or self.lean.Magnitude > 0.001 then
+				record.last = record.base * CFrame.Angles(self.lean.X, self.lean.Y, self.lean.Z)
+				joint.C0 = record.last
+			elseif record.last then
+				joint.C0 = record.base
+				record.last = nil
+			end
+		end
+	end
+end
+
+function MovementController:OnState(state)
+	local previousRole = self.role
+	self.role = "Lobby"
+	for _, entry in ipairs(state.players or {}) do
+		if entry.userId == self.player.UserId then
+			self.role = entry.role
+			break
+		end
+	end
+	if self.role == "Spectator" or previousRole ~= self.role or self.phase ~= state.phase then
+		self:_sprint(false)
+	end
+	self.phase = state.phase
+end
+
+function MovementController:OnProfile(_profile)
+	if self:_settings().reducedMotion then
+		self:_releaseCamera()
+		self:_resetPose()
+	end
+end
+
+function MovementController:OnNotice(notice)
+	if notice.kind ~= "ability" or notice.success == false then
+		return
+	end
+	local attribute = READY_ATTRIBUTES[notice.action]
+	local cooldown = tonumber(notice.cooldown)
+	if attribute and cooldown and cooldown == cooldown and cooldown >= 0 and cooldown < 60 then
+		self.player:SetAttribute(attribute, workspace:GetServerTimeNow() + cooldown)
+	end
+end
+
+function MovementController:Start()
+	if self.started then
+		return
+	end
+	self.started = true
+	ContextActionService:BindAction("CatchSprint", function(_, state, input)
+		if state == Enum.UserInputState.Cancel then
+			self:_sprint(false)
+		elseif input.KeyCode == Enum.KeyCode.ButtonL3 or input.UserInputType == Enum.UserInputType.Touch then
+			if state == Enum.UserInputState.Begin then
+				self:_sprint(not self.sprintRequested)
+			end
+		elseif state == Enum.UserInputState.Begin then
+			self:_sprint(true)
+		elseif state == Enum.UserInputState.End then
+			self:_sprint(false)
+		end
+		return Enum.ContextActionResult.Sink
+	end, true, Enum.KeyCode.LeftShift, Enum.KeyCode.RightShift, Enum.KeyCode.ButtonL3)
+	ContextActionService:BindAction("CatchSlide", function(_, state)
+		if state == Enum.UserInputState.Begin then
+			self:_intent("Slide")
+		end
+		return self:_canAct() and Enum.ContextActionResult.Sink or Enum.ContextActionResult.Pass
+	end, true, Enum.KeyCode.C, Enum.KeyCode.ButtonB)
+	ContextActionService:BindAction("CatchVault", function(_, state)
+		if state == Enum.UserInputState.Begin then
+			self:_intent("Vault")
+		end
+		-- Roblox's normal jumping remains available when no vault obstacle is present.
+		return Enum.ContextActionResult.Pass
+	end, false, Enum.KeyCode.Space, Enum.KeyCode.ButtonA)
+	ContextActionService:BindAction("CatchTag", function(_, state)
+		if state == Enum.UserInputState.Begin then
+			self:_intent("Tag")
+		end
+		return self:_canAct() and Enum.ContextActionResult.Sink or Enum.ContextActionResult.Pass
+	end, true, Enum.KeyCode.F, Enum.KeyCode.ButtonR2)
+	ContextActionService:SetTitle("CatchSprint", "RUN")
+	ContextActionService:SetTitle("CatchSlide", "SLIDE")
+	ContextActionService:SetTitle("CatchTag", "TAG")
+	ContextActionService:SetPosition("CatchSprint", UDim2.new(1, -190, 1, -150))
+	ContextActionService:SetPosition("CatchSlide", UDim2.new(1, -110, 1, -150))
+	ContextActionService:SetPosition("CatchTag", UDim2.new(1, -190, 1, -225))
+	for _, action in ipairs(ACTIONS) do
+		local button = ContextActionService:GetButton(action)
+		if button then
+			button.Size = UDim2.fromOffset(64, 64)
+			button.ImageColor3 = Color3.fromRGB(31, 47, 65)
+		end
+	end
+	table.insert(self.connections, UserInputService.JumpRequest:Connect(function()
+		if UserInputService.TouchEnabled then
+			self:_intent("Vault")
+		end
+	end))
+	table.insert(self.connections, UserInputService.WindowFocusReleased:Connect(function()
+		self:_sprint(false)
+	end))
+	table.insert(self.connections, UserInputService.TextBoxFocused:Connect(function()
+		self:_sprint(false)
+	end))
+	table.insert(self.connections, self.player:GetAttributeChangedSignal("CatchMenuOpen"):Connect(function()
+		if self.player:GetAttribute("CatchMenuOpen") then
+			self:_sprint(false)
+		end
+	end))
+	table.insert(self.connections, self.player.CharacterAdded:Connect(function(character)
+		self:OnCharacter(character)
+	end))
+	table.insert(self.connections, self.player.CharacterRemoving:Connect(function(character)
+		if character == self.character then
+			self:OnCharacter(nil)
+		end
+	end))
+	RunService:BindToRenderStep(self.bindName, Enum.RenderPriority.Camera.Value - 1, function(dt)
+		self:_feedback(dt)
+	end)
+	self:OnCharacter(self.player.Character)
+	self:OnState(self.ctx.State)
+end
+
+function MovementController:Destroy()
+	self.destroyed = true
+	self:_sprint(false)
+	RunService:UnbindFromRenderStep(self.bindName)
+	for _, action in ipairs(ACTIONS) do
+		ContextActionService:UnbindAction(action)
+	end
+	self:OnCharacter(nil)
+	disconnectAll(self.connections)
+end
+
+return MovementController
