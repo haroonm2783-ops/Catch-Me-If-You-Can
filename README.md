@@ -1,16 +1,158 @@
 # Catch Me If You Can
 
-A Roblox multiplayer parkour chase game set in the original Neon Heights city.
+An original Roblox multiplayer parkour chase game set in **Neon Heights**: a
+mint-and-coral twilight city with rooftop gardens, a lantern restaurant, an arcade,
+a clock tower, interconnected rooftops, and a separate social deck.
 
-Implementation is being integrated. See [PROGRESS.md](PROGRESS.md) for the verified
-checkpoint and exact remaining steps. The source is Rojo-compatible; dependency
-versions are pinned in `aftman.toml` and `tools/bootstrap.sh`.
+**A complete Studio place is generated and included.** The code, map, UI, and
+cosmetic systems are integrated and pass the automated checks described below.
+Roblox Studio multiplayer playtesting, real purchases, live saves, and mobile
+performance have **not** been verified. This is a playable development candidate,
+not a claim of launch readiness.
+
+## Open the game directly — no plugins required
+
+1. Download **[dist/CatchMeIfYouCan.rbxl](dist/CatchMeIfYouCan.rbxl)**. On GitHub,
+   open the file and use **Download raw file**. The XML alternative is
+   **[dist/CatchMeIfYouCan.rbxlx](dist/CatchMeIfYouCan.rbxlx)**; both contain the same
+   game. Download one, not the GitHub HTML page.
+2. In Roblox Studio, choose **File → Open from File** and select the downloaded
+   place. Neon Heights is already present in the editor; it is not an empty place
+   that requires pasting scripts. The map is reused at runtime.
+3. Press **Play**. A solo Studio session enters a clearly labeled practice round
+   after the 16-second intermission and 5-second head start. Practice awards no
+   XP, coins, rank, or wins. The avatar and game interface appear during Play.
+4. For competitive testing, use Studio's **Server & Clients / Local Server** test
+   controls with at least **2 clients**. For the full lobby use **12 clients**.
+5. Before publishing, use an R15 avatar configuration and set the experience's
+   maximum server size to **12**. The generated place sets R15; confirm published
+   experience settings retain it. Follow [the testing checklist](docs/TESTING.md).
+
+You can edit modules directly in Studio. For source-controlled work, edit `src/`
+and rebuild; direct edits to a generated place are not automatically copied back
+into the source tree.
+
+## What is connected
+
+- **Chase rounds:** up to 12 players, 1 hunter for 2–6 players and 2 for 7–12;
+  180-second active rounds; 16-second intermissions; 5-second runner head starts;
+  10-second results; fair hunter rotation, late-join spectating, death/reset and
+  disconnect handling, last-runner presentation, and a final 30-second chase cue.
+- **Movement:** accelerated sprinting, momentum slide, geometry-checked vaulting,
+  native jumping, third-person camera feedback, and server cooldown, movement,
+  range, and line-of-sight validation. Hunters use the same parkour abilities.
+- **Neon Heights:** six recognizable rooftop districts, twelve broad bridge/ramp
+  routes, six ladders, optional vault routes, two animated timing gates with
+  bypasses, signs, gardens, vents, storefronts, skyline, and a podium lobby.
+- **Custom presentation:** loading/lobby, live HUD, role announcements, collection
+  shop, locker, 3D previews, daily quests, career, settings, server leaderboard,
+  results, spectator cycling, touch controls, and controller focus navigation.
+- **Original cosmetics:** seven distinct geometric R15 outfits and five independent
+  masks; coin/milestone/free unlocks; 42 skin/mask combinations including no mask;
+  sprint trails, tag effects, lobby emotes, animated victory podiums, and nameplates.
+- **Progression:** XP/levels, coins, performance rating ranks, wins/streaks, separate
+  hunter/runner statistics, UTC daily quests, achievements, and milestone cosmetics.
+- **Persistence and shop:** server-owned inventory and transactions, DataStore
+  retries and expiring session leases, truthful save status, and verified permanent
+  game-pass entitlements. Collections and VIP provide cosmetics only.
+- **Feedback:** original transient visual effects, camera lean/FOV, optional reduced
+  motion, and quiet Roblox engine-bundled SFX. Optional uploaded music and sound
+  overrides are configured in `Config.Audio`; no invented asset IDs are required.
+
+The leaderboard ranks players in the **current server** using their persistent
+statistics. There is no global cross-server leaderboard or ranked matchmaking.
+Rank is a transparent win/loss rating (+24 / −14), not a matchmaking skill estimate.
+
+![Geometric map overview — not a Studio screenshot](docs/NeonHeights-overview.png)
+
+## Controls
+
+| Action | PC | Controller | Touch |
+| --- | --- | --- | --- |
+| Move / look | WASD / mouse | Left / right stick | Roblox joystick / drag |
+| Sprint | Hold Shift | Toggle L3 | Toggle RUN |
+| Slide | C while moving | B while moving | SLIDE |
+| Jump / attempt vault | Space | A | Native jump button |
+| Tag as hunter | F | R2 | TAG |
+| Locker | On-screen menu | Y | On-screen menu |
+| Close menu | Close button / Escape | B | Close button |
+| Spectate | On-screen arrows | Select arrows with UI navigation | On-screen arrows |
+
+A vault request keeps normal jumping available when no suitable obstacle exists.
+Movement ability cooldowns appear only after server acknowledgment. Opening menus
+releases sprint; an open collection does not opt a player out of automatic rounds.
+
+## Build and check the source
+
+Linux x86_64 (Python 3, curl, unzip, and Git required):
 
 ```bash
-./tools/bootstrap.sh
-.tooling/bin/luau tests/rules.spec.luau
-.tooling/bin/rojo build default.project.json -o dist/CatchMeIfYouCan.rbxlx
+./tools/bootstrap.sh       # Pinned official tools; SHA-256 verified
+./tools/check.sh           # Compile, rebuild, deserialize, and run all six suites
+./tools/build.sh           # Rebuild just the two deliverable place files
 ```
 
-The final deliverable will be `dist/CatchMeIfYouCan.rbxlx`, with a city baked into the
-place for direct opening in Roblox Studio. Studio gameplay validation is required.
+Pinned versions: **Rojo 7.7.1**, **Luau 0.742**, **Lune 0.11.0**. Linux tools live
+in ignored `.tooling/bin`. `aftman.toml` pins Rojo and Lune for other platforms;
+install the corresponding official Luau CLI release separately. With those tools
+and Python on PATH, Windows/macOS can run:
+
+```text
+python tools/check.py
+```
+
+For only a place build on any supported platform:
+
+```text
+rojo build default.project.json -o dist/CatchMeIfYouCan.sources.rbxlx
+lune run tools/bake-place.luau dist/CatchMeIfYouCan.sources.rbxlx
+```
+
+Rojo creates the script/service hierarchy. Lune executes the authored map builder
+with Roblox data types, bakes its geometry/lighting/spawns, and serializes **both**
+place formats. The build then reopens both files and verifies their content. Lune
+does not simulate the Roblox engine. A plain `rojo build` still runs the map builder
+at Play time, but the two-step build is required for the city to be visible in Edit.
+
+For live source editing, `rojo serve default.project.json` can sync scripts through
+the Rojo Studio plugin. After map source changes, rebuild/reopen the place, or
+remove the generated `Workspace.NeonHeights` model before the next Play session so
+`MapBuilder` regenerates it. Existing baked map geometry is deliberately reused.
+
+## Configuration and release checks
+
+- [`Config.lua`](src/shared/Config.lua): round/movement tuning, data store, audio.
+  Studio defaults to **temporary session-only data** and says so in the interface.
+- [`Catalog.lua`](src/shared/Catalog.lua): cosmetics, coin prices, milestones, and
+  real pass IDs. All Robux IDs are **0**, which disables paid purchase prompts.
+- [Monetization guide](docs/MONETIZATION.md): create passes, set prices/IDs, publish,
+  and test server-verified ownership. No real Robux transactions were tested here.
+- [Testing checklist](docs/TESTING.md): required Studio, device, network, persistence,
+  and performance checks before launch.
+- [Progress and continuation](PROGRESS.md): verified results and remaining work.
+
+The bounded city intentionally loads as a whole so lobby spectators can follow
+any runner. Streaming is disabled; the authored map is limited to 1,528 parts,
+10 local lights without shadow casting, two moving gates, and at most 69 parts per
+cosmetic preview. These are geometry budgets, **not measured mobile frame rates**.
+
+## Source layout
+
+```text
+src/shared/                   Configuration, catalog, pure rules, outfit geometry
+src/server/Main.server.lua    Remotes, rate limits, service wiring
+src/server/Services/          Rounds, movement, data, purchases, cosmetics
+src/server/World/MapBuilder.lua Authored city and runtime timing gates
+src/client/Main.client.lua    Snapshot/event synchronization and controllers
+src/client/Controllers/       UI, inputs/camera, sound and visual feedback
+tests/                        Rules, service, client, appearance, map regressions
+tools/                        Verified tool bootstrap, build, and validation
+dist/                         Direct-open Studio place files
+```
+
+The optional overview renderer (`tools/render-overview.py`) uses Pillow and NumPy
+to draw the baked geometry; it is not part of the game build and is not a Studio
+render or playtest.
+
+All map and costume geometry is original project code. No free-model scripts,
+external meshes, third-party asset packages, or paid movement advantages are used.

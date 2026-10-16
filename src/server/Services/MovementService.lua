@@ -182,11 +182,15 @@ function MovementService:ValidatePosition(player)
 	local speed = self:_allowedSpeed(player, state)
 	state.credit = math.min(speed * 0.55 + 3, state.credit + speed * math.min(dt, 0.75))
 	local difference = root.Position - state.lastPosition
-	local traveled = horizontal(difference).Magnitude
+	local horizontalDistance = horizontal(difference).Magnitude
+	local climbing = self:_climbing(character, humanoid, root)
+	-- A nearby ladder permits climbing, but not unbounded vertical travel. Charge
+	-- its full path against the same server speed budget used on the ground.
+	local traveled = climbing and difference.Magnitude or horizontalDistance
 	if traveled > state.credit or math.abs(difference.Y) > 110 * math.min(dt, 0.75) + 8 then
 		return self:_correct(player, state, root)
 	end
-	if traveled > 0.25 then
+	if horizontalDistance > 0.25 then
 		local wall = Workspace:Raycast(state.lastPosition, difference, rayParameters(character))
 		if wall and wall.Instance.Anchored and math.abs(wall.Normal.Y) < 0.65 then
 			local model = wall.Instance:FindFirstAncestorOfClass("Model")
@@ -205,7 +209,6 @@ function MovementService:ValidatePosition(player)
 		end
 	end
 	local grounded = self:_grounded(character, humanoid, root)
-	local climbing = self:_climbing(character, humanoid, root)
 	if grounded or climbing then
 		state.airStart = nil
 		state.groundY = root.Position.Y

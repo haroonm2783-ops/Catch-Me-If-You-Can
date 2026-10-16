@@ -330,6 +330,7 @@ function EffectsController:OnState(state)
 	if changedRound then
 		self.countdownKey = nil
 		self.finalShown = false
+		self.lastRunnerShown = false
 		self.participated = false
 	end
 	if state.phase == "HeadStart" or state.phase == "Active" then
@@ -343,6 +344,12 @@ function EffectsController:OnState(state)
 	if state.phase == "Active" and previousPhase == "HeadStart" then
 		self:_banner("CHASE ON", CYAN, 0.7, false)
 		self:_pulse(CYAN, 0.5)
+	end
+	if state.phase == "Active" and state.lastRunner and not self.lastRunnerShown then
+		self.lastRunnerShown = true
+		self:_banner("LAST RUNNER STANDING", CORAL, 1.1, false)
+		self:_pulse(CORAL, 0.55)
+		self:_sound("Final", 0.3)
 	end
 	if state.phase == "Active" and state.finalChase and not self.finalShown then
 		self.finalShown = true
@@ -389,7 +396,9 @@ function EffectsController:OnNotice(notice)
 		end
 		self.lastTag = now
 		local bloom = notice.action == "tag_bloom"
-		self:_worldBurst(notice.position, bloom and GOLD or CYAN, bloom)
+		if notice.action == "tag_spark" or bloom then
+			self:_worldBurst(notice.position, bloom and CORAL or CYAN, bloom)
+		end
 		if notice.userId == self.player.UserId then
 			self:_pulse(CYAN, 0.65)
 			self:_sound("Tag", 0.45)

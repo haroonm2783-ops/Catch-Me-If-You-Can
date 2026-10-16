@@ -5,6 +5,7 @@ local RunService = game:GetService("RunService")
 local UserInputService = game:GetService("UserInputService")
 local GuiService = game:GetService("GuiService")
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
+local ContextActionService = game:GetService("ContextActionService")
 
 local UIController = {}
 UIController.__index = UIController
@@ -143,6 +144,8 @@ function UIController:_tween(object, duration, props)
 end
 
 function UIController:Start()
+	if self.started then return end
+	self.started = true
 	self.Appearance = require(ReplicatedStorage:WaitForChild("CatchShared"):WaitForChild("Appearance"))
 	self.gui = node("ScreenGui", {
 		Name = "CatchCityUI", ResetOnSpawn = false, IgnoreGuiInset = false,
@@ -168,11 +171,27 @@ function UIController:Start()
 	self:_buildAnnouncement()
 	self:_buildLoading()
 	self.connections[#self.connections + 1] = UserInputService.InputBegan:Connect(function(input)
-		if self.menu and (input.KeyCode == Enum.KeyCode.Escape or input.KeyCode == Enum.KeyCode.ButtonB) then self:CloseMenu() end
+		if self.menu and input.KeyCode == Enum.KeyCode.Escape then self:CloseMenu() end
 	end)
-	self.connections[#self.connections + 1] = self.player.CharacterAdded:Connect(function()
-		self.spectateTarget = nil
-		task.defer(function() self:_updateSpectator() end)
+	-- B must be consumed before the movement binding, including the closing press.
+	ContextActionService:BindActionAtPriority("CatchCloseMenu", function(_, state)
+		if state == Enum.UserInputState.Begin then
+			self.consumingBack = self.menu ~= nil or GuiService.SelectedObject ~= nil
+			if self.menu then self:CloseMenu()
+			elseif self.consumingBack then GuiService.SelectedObject = nil end
+		end
+		local consume = self.consumingBack
+		if state == Enum.UserInputState.End or state == Enum.UserInputState.Cancel then self.consumingBack = false end
+		return consume and Enum.ContextActionResult.Sink or Enum.ContextActionResult.Pass
+	end, false, Enum.ContextActionPriority.High.Value + 10, Enum.KeyCode.ButtonB)
+	ContextActionService:BindActionAtPriority("CatchOpenMenu", function(_, state)
+		if state == Enum.UserInputState.Begin then
+			if self.menu then self:CloseMenu() else self:OpenMenu("Inventory") end
+		end
+		return Enum.ContextActionResult.Sink
+	end, false, Enum.ContextActionPriority.High.Value + 10, Enum.KeyCode.ButtonY)
+	self.connections[#self.connections + 1] = UserInputService.LastInputTypeChanged:Connect(function()
+		self:_responsive()
 	end)
 	self.connections[#self.connections + 1] = self.root:GetPropertyChangedSignal("AbsoluteSize"):Connect(function()
 		self:_responsive()
@@ -295,6 +314,9 @@ function UIController:_responsive()
 	self.compact = small
 	self.brand.TextSize = small and 13 or 21
 	self.brand.Size = UDim2.fromOffset(small and 115 or 220, 52)
+	self.brand.Visible = size.X >= 390
+	self.brandAccent.Visible = self.brand.Visible
+	self.clock.Position = size.X < 390 and UDim2.fromOffset(64, 0) or UDim2.fromScale(0.5, 0)
 	self.clock.Size = UDim2.fromOffset(small and 128 or 220, 67)
 	self.phaseLabel.TextSize = small and 7 or 9
 	self.wallet.Size = UDim2.fromOffset(small and 112 or 180, 60)
@@ -303,15 +325,17 @@ function UIController:_responsive()
 	self.hero.Size = UDim2.fromOffset(math.min(size.X - 44, 440), short and 190 or 230)
 	self.hero.Position = short and UDim2.fromOffset(22, 156) or UDim2.new(0, 22, 0.5, -78)
 	self.heroTitle.TextSize = small and 26 or 35
-	self.panel.Size = UDim2.new(1, -24, 1, short and -164 or -210)
-	self.panel.Position = UDim2.new(0.5, 0, 0.5, short and 20 or 6)
+	-- Short landscape displays need a usable content viewport below the dock.
+	self.panel.Size = UDim2.new(1, -24, 1, short and -136 or -210)
+	self.panel.Position = UDim2.new(0.5, 0, 0.5, short and 58 or 6)
 	self.panelTitle.TextSize = small and 18 or 22
 	self.roleChip.Visible = not short and not self.menu
 	self.hero.Visible = not self.visited and not self.menu and (self.ctx.State.phase == "Waiting" or self.ctx.State.phase == "Intermission") and not short
-	self.abilities.Visible = not self.menu and not UserInputService.TouchEnabled
+	self.abilities.Visible = not self.menu and UserInputService:GetLastInputType() ~= Enum.UserInputType.Touch and not short
 	self.spectator.Size = UDim2.fromOffset(math.min(320, size.X - 36), 62)
 	self.spectator.Position = UDim2.new(0.5, 0, 1, UserInputService.TouchEnabled and -32 or -96)
 	self.saveLabel.Visible = not short
+	self:_updateSpectator()
 end
 
 function UIController:OpenMenu(name)
@@ -341,6 +365,8 @@ function UIController:CloseMenu()
 end
 
 function UIController:_renderMenu()
+	local focused = GuiService.SelectedObject
+	local focusName = focused and focused:IsDescendantOf(self.panelContent) and focused.Name
 	self.previewModel, self.previewCamera = nil, nil
 	clear(self.panelContent)
 	if self.menu == "Shop" or self.menu == "Inventory" then self:_renderShop()
@@ -349,13 +375,18 @@ function UIController:_renderMenu()
 	elseif self.menu == "Settings" then self:_renderSettings()
 	elseif self.menu == "Leaderboard" then self:_renderLeaderboard()
 	elseif self.menu == "Results" then self:_renderResults() end
+	-- Rerendering an equipped item or category must not strand controller focus.
+	if focusName then
+		local replacement = self.panelContent:FindFirstChild(focusName, true)
+		GuiService.SelectedObject = replacement and replacement:IsA("GuiButton") and replacement or self.panel:FindFirstChild("Close")
+	end
 end
 
 function UIController:_itemPrice(item)
 	if item.currency == "Coins" then return number(item.price) .. " COINS" end
 	if item.currency == "Robux" then
 		if not item.gamePassId or item.gamePassId == 0 then return "NOT CONFIGURED" end
-		return item.price and ("R$ " .. number(item.price) .. " / confirm in Roblox") or "ROBLOX GAME PASS"
+		return "VIEW ROBUX PRICE"
 	end
 	if item.currency == "Milestone" then
 		local milestone = item.milestone or {}
@@ -368,33 +399,38 @@ function UIController:_renderShop()
 	local inventory = self.menu == "Inventory"
 	self.panelTitle.Text = inventory and "YOUR LOCKER" or "THE COLLECTION"
 	self.panelSubtitle.Text = inventory and "Your style. Your signature. Select a piece to equip." or "Express yourself. Every cosmetic leaves the chase fair."
-	local compact = self.panel.AbsoluteSize.X < 720
+	local compact = self.panel.AbsoluteSize.X < 720 or self.panelContent.AbsoluteSize.Y < 360
 	local profile = self.ctx.Profile
 	local owned = profile.owned or {}
 	local equipped = profile.equipped or {}
-	local detail = frame(self.panelContent, {
+	local items = self.ctx.Catalog.ForCategory(self.category)
+	local visible = {}
+	for _, item in ipairs(items) do if not inventory or owned[item.id] then visible[#visible + 1] = item end end
+	local columns = compact and (self.panel.AbsoluteSize.X < 440 and 1 or 2) or (self.panel.AbsoluteSize.X > 960 and 3 or 2)
+	-- One vertical scroll surface in compact mode keeps the preview and every
+	-- item reachable even on a phone in landscape; no negative-height grids.
+	local surface = compact and scroll(self.panelContent, {Name = "CompactCollection"}) or self.panelContent
+	local gridHeight = math.max(140, math.ceil(#visible / columns) * 124)
+	local detail = frame(surface, {
 		Position = compact and UDim2.new() or UDim2.new(0.69, 12, 0, 0),
 		Size = compact and UDim2.new(1, 0, 0, 142) or UDim2.new(0.31, -12, 1, 0), BackgroundColor3 = C.panel,
 	}, 12)
-	local collection = frame(self.panelContent, {
+	local collection = frame(surface, {
 		Position = compact and UDim2.fromOffset(0, 154) or UDim2.new(),
-		Size = compact and UDim2.new(1, 0, 1, -154) or UDim2.new(0.69, 0, 1, 0), BackgroundTransparency = 1,
+		Size = compact and UDim2.new(1, -5, 0, gridHeight + 46) or UDim2.new(0.69, 0, 1, 0), BackgroundTransparency = 1,
 	})
 	local categories = scroll(collection, {Size = UDim2.new(1, 0, 0, 39)}, true)
 	list(categories, true, 6)
 	for index, category in ipairs(self.ctx.Catalog.Categories) do
 		button(categories, string.upper(category.label), function()
 			self.category = category.id self:_renderMenu()
-		end, {Size = UDim2.fromOffset(math.max(70, #category.label * 7 + 22), 31), LayoutOrder = index, TextSize = 9,
+		end, {Name = "Category_" .. category.id, Size = UDim2.fromOffset(math.max(70, #category.label * 7 + 22), 31), LayoutOrder = index, TextSize = 9,
 			BackgroundColor3 = self.category == category.id and C.cyan or C.card,
 			TextColor3 = self.category == category.id and C.background or C.muted})
 	end
-	local grid = scroll(collection, {Position = UDim2.fromOffset(0, 46), Size = UDim2.new(1, 0, 1, -46)})
-	local columns = compact and 2 or (self.panel.AbsoluteSize.X > 960 and 3 or 2)
+	local gridProps = {Position = UDim2.fromOffset(0, 46), Size = UDim2.new(1, 0, 1, -46), BackgroundTransparency = 1}
+	local grid = compact and frame(collection, gridProps) or scroll(collection, gridProps)
 	node("UIGridLayout", {CellPadding = UDim2.fromOffset(8, 8), CellSize = UDim2.new(1 / columns, -9, 0, compact and 116 or 142), SortOrder = Enum.SortOrder.LayoutOrder}, grid)
-	local items = self.ctx.Catalog.ForCategory(self.category)
-	local visible = {}
-	for _, item in ipairs(items) do if not inventory or owned[item.id] then visible[#visible + 1] = item end end
 	local selected = self.ctx.Catalog.Get(self.selectedItem)
 	local selectionValid = false
 	for _, item in ipairs(visible) do if item.id == self.selectedItem then selectionValid = true break end end
@@ -402,7 +438,7 @@ function UIController:_renderShop()
 	for index, item in ipairs(visible) do
 		local itemColor = accent(item)
 		local chosen = self.selectedItem == item.id
-		local card = button(grid, "", function() self.selectedItem = item.id self:_renderMenu() end, {LayoutOrder = index, BackgroundColor3 = chosen and Color3.fromRGB(31, 58, 72) or C.card})
+		local card = button(grid, "", function() self.selectedItem = item.id self:_renderMenu() end, {Name = "Item_" .. item.id, LayoutOrder = index, BackgroundColor3 = chosen and Color3.fromRGB(31, 58, 72) or C.card})
 		frame(card, {Position = UDim2.fromOffset(10, 10), Size = UDim2.fromOffset(26, 3), BackgroundColor3 = itemColor}, 2)
 		label(card, string.upper(item.rarity or "Common"), {Position = UDim2.fromOffset(10, 22), Size = UDim2.new(1, -20, 0, 14), TextSize = 8, Font = F.bold, TextColor3 = itemColor})
 		label(card, item.name, {Position = UDim2.fromOffset(10, 42), Size = UDim2.new(1, -20, 0, compact and 33 or 43), Font = F.bold, TextSize = compact and 13 or 16, TextWrapped = true, TextYAlignment = Enum.TextYAlignment.Top})
@@ -425,10 +461,15 @@ function UIController:_renderItemDetail(parent, item, compact)
 		Ambient = Color3.fromRGB(170, 188, 219), LightColor = C.text, LightDirection = Vector3.new(-1, -1, -1),
 	}, parent)
 	local world = node("WorldModel", {}, view)
-	local skin = item.category == "skins" and item.id or equipped.skins or "skin_courier"
-	local mask = item.category == "masks" and item.id or equipped.masks or ""
 	local extra = table.clone(equipped)
-	extra[item.category] = item.id
+	if self.ctx.Catalog.IsEquippable(item.category) then extra[item.category] = item.id end
+	-- Collection previews show their included outfit and mask before purchase.
+	for _, grantedId in ipairs(item.grants or {}) do
+		local granted = self.ctx.Catalog.Get(grantedId)
+		if granted and self.ctx.Catalog.IsEquippable(granted.category) then extra[granted.category] = granted.id end
+	end
+	local skin = extra.skins ~= "" and extra.skins or "skin_courier"
+	local mask = extra.masks or ""
 	local success, rig = pcall(self.Appearance.BuildPreview, skin, mask, extra)
 	if success and rig then
 		rig.Parent = world
@@ -443,23 +484,28 @@ function UIController:_renderItemDetail(parent, item, compact)
 	label(info, item.name, {Position = UDim2.fromOffset(0, 16), Size = UDim2.new(1, 0, 0, compact and 21 or 42), TextSize = compact and 14 or 20, Font = F.black, TextWrapped = true})
 	label(info, item.description or "", {Position = UDim2.fromOffset(0, compact and 39 or 62), Size = UDim2.new(1, 0, 0, compact and 30 or 49), TextSize = compact and 9 or 11, TextColor3 = C.muted, TextWrapped = true, TextYAlignment = Enum.TextYAlignment.Top})
 	local configured = item.currency ~= "Robux" or (item.gamePassId or 0) > 0
+	local canUnequip = owned and equipped[item.category] == item.id
+		and (item.category ~= "skins" or item.id ~= self.ctx.Catalog.DefaultEquipment.skins)
+		and self.ctx.Catalog.IsEquippable(item.category) and self.menu == "Inventory"
 	local actionText
 	if self.pendingId == item.id then actionText = "WAITING FOR SERVER..."
+	elseif canUnequip then actionText = item.category == "skins" and "USE DEFAULT LOOK" or "UNEQUIP"
 	elseif owned and equipped[item.category] == item.id then actionText = "EQUIPPED"
 	elseif owned and self.ctx.Catalog.IsEquippable(item.category) then actionText = "EQUIP"
 	elseif owned then actionText = "OWNED"
 	elseif not configured then actionText = "NOT CONFIGURED"
 	elseif item.currency == "Milestone" then actionText = self:_itemPrice(item)
 	else actionText = item.currency == "Free" and "CLAIM FREE" or self:_itemPrice(item) end
-	local canAct = not self.pendingId and ((owned and self.ctx.Catalog.IsEquippable(item.category) and equipped[item.category] ~= item.id) or (not owned and configured and item.currency ~= "Milestone"))
+	local canAct = not self.pendingId and (canUnequip or (owned and self.ctx.Catalog.IsEquippable(item.category) and equipped[item.category] ~= item.id) or (not owned and configured and item.currency ~= "Milestone"))
 	button(info, actionText, function()
 		if not canAct then
 			if not configured and not owned then self:Toast("This item is not configured for purchase yet.") end
 			return
 		end
-		if owned then self:_send("Equip", {category = item.category, id = item.id})
-		else self:_send("Buy", {id = item.id}) end
+		-- Set pending before firing so an immediate profile response wins the race.
 		self.pendingId = item.id
+		if owned then self:_send("Equip", {category = item.category, id = canUnequip and "" or item.id})
+		else self:_send("Buy", {id = item.id}) end
 		self:_renderMenu()
 		task.delay(8, function()
 			if self.pendingId == item.id then
@@ -467,10 +513,7 @@ function UIController:_renderItemDetail(parent, item, compact)
 				if self.menu == "Shop" or self.menu == "Inventory" then self:_renderMenu() end
 			end
 		end)
-	end, {AnchorPoint = Vector2.new(0, 1), Position = UDim2.new(0, 0, 1, 0), Size = UDim2.new(1, 0, 0, compact and 35 or 40), TextSize = compact and 9 or 10, BackgroundColor3 = canAct and C.cyan or C.card, TextColor3 = canAct and C.background or C.muted})
-	if owned and equipped[item.category] == item.id and item.category ~= "skins" and self.menu == "Inventory" and not compact then
-		button(view, "UNEQUIP", function() self:_send("Equip", {category = item.category, id = ""}) end, {AnchorPoint = Vector2.new(0.5, 1), Position = UDim2.new(0.5, 0, 1, -6), Size = UDim2.fromOffset(110, 28), TextSize = 9})
-	end
+	end, {Name = "ItemAction", AnchorPoint = Vector2.new(0, 1), Position = UDim2.new(0, 0, 1, 0), Size = UDim2.new(1, 0, 0, compact and 35 or 40), TextSize = compact and 9 or 10, BackgroundColor3 = canAct and C.cyan or C.card, TextColor3 = canAct and C.background or C.muted})
 end
 
 function UIController:_renderQuests()
@@ -489,7 +532,7 @@ function UIController:_renderQuests()
 		frame(track, {Size = UDim2.fromScale(ratio, 1), BackgroundColor3 = quest.claimed and C.muted or C.cyan}, 2)
 		button(card, quest.claimed and "CLAIMED" or (ratio >= 1 and "CLAIM" or "IN PROGRESS"), function()
 			if ratio >= 1 and not quest.claimed then self:_send("ClaimQuest", {id = quest.id}) end
-		end, {Position = UDim2.new(1, -128, 0, 33), Size = UDim2.fromOffset(110, 35), TextSize = 9, BackgroundColor3 = ratio >= 1 and not quest.claimed and C.cyan or C.card, TextColor3 = ratio >= 1 and not quest.claimed and C.background or C.muted})
+		end, {Name = "Quest_" .. quest.id, Position = UDim2.new(1, -128, 0, 33), Size = UDim2.fromOffset(110, 35), TextSize = 9, BackgroundColor3 = ratio >= 1 and not quest.claimed and C.cyan or C.card, TextColor3 = ratio >= 1 and not quest.claimed and C.background or C.muted})
 	end
 	if #quests == 0 then label(container, "Your daily dispatch is loading.", {Size = UDim2.new(1, 0, 0, 50), TextColor3 = C.muted}) end
 end
@@ -543,11 +586,11 @@ function UIController:_renderSettings()
 		label(row, spec[2], {Position = UDim2.fromOffset(16, 13), Size = UDim2.new(1, -120, 0, 22), TextSize = 13, Font = F.bold})
 		label(row, spec[3], {Position = UDim2.fromOffset(16, 40), Size = UDim2.new(1, -120, 0, 32), TextSize = 10, TextColor3 = C.muted, TextWrapped = true})
 		local enabled = settings[spec[1]] == true
-		button(row, enabled and "ON" or "OFF", function() self:_send("Settings", {[spec[1]] = not enabled}) end, {Position = UDim2.new(1, -92, 0, 23), Size = UDim2.fromOffset(74, 36), BackgroundColor3 = enabled and C.cyan or C.card, TextColor3 = enabled and C.background or C.muted})
+		button(row, enabled and "ON" or "OFF", function() self:_send("Settings", {[spec[1]] = not enabled}) end, {Name = "Setting_" .. spec[1], Position = UDim2.new(1, -92, 0, 23), Size = UDim2.fromOffset(74, 36), BackgroundColor3 = enabled and C.cyan or C.card, TextColor3 = enabled and C.background or C.muted})
 	end
 	local instructions = frame(container, {Size = UDim2.new(1, -5, 0, 152), LayoutOrder = 10}, 10)
 	label(instructions, "KNOW YOUR ROUTE", {Position = UDim2.fromOffset(16, 12), Size = UDim2.new(1, -32, 0, 22), Font = F.bold, TextColor3 = C.cyan, TextSize = 12})
-	label(instructions, "Sprint  Shift / L3     Slide  C / B\nJump + vault  Space / A     Tag  F / R2\nTouch: use the on-screen controls.\nGamepad: use the menu selection button, then A to select.\nRunners escape until time runs out. Hunters tag every runner.", {Position = UDim2.fromOffset(16, 40), Size = UDim2.new(1, -32, 0, 100), TextColor3 = C.muted, TextSize = 11, TextWrapped = true, TextYAlignment = Enum.TextYAlignment.Top})
+	label(instructions, "Sprint  Shift / L3     Slide  C / B\nJump + vault  Space / A     Tag  F / R2\nTouch: use the on-screen controls.\nGamepad: Y opens your locker. A selects; B closes.\nRunners escape until time runs out. Hunters tag every runner.", {Position = UDim2.fromOffset(16, 40), Size = UDim2.new(1, -32, 0, 100), TextColor3 = C.muted, TextSize = 11, TextWrapped = true, TextYAlignment = Enum.TextYAlignment.Top})
 end
 
 function UIController:_renderLeaderboard()
@@ -622,7 +665,18 @@ function UIController:_restoreCamera()
 	local character = self.player.Character
 	local humanoid = character and character:FindFirstChildOfClass("Humanoid")
 	if camera and humanoid then camera.CameraType = Enum.CameraType.Custom camera.CameraSubject = humanoid end
+	self.pendingCameraRestore = not (camera and humanoid and humanoid.Health > 0)
 	self.spectateTarget = nil
+end
+
+function UIController:OnCharacter(character)
+	if not character then return end
+	task.spawn(function()
+		character:WaitForChild("Humanoid", 10)
+		if self.destroyed or self.player.Character ~= character then return end
+		if self.wasSpectating then self:_updateSpectator()
+		else self:_restoreCamera() end
+	end)
 end
 
 function UIController:_updateSpectator()
@@ -636,6 +690,7 @@ function UIController:_updateSpectator()
 		return
 	end
 	self.wasSpectating = true
+	self.pendingCameraRestore = false
 	local targets = {}
 	for _, entry in ipairs(state.players or {}) do
 		if entry.alive and entry.role == "Runner" and entry.userId ~= self.player.UserId then
@@ -666,13 +721,16 @@ function UIController:_tick()
 	for action, widgets in pairs(self.abilityLabels) do
 		local deadline = self.player:GetAttribute("Catch" .. action .. "ReadyAt") or 0
 		local cooldown = math.max(0, deadline - now)
-		local enabled = role == "Runner" or role == "Hunter"
-		if action == "Tag" and role ~= "Hunter" then enabled = false end
-		widgets.status.Text = not enabled and (action == "Tag" and "HUNTERS ONLY" or "IN ROUND") or (cooldown > 0 and string.format("%.1fs", cooldown) or (UserInputService.GamepadEnabled and widgets.gamepad or widgets.keyboard))
+		local frozen = self.player.Character and self.player.Character:GetAttribute("RoundFrozen") == true
+		local enabled = role ~= "Spectator" and not frozen
+		if action == "Tag" and (role ~= "Hunter" or state.phase ~= "Active") then enabled = false end
+		local gamepad = string.find(UserInputService:GetLastInputType().Name, "Gamepad") ~= nil
+		widgets.status.Text = not enabled and (frozen and "HEAD START" or action == "Tag" and "HUNTERS ONLY" or "SPECTATING") or (cooldown > 0 and string.format("%.1fs", cooldown) or (gamepad and widgets.gamepad or widgets.keyboard))
 		widgets.status.TextColor3 = not enabled and C.muted or (cooldown > 0 and C.amber or C.cyan)
 		widgets.fill.BackgroundColor3 = not enabled and C.line or (cooldown > 0 and C.amber or C.cyan)
 	end
 	if self.wasSpectating then self:_updateSpectator() end
+	if self.pendingCameraRestore and not self.wasSpectating then self:_restoreCamera() end
 end
 
 function UIController:OnState(state)
@@ -732,6 +790,9 @@ function UIController:OnNotice(notice)
 end
 
 function UIController:Destroy()
+	self.destroyed = true
+	ContextActionService:UnbindAction("CatchCloseMenu")
+	ContextActionService:UnbindAction("CatchOpenMenu")
 	for _, connection in ipairs(self.connections) do connection:Disconnect() end
 	self.player:SetAttribute("CatchMenuOpen", false)
 	self:_restoreCamera()

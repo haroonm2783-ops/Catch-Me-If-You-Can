@@ -1,3 +1,8 @@
+# Maintainer integration reference
+
+This is the original implementation contract, updated where interfaces changed.
+The source and tests are authoritative; see README and PROGRESS for delivery status.
+
 # Integration contract
 
 Project root: `/workspace/Catch-Me-If-You-Can`. Rojo maps `src/shared` to ReplicatedStorage.CatchShared; `src/server` to ServerScriptService.CatchServer; `src/client` to StarterPlayer.StarterPlayerScripts.CatchClient. Use require(script.Parent...) within own subtree and ReplicatedStorage:WaitForChild("CatchShared") across trees. Standard R15 avatars, 12-player limit; no gameplay asset IDs required.
@@ -11,11 +16,11 @@ Config.Round = {MaxPlayers=12,MinimumPlayers=2,Duration=180,Intermission=16,Resu
 Config.Movement = {WalkSpeed=17,RunnerSprint=26,HunterSprint=27,Acceleration=7,JumpPower=48,SlideSpeed=35,SlideDuration=0.65,SlideCooldown=3,VaultCooldown=1.1,VaultDistance=5,VaultHeight=4.5,TagRange=5.8,TagCooldown=0.65}
 Config.Persistence = {StoreName="CatchMeIfYouCan_v1",AutosaveSeconds=60,Retries=3,UseStudioDataStores=false,SessionLockSeconds=180}
 Config.Progression={RoundXP=45,WinXP=80,TagXP=25,SurvivalXPPerSecond=0.4,RoundCoins=12,WinCoins=25,TagCoins=6}
-Config.Audio={Music=0,Sprint=0,Slide=0,Vault=0,Tag=0,Win=0,Lose=0,Level=0,Countdown=0,Final=0,Purchase=0}; zero means no uploaded audio; visual feedback remains.
+Config.Audio={Music=0,Sprint=0,Slide=0,Vault=0,Tag=0,Win=0,Lose=0,Level=0,Countdown=0,Final=0,Purchase=0}; zero music means silent; zero SFX uses bundled Roblox fallback cues; positive IDs override.
 Config.Palette colors allowed (Color3 fields) and Config.GameName. Any needed additions coordinate with root; use local fallback otherwise.
 
 ## Catalog (root owns)
-Catalog.Items dictionary keyed ID. Each entry `{id, category, name, description, currency="Free"|"Coins"|"Robux"|"Milestone",price,gamePassId=0,rarity="Common"|"Rare"|"Epic"|"Legendary",accent={r,g,b}, milestone?={stat="level"|"wins"|"tags",value},grants?={ids...}}`. Category strings: skins,masks,trails,tagEffects,victories,emotes,nameplates,bundles,vip. Catalog.Categories ordered list of `{id,label}`. Catalog.DefaultEquipment={skins="skin_courier",masks="",trails="",tagEffects="tag_spark",victories="victory_wave",emotes="emote_wave",nameplates="name_rookie"}. Catalog.Get(id), Catalog.ForCategory(category), Catalog.IsEquippable(category), Catalog.DefaultOwned(). Free item IDs: skin_courier,skin_rooftop,skin_gardener; premium skin_shadow/skin_golden/skin_neon/skin_crimson; mask_phantom/mask_kitsune/mask_skull, mask_visor,mask_street; trail_cyan/trail_sunset; tag_spark/tag_bloom; victory_wave/victory_spin; emote_wave/emote_dance; name_rookie/name_survivor/name_legend; bundle_night; vip_founder.
+Catalog.Items dictionary keyed ID. Each entry `{id, category, name, description, currency="Free"|"Coins"|"Robux"|"Milestone",price,gamePassId=0,rarity="Common"|"Rare"|"Epic"|"Legendary",accent={r,g,b}, milestone?={stat="level"|"wins"|"tags",value},grants?={ids...}}`. Category strings: skins,masks,trails,tagEffects,victories,emotes,nameplates,bundles,vip. Catalog.Categories ordered list of `{id,label}`. Catalog.DefaultEquipment={skins="skin_courier",masks="",trails="",tagEffects="tag_spark",victories="victory_wave",emotes="emote_wave",nameplates="name_rookie"}. Catalog.Get(id), Catalog.ForCategory(category), Catalog.IsEquippable(category), Catalog.DefaultOwned(). Skin IDs: skin_courier (free),skin_rooftop (level 5),skin_gardener (coins); premium skin_shadow/skin_golden/skin_neon/skin_crimson; mask_phantom/mask_kitsune/mask_skull, mask_visor,mask_street; trail_cyan/trail_sunset; tag_spark/tag_bloom; victory_wave/victory_spin; emote_wave/emote_dance; name_rookie/name_survivor/name_legend; bundle_night; vip_founder.
 
 ## Rules (root owns, pure Luau)
 Rules.HunterCount(count) returns 0 if <2; 1 if 2..6; 2 if 7..12. Rules.LevelFromXP(xp), Rules.XPForLevel(level) cumulative; Rules.Rank(rating) string. Rules.NewProfile(now?) produces profile schema below. Rules.NormalizeProfile(raw,now?) sanitizes persisted data. Rules.RoundReward(summary, config) => {xp,coins,rating}; practice => zero. Rules.DailyQuests(dayKey) ordered definitions `{id,text,stat,goal,xp,coins}` with IDs play_3, tag_5, survive_120. Rules.DayKey(timestamp) UTC yyyy-mm-dd. Rules.QuestProgress(profile,quest).

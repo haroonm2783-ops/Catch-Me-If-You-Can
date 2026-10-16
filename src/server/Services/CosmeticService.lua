@@ -7,9 +7,9 @@ local CosmeticService = {}
 CosmeticService.__index = CosmeticService
 
 local plateStyles = {
-	name_rookie = {label="ROOFTOP ROOKIE",color=Color3.fromRGB(160,189,210)},
-	name_survivor = {label="CHASE SURVIVOR",color=Color3.fromRGB(73,227,204)},
-	name_legend = {label="CITY LEGEND",color=Color3.fromRGB(244,194,88)},
+	name_rookie = {label="CITY NEWCOMER",color=Color3.fromRGB(160,189,210)},
+	name_survivor = {label="UNTOUCHABLE",color=Color3.fromRGB(73,227,204)},
+	name_legend = {label="SKYLINE LEGEND",color=Color3.fromRGB(244,194,88)},
 }
 
 local function text(parent, name, value, size, position, color, bold)
@@ -18,7 +18,7 @@ local function text(parent, name, value, size, position, color, bold)
 	label.BackgroundTransparency = 1
 	label.Size, label.Position = size,position
 	label.Text = value
-	label.Font = bold and Enum.Font.GothamBold or Enum.Font.GothamMedium
+	label.FontFace = Font.fromEnum(bold and Enum.Font.GothamBold or Enum.Font.GothamMedium)
 	label.TextSize = bold and 15 or 10
 	label.TextColor3 = color
 	label.TextStrokeColor3 = Color3.fromRGB(12,17,28)
@@ -41,7 +41,9 @@ local function nameplate(folder, rig, displayName, plateId, title)
 	gui.MaxDistance = 70
 	gui.Parent = folder
 	text(gui,"Identity",displayName,UDim2.fromScale(1,0.58),UDim2.fromScale(0,0),Color3.fromRGB(245,246,255),true)
-	text(gui,"Title",title or style.label,UDim2.fromScale(1,0.42),UDim2.fromScale(0,0.58),style.color,false)
+	if title or plateId ~= "" then
+		text(gui,"Title",title or style.label,UDim2.fromScale(1,0.42),UDim2.fromScale(0,0.58),style.color,false)
+	end
 end
 
 local function ownedEquipment(ctx, profile)
@@ -88,7 +90,8 @@ function CosmeticService:TagEffect(hunter, target)
 	local root = rig and rig:FindFirstChild("HumanoidRootPart")
 	if not profile or not root then return end
 	local equipped = ownedEquipment(self.ctx,profile)
-	self.ctx.Remotes.Notice:FireAllClients({kind="tag",position=root.Position,userId=hunter.UserId,action=equipped.tagEffects or "tag_spark"})
+	self.ctx.Remotes.Notice:FireAllClients({kind="tag",position=root.Position,userId=hunter.UserId,
+		victimUserId=target:IsA("Player") and target.UserId or nil,action=equipped.tagEffects or "tag_spark"})
 end
 
 function CosmeticService:_stopEmote(player)
@@ -171,7 +174,7 @@ function CosmeticService:ShowWinners(players)
 	folder.Name = "CatchWinnerShowcase"
 	folder.Parent = workspace
 	self.podiums = folder
-	local spinning = {}
+	local showcases = {}
 	for index=1,math.min(#players,#positions) do
 		local player = players[index]
 		local profile = self.ctx.Services.DataService:Get(player)
@@ -182,18 +185,26 @@ function CosmeticService:ShowWinners(players)
 			rig.Parent = folder
 			rig:PivotTo(positions[index])
 			nameplate(rig.CatchAppearance,rig,player.DisplayName,equipped.nameplates,"CHASE CHAMPION")
-			if equipped.victories == "victory_spin" then table.insert(spinning,{rig=rig,origin=positions[index]}) end
+			local animate = Appearance.CreatePreviewPose(rig,equipped.victories)
+			if animate then
+				animate(0)
+				table.insert(showcases,{rig=rig,origin=positions[index],spin=equipped.victories=="victory_spin",animate=animate})
+			end
 		end
 	end
-	if #spinning > 0 then
+	if #showcases > 0 then
 		local began = os.clock()
 		self.podiumSpin = RunService.Heartbeat:Connect(function()
 			if not folder.Parent then
 				if self.podiumSpin then self.podiumSpin:Disconnect(); self.podiumSpin=nil end
 				return
 			end
-			for _, item in ipairs(spinning) do
-				if item.rig.Parent then item.rig:PivotTo(item.origin*CFrame.Angles(0,(os.clock()-began)*0.7,0)) end
+			local elapsed = os.clock()-began
+			for _, item in ipairs(showcases) do
+				if item.rig.Parent then
+					if item.spin then item.rig:PivotTo(item.origin*CFrame.Angles(0,elapsed*0.7,0)) end
+					item.animate(elapsed)
+				end
 			end
 		end)
 	end
@@ -221,7 +232,28 @@ function CosmeticService:_watchPlayer(player)
 	if player.Character then applyWhenReady(player.Character) end
 end
 
+function CosmeticService:_updateTrails()
+	for _, player in ipairs(Players:GetPlayers()) do
+		local rig = player.Character
+		local root = rig and rig:FindFirstChild("HumanoidRootPart")
+		local folder = rig and rig:FindFirstChild("CatchAppearance")
+		if root and folder then
+			local enabled = rig:GetAttribute("Sprinting") == true and root.AssemblyLinearVelocity.Magnitude > 3
+			for _, effect in ipairs(folder:GetChildren()) do
+				if effect:IsA("Trail") and effect.Enabled ~= enabled then effect.Enabled = enabled end
+			end
+		end
+	end
+end
+
 function CosmeticService:Start()
+	if self.started then return end
+	self.started = true
+	local elapsed = 0
+	table.insert(self.connections, RunService.Heartbeat:Connect(function(dt)
+		elapsed += dt
+		if elapsed >= 0.15 then elapsed = 0; self:_updateTrails() end
+	end))
 	table.insert(self.connections,Players.PlayerAdded:Connect(function(player) self:_watchPlayer(player) end))
 	table.insert(self.connections,Players.PlayerRemoving:Connect(function(player)
 		self:_stopEmote(player)

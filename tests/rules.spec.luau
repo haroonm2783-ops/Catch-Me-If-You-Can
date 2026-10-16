@@ -80,7 +80,7 @@ for id,item in pairs(Catalog.Items) do
 	assert(not ids[id],"Duplicate item"); ids[id]=true
 	assert(#item.name>0 and #item.description>0,"Every item has readable presentation")
 	assert(item.price>=0,"Nonnegative price")
-	if item.currency=="Robux" then equal(item.gamePassId,0,"Unconfigured real IDs disabled") end
+	if item.currency=="Robux" then equal(type(item.gamePassId)=="number" and item.gamePassId>=0 and item.gamePassId%1==0,true,"Pass ID is configurable nonnegative integer") end
 	if item.grants then for _, grant in ipairs(item.grants) do assert(Catalog.Get(grant),"Bundle grants existing item") end end
 	if item.milestone then assert(item.milestone.value>0,"Positive milestone") end
 end

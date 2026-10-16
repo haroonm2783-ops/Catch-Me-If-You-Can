@@ -22,7 +22,8 @@ local Config = {
 		RoundCoins = 12, WinCoins = 25, TagCoins = 6,
 	},
 	-- Only set IDs for audio you own or have permission to use in this experience.
-	-- Zero disables that sound gracefully; all actions also have visual feedback.
+	-- Music=0 is silent; SFX=0 use quiet engine-bundled cues. Positive IDs override.
+	-- Unavailable audio is skipped; every action also has visual feedback.
 	Audio = {
 		Music = 0, Sprint = 0, Slide = 0, Vault = 0, Tag = 0, Win = 0, Lose = 0,
 		Level = 0, Countdown = 0, Final = 0, Purchase = 0,

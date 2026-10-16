@@ -43,12 +43,20 @@ end
 local nextGuid = 0
 local function fixture(studio, existingStore)
 	local queue, notices, snapshots = {}, {}, {}
+	local scheduler = {}
 	local players = { PlayerAdded = signal(), PlayerRemoving = signal(), GetPlayers = function() return {} end }
 	local store = existingStore or { values = {}, calls = 0 }
 	function store:UpdateAsync(key, transform)
 		self.calls += 1
 		if self.failBefore then error("simulated storage outage") end
 		local value = transform(copy(self.values[key]))
+		-- Roblox may rerun the transform when another writer wins before commit.
+		if self.retryTransform and value ~= nil then
+			local hook = self.retryTransform
+			self.retryTransform = nil
+			hook(self.values, key)
+			value = transform(copy(self.values[key]))
+		end
 		if self.beforeCommit then local hook = self.beforeCommit; self.beforeCommit = nil; hook() end
 		if value ~= nil then self.values[key] = copy(value) end
 		if self.failAfterCommit then self.failAfterCommit = false; error("simulated lost response after commit") end
@@ -58,9 +66,13 @@ local function fixture(studio, existingStore)
 	function marketplace:UserOwnsGamePassAsync(userId, passId)
 		self.queries += 1
 		if self.failVerification then error("simulated marketplace outage") end
+		if self.afterQuery then local hook = self.afterQuery; self.afterQuery = nil; hook() end
 		return self.owns[tostring(userId) .. ":" .. tostring(passId)] == true
 	end
-	function marketplace:PromptGamePassPurchase(_, _passId) self.prompts += 1 end
+	function marketplace:PromptGamePassPurchase(_, _passId)
+		self.prompts += 1
+		if self.failPrompt then error("simulated prompt failure") end
+	end
 	local services = {
 		Players = players, MarketplaceService = marketplace,
 		RunService = { IsStudio = function() return studio == true end },
@@ -68,8 +80,15 @@ local function fixture(studio, existingStore)
 		HttpService = { GenerateGUID = function() nextGuid += 1; return "guid" .. nextGuid end },
 	}
 	local environment = {
-		game = { JobId = "test_server", GetService = function(_, name) return assert(services[name], name) end },
-		task = { wait = function() end, defer = function(fn) table.insert(queue, fn) end, spawn = function(fn) table.insert(queue, fn) end },
+		game = {
+			JobId = "test_server", GetService = function(_, name) return assert(services[name], name) end,
+			BindToClose = function(_, callback) scheduler.close = callback end,
+		},
+		task = {
+			wait = function(seconds) if scheduler.wait then return scheduler.wait(seconds) end end,
+			defer = function(fn) table.insert(queue, fn) end,
+			spawn = function(fn) table.insert(queue, fn) end,
+		},
 		Instance = { new = instance },
 	}
 	local ctx = {
@@ -97,7 +116,7 @@ local function fixture(studio, existingStore)
 	player.Parent = players
 	return {
 		data = data, shop = shop, player = player, store = store, ctx = ctx, queue = queue,
-		notices = notices, snapshots = snapshots, marketplace = marketplace, players = players,
+		notices = notices, snapshots = snapshots, marketplace = marketplace, players = players, scheduler = scheduler,
 		applied = function() return applied end,
 	}
 end
@@ -256,6 +275,145 @@ do
 	f.shop:_Refresh(f.player)
 	expect(f.data:Get(f.player).owned.bundle_night and f.data:Get(f.player).owned.mask_phantom and f.data:Get(f.player).owned.trail_cyan, "Join refresh should restore all verified bundle grants")
 	bundle.gamePassId = previousId
+end
+
+-- Legacy profiles migrate under a lease; malformed and concurrently replaced records stay protected.
+do
+	local f = fixture(false)
+	local legacy = Rules.NewProfile()
+	legacy.coins = 73
+	legacy.owned.mask_visor = true
+	legacy.equipped.masks = "mask_visor"
+	f.store.values.player_42 = legacy
+	f.store.failAfterCommit = true
+	f.data:_Load(f.player)
+	expect(f.store.calls == 2 and f.data.records[f.player].writable, "Lost load acknowledgment should retry its own lease safely")
+	expect(f.data:Get(f.player).coins == 73 and f.data:Get(f.player).equipped.masks == "mask_visor", "Migration must preserve balances and equipment")
+	expect(f.store.values.player_42._format == "CatchMeIfYouCan.profile.v1", "Flat legacy profile must migrate into the documented envelope")
+	local g = fixture(false)
+	g.store.values.player_42 = { _format = "CatchMeIfYouCan.profile.v1", profile = Rules.NewProfile(), session = { id = "expired", expiresAt = os.time() - 1 } }
+	g.data:_Load(g.player)
+	expect(g.data.records[g.player].writable and g.store.values.player_42.session.id ~= "expired", "Expired lease should permit recovery")
+	local h = fixture(false)
+	h.store.retryTransform = function(values, key)
+		values[key] = { _format = "CatchMeIfYouCan.profile.v1", profile = Rules.NewProfile(), session = { id = "winning_server", expiresAt = os.time() + 180 } }
+		values[key].profile.coins = 456
+	end
+	h.data:_Load(h.player)
+	expect(not h.data.records[h.player].writable, "Load must recheck ownership when UpdateAsync retries a transform")
+	expect(h.store.values.player_42.profile.coins == 456 and h.store.values.player_42.session.id == "winning_server", "Contended load must preserve winner's profile and lease")
+	for _, badSession in ipairs({ { id = "bad", expiresAt = 0/0 }, { id = "bad", expiresAt = math.huge }, { id = 99, expiresAt = os.time() } }) do
+		local bad = fixture(false)
+		bad.store.values.player_42 = { _format = "CatchMeIfYouCan.profile.v1", profile = Rules.NewProfile(), session = badSession }
+		bad.data:_Load(bad.player)
+		expect(not bad.data.records[bad.player].writable and not bad.data:Save(bad.player), "Malformed stored leases must never be replaced with defaults")
+	end
+end
+
+-- A competing lease that wins during UpdateAsync retries invalidates the old writer.
+do
+	local f = fixture(false)
+	f.data:_Load(f.player)
+	f.data:Get(f.player).coins = 111
+	f.data:_Dirty(f.data.records[f.player])
+	f.store.retryTransform = function(values, key)
+		values[key].session = { id = "new_owner", expiresAt = os.time() + 180 }
+		values[key].profile.coins = 999
+	end
+	expect(not f.data:Save(f.player), "UpdateAsync conflict must recheck the writer's lease")
+	expect(f.store.values.player_42.profile.coins == 999 and f.store.values.player_42.session.id == "new_owner", "A stale snapshot must never replace the winning session's profile")
+	expect(not f.data.records[f.player].writable and f.data:Snapshot(f.player).persistence == "unavailable", "Losing a lease must revoke writing and report unsaved state")
+	local calls = f.store.calls
+	expect(not f.data:Save(f.player) and f.store.calls == calls, "Revoked writer must not retry writes against another session")
+end
+
+-- Concurrent saves serialize, and departure writes the newest revision before releasing.
+do
+	local f = fixture(false)
+	f.data:_Load(f.player)
+	local record = f.data.records[f.player]
+	record.profile.coins = 1000
+	f.data:_Dirty(record)
+	f.scheduler.wait = function() coroutine.yield("waiting for writer") end
+	f.store.beforeCommit = function() coroutine.yield("saving initial snapshot") end
+	local firstResult, releaseResult
+	local first = coroutine.create(function() firstResult = f.data:Save(f.player) end)
+	expect(coroutine.resume(first), "Initial save coroutine should start")
+	expect(record.saving and coroutine.status(first) == "suspended", "Initial save must hold writer guard while storage yields")
+	expect(f.data:_PurchaseWithCoins(f.player, "mask_visor"), "Non-yielding purchase can progress while autosave is pending")
+	record.departed = true
+	record.accepting = false
+	local release = coroutine.create(function() releaseResult = f.data:_SaveRecord(record, true) end)
+	expect(coroutine.resume(release), "Departure save should start")
+	expect(coroutine.status(release) == "suspended" and f.store.calls == 2, "Concurrent release must wait without issuing a second write")
+	expect(coroutine.resume(first) and firstResult, "Initial save should complete")
+	expect(coroutine.resume(release) and releaseResult, "Departure save should complete after existing writer")
+	expect(f.store.values.player_42.profile.coins == 820 and f.store.values.player_42.profile.owned.mask_visor, "Departure must persist the newest atomic purchase")
+	expect(f.store.values.player_42.session == nil and record.released, "Departure must release profile ownership")
+	expect(not f.data:_PurchaseWithCoins(f.player, "trail_cyan"), "Departing profiles must stop accepting mutations")
+end
+
+-- Shutdown waits through a delayed load's final save and lease release.
+do
+	local f = fixture(false)
+	f.data:Start()
+	f.scheduler.wait = function() coroutine.yield("shutdown waiting") end
+	f.store.beforeCommit = function()
+		coroutine.yield("load response delayed")
+		f.store.beforeCommit = function() coroutine.yield("release response delayed") end
+	end
+	local loading = coroutine.create(function() f.data:_Load(f.player) end)
+	expect(coroutine.resume(loading) and f.data.activeLoads == 1, "Delayed load must count as active")
+	local closing = coroutine.create(f.scheduler.close)
+	expect(coroutine.resume(closing) and coroutine.status(closing) == "suspended", "Shutdown must wait for pending load")
+	expect(coroutine.resume(loading) and coroutine.status(loading) == "suspended", "Load should enter delayed lease release after shutdown starts")
+	expect(f.data.activeLoads == 1, "In-flight final release must remain counted as active load work")
+	expect(coroutine.resume(closing) and coroutine.status(closing) == "suspended", "Shutdown must not finish before delayed release commits")
+	expect(coroutine.resume(loading) and f.data.activeLoads == 0, "Completing release should settle load accounting")
+	expect(coroutine.resume(closing) and coroutine.status(closing) == "dead", "Shutdown should finish after load cleanup")
+	expect(f.data.records[f.player] == nil and f.store.values.player_42.session == nil, "Shutdown during load must remove local record and durable lease")
+end
+
+-- Marketplace failures, cancellation, callbacks, and player departure never manufacture entitlements.
+do
+	local item = Catalog.Get("skin_golden")
+	local previousId = item.gamePassId
+	item.gamePassId = 654321
+	local f = fixture(true)
+	f.data:_Load(f.player)
+	f.shop:Start()
+	f.marketplace.failVerification = true
+	expect(not f.shop:Purchase(f.player, item.id) and f.marketplace.prompts == 0, "Ownership outage must block a new charge prompt")
+	expect(not f.data:Get(f.player).owned[item.id] and not f.shop.busy[f.player], "Ownership outage must neither grant nor leave the shop busy")
+	f.marketplace.failVerification = false
+	f.marketplace.failPrompt = true
+	expect(not f.shop:Purchase(f.player, item.id), "Prompt API failure must be reported")
+	expect(f.shop.pending[f.player] == nil and not f.shop.busy[f.player], "Prompt failure must clear purchase locks")
+	f.marketplace.failPrompt = false
+	f.shop.lastPrompt[f.player] = nil
+	expect(f.shop:Purchase(f.player, item.id), "Valid purchase should open a prompt")
+	f.marketplace.PromptGamePassPurchaseFinished:Fire(f.player, item.gamePassId, false)
+	expect(f.shop.pending[f.player] == nil and not f.data:Get(f.player).owned[item.id], "Cancelled prompt must clear pending state without granting")
+	f.shop.lastPrompt[f.player] = nil
+	expect(f.shop:Purchase(f.player, item.id), "Purchase after cancellation should remain possible")
+	f.marketplace.owns["42:654321"] = true
+	f.marketplace.PromptGamePassPurchaseFinished:Fire(f.player, item.gamePassId, true)
+	expect(not f.data:Get(f.player).owned[item.id], "Prompt-finished event must schedule verification before any grant")
+	local verifyCallback = table.remove(f.queue, 1)
+	expect(type(verifyCallback) == "function", "Completed prompt must schedule server verification")
+	verifyCallback()
+	expect(f.data:Get(f.player).owned[item.id] and f.shop.pending[f.player] == nil, "Verified prompt callback must restore the entitlement and clear pending state")
+	local queries = f.marketplace.queries
+	expect(f.shop:_Verify(f.player, item.gamePassId, false) and f.marketplace.queries == queries, "Verified entitlement can be reused without another marketplace query")
+	f.players.PlayerRemoving:Fire(f.player)
+	expect(f.shop.verified[f.player] == nil and f.shop.pending[f.player] == nil and f.shop.lastPrompt[f.player] == nil, "Leaving must release per-player shop state")
+	local g = fixture(true)
+	g.data:_Load(g.player)
+	g.marketplace.owns["42:654321"] = true
+	g.marketplace.afterQuery = function() g.player.Parent = nil end
+	expect(not g.shop:_Verify(g.player, item.gamePassId, false), "A departing player cannot receive an asynchronous ownership result")
+	expect(not g.data:Get(g.player).owned[item.id], "Ownership response after departure must not mutate a profile")
+	item.gamePassId = previousId
 end
 
 print("Data and shop service tests passed: " .. checks .. " checks")

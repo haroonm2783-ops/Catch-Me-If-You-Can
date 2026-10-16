@@ -3,6 +3,7 @@ local Players = game:GetService("Players")
 local ContextActionService = game:GetService("ContextActionService")
 local RunService = game:GetService("RunService")
 local UserInputService = game:GetService("UserInputService")
+local GuiService = game:GetService("GuiService")
 
 local MovementController = {}
 MovementController.__index = MovementController
@@ -48,7 +49,9 @@ function MovementController:_canAct()
 	return self.humanoid ~= nil
 		and self.humanoid.Health > 0
 		and self.role ~= "Spectator"
+		and self.character:GetAttribute("RoundFrozen") ~= true
 		and not self.player:GetAttribute("CatchMenuOpen")
+		and not GuiService.SelectedObject
 		and UserInputService:GetFocusedTextBox() == nil
 end
 
@@ -66,6 +69,7 @@ function MovementController:_intent(action)
 	if not self:_canAct() then
 		return
 	end
+	if action == "Tag" and (self.role ~= "Hunter" or self.phase ~= "Active") then return end
 	-- This is only an input flood guard. The server decides whether the move is valid.
 	local field = "last" .. action .. "Intent"
 	local now = os.clock()
@@ -218,7 +222,7 @@ end
 
 function MovementController:OnState(state)
 	local previousRole = self.role
-	self.role = "Lobby"
+	self.role = (state.phase == "Active" or state.phase == "HeadStart") and "Spectator" or "Lobby"
 	for _, entry in ipairs(state.players or {}) do
 		if entry.userId == self.player.UserId then
 			self.role = entry.role
@@ -229,6 +233,17 @@ function MovementController:OnState(state)
 		self:_sprint(false)
 	end
 	self.phase = state.phase
+	self:_touchControls()
+end
+
+function MovementController:_touchControls()
+	local visible = self.role ~= "Spectator" and not self.player:GetAttribute("CatchMenuOpen")
+	for _, action in ipairs(ACTIONS) do
+		local control = ContextActionService:GetButton(action)
+		if control then
+			control.Visible = visible and (action ~= "CatchTag" or (self.role == "Hunter" and self.phase == "Active"))
+		end
+	end
 end
 
 function MovementController:OnProfile(_profile)
@@ -266,7 +281,7 @@ function MovementController:Start()
 		elseif state == Enum.UserInputState.End then
 			self:_sprint(false)
 		end
-		return Enum.ContextActionResult.Sink
+		return self:_canAct() and Enum.ContextActionResult.Sink or Enum.ContextActionResult.Pass
 	end, true, Enum.KeyCode.LeftShift, Enum.KeyCode.RightShift, Enum.KeyCode.ButtonL3)
 	ContextActionService:BindAction("CatchSlide", function(_, state)
 		if state == Enum.UserInputState.Begin then
@@ -315,6 +330,10 @@ function MovementController:Start()
 		if self.player:GetAttribute("CatchMenuOpen") then
 			self:_sprint(false)
 		end
+		self:_touchControls()
+	end))
+	table.insert(self.connections, GuiService:GetPropertyChangedSignal("SelectedObject"):Connect(function()
+		if GuiService.SelectedObject then self:_sprint(false) end
 	end))
 	table.insert(self.connections, self.player.CharacterAdded:Connect(function(character)
 		self:OnCharacter(character)

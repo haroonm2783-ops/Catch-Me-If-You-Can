@@ -63,14 +63,54 @@ local function applyLighting()
 	color.Parent = Lighting
 end
 
-function MapBuilder.Build()
+local function activateObstacles(model)
+	if model:GetAttribute("CatchRuntimeStarted") then return end
+	model:SetAttribute("CatchRuntimeStarted", true)
+	local tweens = {}
+	for _, gate in ipairs(model:GetDescendants()) do
+		if gate:IsA("BasePart") and gate:GetAttribute("DynamicObstacle") then
+			local closed = gate:GetAttribute("GateClosedCFrame") or gate.CFrame
+			gate.CFrame = closed
+			local tween = TweenService:Create(gate, TweenInfo.new(gate:GetAttribute("GateCycle") or 3,
+				Enum.EasingStyle.Sine, Enum.EasingDirection.InOut, -1, true, 1.5),
+				{CFrame = closed + Vector3.new(0, 5, 0)})
+			table.insert(tweens, tween)
+			tween:Play()
+		end
+	end
+	model.Destroying:Connect(function()
+		for _, tween in ipairs(tweens) do tween:Cancel() end
+	end)
+end
+
+local function readBaked(model)
+	local world = {Model=model, LobbySpawn=model:GetAttribute("LobbySpawn"), RunnerSpawns={}, HunterSpawns={}, Podiums={},
+		Bounds={min=model:GetAttribute("BoundsMin"),max=model:GetAttribute("BoundsMax")}}
+	for _, kind in ipairs({"Runner", "Hunter", "Podium"}) do
+		local target = kind == "Podium" and world.Podiums or world[kind.."Spawns"]
+		for i=1, model:GetAttribute(kind.."Count") or 0 do
+			table.insert(target, model:GetAttribute(kind.."Spawn"..i))
+		end
+	end
+	return world
+end
+
+function MapBuilder.Build(options)
 	if built and built.Model.Parent then return built end
+	local static = options and options.Static == true
+	local existing = workspace:FindFirstChild("NeonHeights")
+	if existing and existing:GetAttribute("CatchMapVersion") == 1 then
+		built = readBaked(existing)
+		applyLighting()
+		if not static then activateObstacles(existing) end
+		return built
+	elseif existing then existing:Destroy() end
 	local model = Instance.new("Model")
 	model.Name = "NeonHeights"
 	model:SetAttribute("MapName", "NEON HEIGHTS")
 	model:SetAttribute("ArtDirection", "Twilight couriers / warm concrete / electric mint")
 	local partCount = 0
-	local tweens = {}
+	local gates = {}
 	local function group(name)
 		local folder = Instance.new("Folder")
 		folder.Name = name
@@ -135,7 +175,7 @@ function MapBuilder.Build()
 		label.Text = text
 		label.TextColor3 = accent or P.white
 		label.TextScaled = true
-		label.Font = Enum.Font.GothamBold
+		label.FontFace = Font.fromEnum(Enum.Font.GothamBold)
 		label.Parent = gui
 		for _, side in ipairs({ -1, 1 }) do
 			part(parent, "SignEdge", Vector3.new(width, 0.14, 0.16), cf * CFrame.new(0, side * height / 2, -0.22), accent, Enum.Material.Neon, false)
@@ -184,7 +224,6 @@ function MapBuilder.Build()
 		climb.CFrame = cf
 		climb.Color = P.gold
 		climb.Material = Enum.Material.Metal
-		climb.Style = Enum.Style.BridgeStyleSupports
 		climb.Anchored = true
 		climb.CanTouch = false
 		climb.Parent = routes
@@ -369,9 +408,9 @@ function MapBuilder.Build()
 	route("GardenRampLanding", Vector3.new(98, 24, -116), Vector3.new(98, 24, -103), 11, P.cyan, false)
 	route("MarketStreetRamp", Vector3.new(36, 0.4, 111), Vector3.new(0, 14, 111), 11, P.gold, true)
 	route("MarketRampLanding", Vector3.new(0, 14, 111), Vector3.new(0, 14, 100), 11, P.gold, false)
-	ladder(-51, 40, 20, math.pi / 2)
+	ladder(-48.5, 40, 20, math.pi / 2)
 	ladder(123, 58, 14, math.pi / 2)
-	ladder(48, -63, 24, math.pi / 2)
+	ladder(38.5, -63, 24, math.pi / 2)
 	ladder(-84, -109, 16)
 	ladder(-20, -64, 24, math.pi / 2)
 	ladder(-26, 89, 14, math.pi / 2)
@@ -506,12 +545,13 @@ function MapBuilder.Build()
 		gate:SetAttribute("DynamicObstacle", true)
 		gate:SetAttribute("MovementTolerance", 8)
 		sign(routes, "TIMING / BYPASS", Vector3.new(x, 11.5, z - 0.1), 12.5, 2, accent)
-		local tween = TweenService:Create(gate, TweenInfo.new(2.4 + index * 0.3, Enum.EasingStyle.Sine, Enum.EasingDirection.InOut, -1, true, 1.5), { CFrame = gate.CFrame + Vector3.new(0, 5, 0) })
-		table.insert(tweens, tween)
+		gate:SetAttribute("GateClosedCFrame", gate.CFrame)
+		gate:SetAttribute("GateCycle", 2.4 + index * 0.3)
+		table.insert(gates, gate)
 	end
 
 	-- Carefully placed silhouettes frame the arena, with restrained lit-window bands.
-	box(skyline, "CityBelow", 0, -18, -25, 950, 8, 950, P.ink, Enum.Material.Concrete)
+	box(skyline, "CityBelow", 0, -18, -25, 950, 8, 950, P.ink, Enum.Material.Concrete, false)
 	local towers = {
 		{ -218, -163, 40, 44, 90, P.navy }, { -165, -187, 37, 46, 120, P.purple },
 		{ -103, -191, 38, 42, 73, P.teal }, { -48, -206, 35, 45, 105, P.steel },
@@ -596,12 +636,8 @@ function MapBuilder.Build()
 	applyLighting()
 	model:SetAttribute("StaticPartCount", partCount)
 	model:SetAttribute("ElevatedRouteCount", 12)
-	model:SetAttribute("DynamicObstacleCount", #tweens)
+	model:SetAttribute("DynamicObstacleCount", #gates)
 	model.Parent = workspace
-	for _, tween in ipairs(tweens) do tween:Play() end
-	model.Destroying:Connect(function()
-		for _, tween in ipairs(tweens) do tween:Cancel() end
-	end)
 	local function spawnFacing(x, y, z)
 		return CFrame.lookAt(Vector3.new(x, y + 3.3, z), Vector3.new(0, y + 3.3, 0))
 	end
@@ -620,6 +656,16 @@ function MapBuilder.Build()
 		Podiums = podiums,
 		Bounds = { min = Vector3.new(-155, -25, -140), max = Vector3.new(155, 100, 145) },
 	}
+	model:SetAttribute("CatchMapVersion", 1)
+	model:SetAttribute("LobbySpawn", built.LobbySpawn)
+	model:SetAttribute("BoundsMin", built.Bounds.min)
+	model:SetAttribute("BoundsMax", built.Bounds.max)
+	for _, kind in ipairs({"Runner", "Hunter", "Podium"}) do
+		local values = kind == "Podium" and built.Podiums or built[kind.."Spawns"]
+		model:SetAttribute(kind.."Count", #values)
+		for i, transform in ipairs(values) do model:SetAttribute(kind.."Spawn"..i, transform) end
+	end
+	if not static then activateObstacles(model) end
 	return built
 end
 

@@ -211,13 +211,16 @@ function DataService:_Load(player)
 	record.loaded = true
 	self:_RollDay(record)
 	self:_Unlocks(record, false)
-	self.activeLoads -= 1
 	if record.departed or self.closing or player.Parent ~= Players then
 		record.accepting = false
 		self:_SaveRecord(record, true)
 		if self.records[player] == record then self.records[player] = nil end
+		-- BindToClose must keep waiting while a load that finished during shutdown
+		-- is still saving and releasing its newly acquired lease.
+		self.activeLoads -= 1
 		return
 	end
+	self.activeLoads -= 1
 	self:_Leaderboard(player, record.profile)
 	player:SetAttribute("DataReady", true)
 	self:Send(player)
@@ -359,6 +362,7 @@ end
 function DataService:Equip(player, category, id)
 	if not self:Ready(player) then return false, "Profile is not ready." end
 	if type(category) ~= "string" or type(id) ~= "string" or not self.ctx.Catalog.IsEquippable(category) then return false, "Invalid equipment slot." end
+	if category == "skins" and id == "" then id = self.ctx.Catalog.DefaultEquipment.skins end
 	local record = self.records[player]
 	if id ~= "" then
 		local item = self.ctx.Catalog.Get(id)

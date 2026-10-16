@@ -12,6 +12,7 @@ local palettes = {
 	skin_neon = {base=C(27,34,56), coat=C(109,51,137), trim=C(62,226,225), detail=C(248,107,212), skin=C(159,112,86)},
 	skin_crimson = {base=C(43,30,40), coat=C(145,44,62), trim=C(192,191,201), detail=C(255,113,85), skin=C(150,113,95)},
 }
+local masks = {mask_phantom=true,mask_kitsune=true,mask_skull=true,mask_visor=true,mask_street=true}
 local nominal = {
 	Head=Vector3.new(1.15,1,1), UpperTorso=Vector3.new(2,1.6,1), LowerTorso=Vector3.new(1.8,0.7,0.9),
 	LeftUpperArm=Vector3.new(0.7,1.1,0.8), RightUpperArm=Vector3.new(0.7,1.1,0.8),
@@ -41,7 +42,9 @@ local function attach(folder, target, name, size, cf, color, material, shape)
 	part.BottomSurface = Enum.SurfaceType.Smooth
 	part.CanCollide, part.CanTouch, part.CanQuery = false, false, false
 	part.Massless = true
-	part.Anchored = target.Anchored
+	-- Live roots are temporarily anchored by head starts and vaults. A welded
+	-- cosmetic must never keep that avatar anchored after the move ends.
+	part.Anchored = folder.Parent:GetAttribute("CatchPreview") == true and target.Anchored
 	part.CFrame = target.CFrame * CFrame.new(mul(cf.Position,scale)) * (cf-cf.Position)
 	part.Parent = folder
 	local weld = Instance.new("WeldConstraint")
@@ -218,6 +221,7 @@ local function addTrail(folder, rig, id)
 	a.Parent,b.Parent = mount,mount
 	local trail = Instance.new("Trail")
 	trail.Name = id
+	trail.Enabled = rig:GetAttribute("CatchPreview") == true or rig:GetAttribute("Sprinting") == true
 	trail.Attachment0,trail.Attachment1 = a,b
 	trail.Color = id=="trail_cyan" and ColorSequence.new(C(59,236,228),C(85,123,239)) or ColorSequence.new(C(255,196,91),C(246,86,135))
 	trail.Lifetime = 0.33
@@ -234,6 +238,7 @@ function Appearance.Apply(rig, skinId, maskId, equipped)
 	local old = rig:FindFirstChild("CatchAppearance")
 	if old then old:Destroy() end
 	skinId = palettes[skinId] and skinId or "skin_courier"
+	maskId = masks[maskId] and maskId or ""
 	local p = palettes[skinId]
 	for _, body in ipairs(rig:GetChildren()) do
 		if body:IsA("BasePart") and nominal[body.Name] and body.Name ~= "HumanoidRootPart" then
@@ -255,12 +260,19 @@ function Appearance.Apply(rig, skinId, maskId, equipped)
 	costume(folder,rig,skinId,maskId,p)
 	mask(folder,rig,maskId)
 	if equipped then addTrail(folder,rig,equipped.trails) end
+	-- Keep the asset-free face through repeated outfit and mask changes in previews.
+	if rig:GetAttribute("CatchPreview") and maskId == "" then
+		local head = rig:FindFirstChild("Head")
+		for _, side in ipairs({-1,1}) do attach(folder,head,"PreviewEye",Vector3.new(0.065,0.10,0.035),offset(side*0.20,0.07,-0.54),C(38,35,42)) end
+		attach(folder,head,"PreviewSmile",Vector3.new(0.22,0.035,0.035),offset(0,-0.20,-0.54),C(89,55,48))
+	end
 	return folder
 end
 
 function Appearance.BuildPreview(skinId, maskId, extra)
 	local rig = Instance.new("Model")
 	rig.Name = "CatchPreview"
+	rig:SetAttribute("CatchPreview",true)
 	local positions = {
 		HumanoidRootPart=Vector3.new(0,0,0),UpperTorso=Vector3.new(0,0.65,0),LowerTorso=Vector3.new(0,-0.50,0),Head=Vector3.new(0,2.02,0),
 		LeftUpperArm=Vector3.new(-1.39,0.84,0),RightUpperArm=Vector3.new(1.39,0.84,0),
@@ -313,13 +325,42 @@ function Appearance.BuildPreview(skinId, maskId, extra)
 	humanoid.AutoRotate = false
 	humanoid.Parent = rig
 	Appearance.Apply(rig,skinId,maskId,extra)
-	-- A small geometric face remains visible when no full mask is selected.
-	local folder = rig:FindFirstChild("CatchAppearance")
-	if not maskId or maskId == "" then
-		for _, side in ipairs({-1,1}) do attach(folder,rig.Head,"PreviewEye",Vector3.new(0.065,0.10,0.035),offset(side*0.20,0.07,-0.54),C(38,35,42)) end
-		attach(folder,rig.Head,"PreviewSmile",Vector3.new(0.22,0.035,0.035),offset(0,-0.20,-0.54),C(89,55,48))
-	end
 	return rig
+end
+
+-- Anchored showroom models cannot rely on live Motor6D physics. Animate the arm
+-- geometry and its clothing together, preserving the same pose after PivotTo.
+-- The returned animator is intentionally unavailable for live character rigs.
+function Appearance.CreatePreviewPose(rig, victoryId)
+	if not rig or not rig:IsA("Model") or rig:GetAttribute("CatchPreview") ~= true then return nil end
+	if victoryId ~= "victory_wave" and victoryId ~= "victory_spin" then return nil end
+	local root = rig:FindFirstChild("HumanoidRootPart")
+	if not root then return nil end
+	local parts = {}
+	local sides = {LeftUpperArm=-1,LeftLowerArm=-1,LeftHand=-1,RightUpperArm=1,RightLowerArm=1,RightHand=1}
+	for _, part in ipairs(rig:GetDescendants()) do
+		if part:IsA("BasePart") then
+			if not part.Anchored then return nil end
+			local weld = part:FindFirstChildOfClass("WeldConstraint")
+			local targetName = weld and weld.Part0 and weld.Part0.Name or part.Name
+			local side = sides[targetName]
+			if side then table.insert(parts,{part=part,side=side,rest=root.CFrame:ToObjectSpace(part.CFrame)}) end
+		end
+	end
+	return function(elapsed)
+		if not rig.Parent or not root.Parent then return end
+		elapsed = type(elapsed)=="number" and elapsed==elapsed and math.abs(elapsed)<math.huge and elapsed or 0
+		local wave = math.sin(elapsed*5.5)
+		for _, item in ipairs(parts) do
+			if item.part.Parent then
+				local angle = victoryId=="victory_spin" and item.side*72
+					or (item.side==1 and 138+wave*11 or -8)
+				local pivot = CFrame.new(item.side*1.05,1.78,0)
+				local rotation = pivot*CFrame.Angles(0,0,math.rad(angle))*pivot:Inverse()
+				item.part.CFrame = root.CFrame*rotation*item.rest
+			end
+		end
+	end
 end
 
 return Appearance

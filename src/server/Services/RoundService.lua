@@ -325,8 +325,9 @@ function RoundService:_activate()
 	self.resultText = self.practice and "Explore NEON HEIGHTS · practice awards no XP or coins" or "The chase is on!"
 	for _, entry in pairs(self.roster) do
 		entry.joinedAt = self.startedAt
-		if entry.player.Character then
-			-- Releasing hunters also clears any stale movement requests during the hold.
+		if entry.alive and entry.role == "Hunter" and entry.player.Character then
+			-- Only held hunters need releasing. Resetting a running player's movement
+			-- here would bless an unvalidated position and interrupt an in-flight vault.
 			self:_setCharacterRole(entry.player, entry.player.Character)
 		end
 	end
@@ -400,16 +401,22 @@ function RoundService:_checkWin()
 		return
 	end
 	local runners, hunters = self:_counts()
-	if runners == 0 then
+	if self.phase == "Active" and now() >= self.endsAt then
+		self:_endRound("Runner", self.practice and "Practice complete · no XP or coins awarded" or "Time is up · runners escaped!")
+	elseif runners == 0 then
 		self:_endRound("Hunter", self.practice and "Practice ended · try another route next round" or "Hunters caught every runner!")
 	elseif not self.practice and hunters == 0 then
 		self:_endRound("Runner", "Runners win · no hunters remain")
-	elseif self.phase == "Active" and now() >= self.endsAt then
-		self:_endRound("Runner", self.practice and "Practice complete · no XP or coins awarded" or "Time is up · runners escaped!")
 	end
 end
 
 function RoundService:_eliminate(player, reason)
+	-- Timer ticks are deliberately infrequent. A death/reset event arriving after
+	-- the deadline must settle the completed chase before it changes the roster.
+	if self.phase == "Active" and now() >= self.endsAt then
+		self:_checkWin()
+		return
+	end
 	local entry = self.roster[player.UserId]
 	if not self:_playingPhase() or not entry or not entry.alive then
 		return
@@ -434,6 +441,12 @@ function RoundService:_eliminate(player, reason)
 end
 
 function RoundService:TryTag(player)
+	-- Resolve the deadline synchronously; a late remote must not steal a win in
+	-- the interval between the visible timer reaching zero and the next tick.
+	if self.phase == "Active" and now() >= self.endsAt then
+		self:_checkWin()
+		return false
+	end
 	if self.phase ~= "Active" or self:GetRole(player) ~= "Hunter" or not self:IsActive(player) then
 		return false
 	end
