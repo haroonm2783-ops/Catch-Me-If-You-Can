@@ -7,3 +7,4 @@ sourcemap.json
 # Build intermediate and geometry data used by the optional map overview renderer
 *.sources.rbxlx
 dist/map-geometry.json
+__pycache__/

@@ -1,16 +1,20 @@
 # Catch Me If You Can — preserved development state
 
-## Current delivery
+## Current delivery — version 0.2.0
 
 The existing implementation has been continued and integrated, not restarted.
 `main` was created and the initial commit `c4fc037` pushed to
-`haroonm2783-ops/Catch-Me-If-You-Can`. The current integration, documentation,
-regressions, and rebuilt artifacts extend that same `main` branch.
+`haroonm2783-ops/Catch-Me-If-You-Can`. The current polish update extends integration commit `158f2c8` on that same
+`main` branch. No gameplay systems or saved profile schema were restarted.
 
 **Direct-open artifacts exist:**
 
-- `dist/CatchMeIfYouCan.rbxl` — binary Roblox place, recommended download.
-- `dist/CatchMeIfYouCan.rbxlx` — equivalent XML Roblox place.
+- `dist/Catch-Me-If-You-Can-Final.rbxl` — binary Roblox place, recommended download.
+- `dist/Catch-Me-If-You-Can-Final.rbxlx` — equivalent XML Roblox place.
+
+These are freshly generated from version 0.2.0 source, not renamed old files.
+The older `CatchMeIfYouCan` paths are also rebuilt as byte-identical compatibility
+copies. `Workspace.CatchGameVersion`, Studio Output and the UI show **0.2.0**.
 
 Both contain all 15 production scripts, the complete baked city, lighting, spawn
 metadata, R15 settings, and runtime service hierarchy. Both were deserialized
@@ -25,7 +29,7 @@ hand-written gameplay or evidence that Studio gameplay has been tested.
 | Round flow | Waiting, 16s intermission, 5s head start, 180s active chase, 10s results; 12-player roster; fair hunter rotation; small lobbies; Studio practice | Production services exercised with deterministic mocked boundaries |
 | Movement/tagging | Server-owned sprint/slide/vault; cooldowns; geometry/LOS/range validation; movement correction; death/reset/departure elimination | Geometry/cooldown/role/deadline tests; actual engine physics pending |
 | Neon Heights | Six distinct roof districts, 12 bridge/ramp routes, six ladders, two timing gates, street loop, skyline, social lobby, three podiums | Builder executed; geometry/spawn-clearance checks; valid serialized places |
-| Interface | Loading/lobby, role/timer/alive HUD, menus, shop/locker, ViewportFrame preview, quests, career, settings, server leaderboard, results, spectating | Four viewport-size construction checks and input/action/camera regression tests |
+| Interface | Loading/lobby, role/timer/alive HUD, menus, shop/locker, ViewportFrame preview, quests, career, settings, server leaderboard, results, spectating | Five viewport-size construction checks and input/action/camera regression tests |
 | Cosmetics | Seven original outfits, five independent masks, trails, tag effects, two emotes, two victory presentations, nameplates | All 42 outfit/mask combinations instantiated, serialized, reapplied; podium/emote logic tested |
 | Shop | Coins, free/milestone items, permanent gamepasses, Nightfall collection and cosmetic VIP | Ownership verification, prompt cancellation/failure, duplicate/debit tests; no real transactions |
 | Progression | Levels/XP/coins, role stats, win streaks, win/loss rating ranks, three UTC daily quests, six achievements, milestone unlocks | Pure rules and production DataService tests |
@@ -41,19 +45,57 @@ runs all six suites, and checks Git whitespace errors. The underlying command ex
 codes are preserved. The latest complete run passed:
 
 - **Rules:** 301 economy/profile/rank/quest/catalog assertions.
-- **Data and shop:** 113 production-service checks with mocked Roblox APIs.
-- **Gameplay:** 89 production-service checks with mocked timers, characters,
+- **Data and shop:** 136 production-service checks with mocked Roblox APIs.
+- **Gameplay:** 149 production-service checks with mocked timers, characters,
   raycasts, input, and lifecycle events.
-- **Appearance:** 45,257 geometry/property/serialization/behavior assertions across
-  42 skin/mask combinations and service cases; maximum 69 avatar parts. This large
-  assertion count includes repeated finite-coordinate and collision-flag checks.
-- **Client controllers:** 243 mocked UI/input/camera/preview/feedback checks.
-- **Map:** 4,734 geometry, spawn-clearance, route, and baked-map reuse assertions.
+- **Appearance:** 157,251 geometry/property/serialization/lifecycle assertions:
+  all 42 skin/mask combinations in previews, live R15 and live R6; maximum 87
+  avatar parts including Hunter identity. Counts include repeated coordinate
+  and collision-flag checks, not independent Studio play scenarios.
+- **Client controllers:** 430 mocked UI/input/camera/preview/feedback checks.
+- **Map:** 28,089 geometry, spawn-clearance, route, and baked-map reuse assertions.
 - **Places:** both `.rbxl` and `.rbxlx` deserialize and contain the expected city,
   15 exact embedded scripts, R15 settings, and complete game hierarchy.
 
 Tool versions: Rojo 7.7.1, Luau 0.742, Lune 0.11.0. Linux bootstrap downloads were
 verified against official release SHA-256 digests. No integrity checks were bypassed.
+
+## Completed in the 0.2.0 polish pass
+
+- Replaced intermittent slide velocity pulses with a bounded planar LinearVelocity
+  actuator while suspending the competing Humanoid ground controller. Sliding
+  follows existing momentum, eases into/out of a 0.72-second move and has a
+  server-enforced 3-second cooldown. No uploaded animation IDs are required.
+- Added eased local/opponent R15/R6 slide poses and cleared stale menu-focus and
+  respawn cooldown issues. Exercised wall, ledge, jump/vault, death, seat, teleport,
+  disconnect and round-freeze cleanup. Fixed Physics-state recovery when a slide
+  ends as a Hunter becomes frozen for the next round.
+- Fixed premature appearance success on partial avatars and added R6 fitting,
+  late-Humanoid/accessory/BodyColors recovery and profile-loading fallback. The
+  free courier now has a teal jacket, dropped hood, undershirt, coral satchel,
+  cargo pockets and sneakers. Hunter cuffs/outline preserve selected cosmetics.
+- Refined premium silhouettes and faceted masks, retained independent equipment,
+  and verified saved skin/mask selection across a mocked store release/rejoin.
+  Corrected shop descriptions to match actual geometry; all paid IDs remain zero.
+- Added district-specific roof silhouettes, fruit/washer landmarks, facade layers,
+  antennas, a deeper skyline and an arrival canopy/podium frame. Source comparison
+  found all 310 collision parts and all spawn/podium transforms unchanged by the
+  art pass. Added art safety, finite-transform and old-map replacement checks.
+- Reduced neon accents from 413 to 334, disabled distant skyline shadows, kept
+  lights at 10 and map parts below 1,800. These are static budgets, not phone FPS.
+- Enlarged the illuminated locker stage, added turn/front controls, improved shop
+  hierarchy, responsive quests/results and HUD progress. Fixed results duration
+  binding and tested all panels and purchase/equip acknowledgement flows.
+- Added grounded slide streaks and landing cues with existing audio fallbacks.
+- Fixed four vertical art beams whose collinear lookAt axes produced invalid
+  serialized rotations. The bake now fails on every nonfinite part transform.
+- Generated both requested Final place names from current source, reopened every
+  delivery/compatibility file and verified exact embedded scripts and version.
+
+The old slide implementation leaving Humanoid locomotion active is consistent
+with the reported failure, and stale UI selection was another verified input
+hazard. The actual engine cause and success of the new propulsion still need the
+Studio slide acceptance pass; headless checks cannot establish physics feel.
 
 ## Concrete issues fixed during integration
 
@@ -80,7 +122,7 @@ verified against official release SHA-256 digests. No integrity checks were bypa
 
 ## Geometry and presentation budgets
 
-The baked map has 1,528 parts, 413 neon accents, 22 signs, 10 shadowless local lights,
+The baked map has 1,646 parts, 334 neon accents, 22 signs, 10 shadowless local lights,
 12 elevated traversal surfaces, and two moving shortcuts. Props are anchored,
 noninteractive detail avoids unnecessary collision/query work, and no map parts
 are generated repeatedly during rounds. All outfit geometry is noncolliding and
@@ -89,8 +131,15 @@ massless. The source uses original geometry, not downloaded free-model scripts.
 `docs/NeonHeights-overview.png` is an architectural projection of the actual baked
 geometry, generated by the optional `tools/render-overview.py` (Pillow + NumPy).
 It is **not a Roblox Studio screenshot** or evidence of rendering performance.
+`docs/Character-lineup.png` similarly depicts the actual costume geometry (all
+seven outfits plus Hunter identity), not engine materials/lighting. Both images
+were regenerated and visually inspected during this pass.
 
 ## Still required before public launch
+
+The user confirmed running, sprinting and vaulting in the previous Studio build,
+and reported broken sliding and insufficient visual quality. The updated 0.2.0
+physics and presentation have not been played in Studio here.
 
 No Roblox Studio runtime is available in this cloud container. The following
 remain unverified and are required outside it:
@@ -123,7 +172,8 @@ Current leaderboards cover the server; ranks do not perform matchmaking.
 1. Use the existing checkout on `main`; do not create another project or worktree.
 2. Read this file and README, then inspect `git status` and recent commits. Preserve
    any newer user work. Run `./tools/check.sh` to establish the current baseline.
-3. Next priority is the Studio/manual checklist, not adding unrelated systems.
+3. Next priority is the 0.2.0 acceptance checklist in `docs/UPDATE_0_2.md` and
+   Studio/manual checklist, not adding unrelated systems.
    Record observed repro steps, client count, device, and Studio Output errors.
 4. Fix the smallest source change for each observed issue and add meaningful
    regressions where the headless harness can model it. Rebuild the place with

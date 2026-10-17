@@ -13,10 +13,10 @@ Remotes under ReplicatedStorage.CatchRemotes: `State`, `Action`, `Profile`, `Not
 
 ## Config (root owns)
 Config.Round = {MaxPlayers=12,MinimumPlayers=2,Duration=180,Intermission=16,ResultsDuration=10,HeadStart=5,FinalSeconds=30,RespawnDelay=2,StudioSolo=true}
-Config.Movement = {WalkSpeed=17,RunnerSprint=26,HunterSprint=27,Acceleration=7,JumpPower=48,SlideSpeed=35,SlideDuration=0.65,SlideCooldown=3,VaultCooldown=1.1,VaultDistance=5,VaultHeight=4.5,TagRange=5.8,TagCooldown=0.65}
+Config.Movement = {WalkSpeed=17,RunnerSprint=26,HunterSprint=27,Acceleration=7,JumpPower=48,SlideSpeed=35,SlideDuration=0.72,SlideAccelerationTime=0.1,SlideMinimumSpeed=4,SlideCooldown=3,VaultCooldown=1.1,VaultDistance=5,VaultHeight=4.5,TagRange=5.8,TagCooldown=0.65}
 Config.Persistence = {StoreName="CatchMeIfYouCan_v1",AutosaveSeconds=60,Retries=3,UseStudioDataStores=false,SessionLockSeconds=180}
 Config.Progression={RoundXP=45,WinXP=80,TagXP=25,SurvivalXPPerSecond=0.4,RoundCoins=12,WinCoins=25,TagCoins=6}
-Config.Audio={Music=0,Sprint=0,Slide=0,Vault=0,Tag=0,Win=0,Lose=0,Level=0,Countdown=0,Final=0,Purchase=0}; zero music means silent; zero SFX uses bundled Roblox fallback cues; positive IDs override.
+Config.Audio={Music=0,Sprint=0,Slide=0,Vault=0,Land=0,Tag=0,Win=0,Lose=0,Level=0,Countdown=0,Final=0,Purchase=0}; zero music means silent; zero SFX uses bundled Roblox fallback cues; positive IDs override.
 Config.Palette colors allowed (Color3 fields) and Config.GameName. Any needed additions coordinate with root; use local fallback otherwise.
 
 ## Catalog (root owns)

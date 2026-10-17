@@ -29,7 +29,7 @@ local function audit(rig, anchored)
 				expect(item.Massless and not item.CanCollide and not item.CanTouch and not item.CanQuery, "Cosmetic parts cannot affect movement or tag raycasts: "..item.Name)
 				expect(item.Anchored == anchored, "Only showroom cosmetics can be anchored")
 				local weld = item:FindFirstChildOfClass("WeldConstraint")
-				expect(weld and weld.Part0 and weld.Part0.Parent == rig and weld.Part1 == item, "Attachment is welded to an R15 body part")
+				expect(weld and weld.Part0 and weld.Part0.Parent == rig and weld.Part1 == item, "Attachment is welded to an actual rig body part")
 			end
 		end
 	end
@@ -81,10 +81,87 @@ for _, skin in ipairs(skins) do
 		end
 		expect(motorCount == 15 and newMotorCount == motorCount,"R15 joints survive outfit changes")
 		expect(folders == 1 and trails == 1,"One outfit folder and one selected trail")
+		-- Every selected skin/mask also retains its geometry on a live R15 avatar,
+		-- including when the server is holding the root for a head start or vault.
+		rig:SetAttribute("CatchPreview",false)
+		for _, part in ipairs(rig:GetChildren()) do if part:IsA("BasePart") then part.Anchored=false end end
+		rig.HumanoidRootPart.Anchored = true
+		Appearance.Apply(rig,skin.id,mask,{trails="trail_sunset"})
+		Appearance.ApplyRole(rig,"Hunter")
+		audit(rig,false)
+		maximum = math.max(maximum,partCount(rig))
+		expect(not rig.CatchAppearance.trail_sunset.Enabled,"Anchored head start never shows a live sprint trail")
+		local outfit = rig.CatchAppearance
+		local roleFolder = rig.CatchRoleAppearance
+		for _, item in ipairs(roleFolder:GetChildren()) do
+			if item:IsA("BasePart") then
+				expect(not item.Anchored and item.Massless and not item.CanQuery and not item.CanCollide,"Hunter identity cannot freeze or block live movement")
+			end
+		end
+		Appearance.ApplyRole(rig,"Hunter")
+		expect(roleFolder.Parent==nil and rig.CatchAppearance==outfit,"Reapplying team identity never duplicates cuffs or replaces paid outfits")
+		Appearance.ApplyRole(rig,"Runner")
+		expect(not rig:FindFirstChild("CatchRoleAppearance") and rig.CatchAppearance==outfit,"Runner transition removes Hunter identity while preserving cosmetics")
 		rig:Destroy()
 	end
 end
 expect(combinations == 42,"All seven skins with all five masks and no mask were instantiated")
+
+local function buildR6()
+	local rig = roblox.Instance.new("Model")
+	local specs = {
+		{"HumanoidRootPart",roblox.Vector3.new(2,2,1),roblox.Vector3.zero},
+		{"Torso",roblox.Vector3.new(2,2,1),roblox.Vector3.zero},
+		{"Head",roblox.Vector3.new(2,1,1),roblox.Vector3.new(0,1.5,0)},
+		{"Left Arm",roblox.Vector3.new(1,2,1),roblox.Vector3.new(-1.5,0,0)},
+		{"Right Arm",roblox.Vector3.new(1,2,1),roblox.Vector3.new(1.5,0,0)},
+		{"Left Leg",roblox.Vector3.new(1,2,1),roblox.Vector3.new(-0.5,-2,0)},
+		{"Right Leg",roblox.Vector3.new(1,2,1),roblox.Vector3.new(0.5,-2,0)},
+	}
+	for _, spec in ipairs(specs) do
+		local part = roblox.Instance.new("Part")
+		part.Name,part.Size,part.CFrame,part.Parent = spec[1],spec[2],roblox.CFrame.new(spec[3]),rig
+	end
+	rig.PrimaryPart = rig.HumanoidRootPart
+	rig.HumanoidRootPart.AssemblyLinearVelocity = roblox.Vector3.zero
+	local humanoid = roblox.Instance.new("Humanoid")
+	humanoid.Health,humanoid.Parent = 100,rig
+	for _, side in ipairs({"Left","Right"}) do
+		local joint = roblox.Instance.new("Motor6D")
+		joint.Name,joint.Part0,joint.Part1,joint.Parent = side.." Shoulder",rig.Torso,rig[side.." Arm"],rig.Torso
+	end
+	return rig
+end
+local r6Combinations = 0
+for _, skin in ipairs(skins) do
+	for _, maskId in ipairs(masks) do
+		local rig = buildR6()
+		expect(Appearance.IsRigReady(rig),"Complete R6 can wear the authored outfits without replacing its joints")
+		Appearance.Apply(rig,skin.id,maskId,{trails="trail_cyan"})
+		Appearance.ApplyRole(rig,"Hunter")
+		audit(rig,false)
+		maximum = math.max(maximum,partCount(rig))
+		expect(rig:GetAttribute("CatchAppearanceRig")=="R6","R6 fallback is diagnosable in Studio attributes")
+		expect(rig.CatchAppearance.Tailored_LeftUpperArm:FindFirstChildOfClass("WeldConstraint").Part0==rig["Left Arm"],"R6 upper sleeve welds to actual left arm")
+		expect(rig.CatchAppearance.SneakerSole.CFrame.Position.Y < -2.7,"R6 sneakers sit at foot level rather than leg center")
+		expect(rig.CatchRoleAppearance.HunterSignalCuff:FindFirstChildOfClass("WeldConstraint").Part0.Name:match(" Arm$"),"Hunter cuffs adapt to R6 limbs")
+		r6Combinations += 1
+		rig:Destroy()
+	end
+end
+expect(r6Combinations==42,"All seven skins and five masks also serialize on live R6 rigs")
+
+do
+	local rig = Appearance.BuildPreview("skin_courier","")
+	local outfit, hand = rig.CatchAppearance,rig.LeftHand
+	hand.Parent = nil
+	expect(not Appearance.IsRigReady(rig) and Appearance.Apply(rig,"skin_golden","")==nil,"Partial R15 spawn is not reported as a completed outfit")
+	expect(outfit.Parent==rig,"A partial rig never destroys the last good outfit")
+	hand.Parent = rig
+	expect(Appearance.IsRigReady(rig) and Appearance.Apply(rig,"skin_golden","")~=nil,"Late body part permits complete outfit recovery")
+	expect(rig:GetAttribute("CatchAppearanceVersion")==Appearance.Version and rig:GetAttribute("CatchAppearanceSkinId")=="skin_golden","Visible appearance exposes current version and skin for troubleshooting")
+	rig:Destroy()
+end
 
 -- Representative scaled live avatar: its body, joints, and accessories must survive.
 do
@@ -140,8 +217,22 @@ local function signal()
 		Count=function() local count=0 for _, item in ipairs(listeners) do if item.active then count+=1 end end return count end,
 	}
 end
+-- Lune stores real Roblox Instances but does not dispatch engine lifecycle
+-- signals. Drive those boundaries explicitly while testing the real service.
+local signals = {}
+local function event(instance,name)
+	signals[instance] = signals[instance] or {}
+	signals[instance][name] = signals[instance][name] or signal()
+	return signals[instance][name]
+end
+roblox.implementMethod("Instance","GetAttributeChangedSignal",function(instance,name) return event(instance,"Attribute_"..name) end)
+roblox.implementProperty("Instance","ChildAdded",function(instance) return event(instance,"ChildAdded") end)
+for _, name in ipairs({"CharacterAdded","CharacterRemoving","CharacterAppearanceLoaded"}) do
+	roblox.implementProperty("Player",name,function(instance) return event(instance,name) end)
+end
 do
 	local now, phase, notices = 0,"Waiting",{}
+	local deferred,spawns,warnings = {},{},{}
 	local heartbeat = signal()
 	local world = roblox.Instance.new("Folder")
 	local module = {}
@@ -154,12 +245,19 @@ do
 	env.game = {GetService=function(_,name) return assert(services[name],name) end}
 	env.workspace = world
 	env.os = {clock=function() return now end}
+	env.task = {
+		defer=function(fn) table.insert(deferred,fn) end,
+		spawn=function(fn) table.insert(spawns,fn) end,
+		wait=function(seconds) now += seconds end,
+	}
+	env.warn = function(message) table.insert(warnings,message) end
 	env.require = function(request) expect(request==module,"Only production appearance dependency is replaced") return Appearance end
 	local CosmeticService = luau.load(fs.readFile("src/server/Services/CosmeticService.lua"),{environment=env,debugName="CosmeticService"})()
 	local player = roblox.Instance.new("Player")
 	player.Name,player.DisplayName,player.UserId = "TestHunter","Test Hunter",42
 	local rig = Appearance.BuildPreview("skin_courier","")
 	rig:SetAttribute("CatchPreview",false)
+	for _, part in ipairs(rig:GetChildren()) do if part:IsA("BasePart") then part.Anchored=false end end
 	rig.Parent = world
 	rig.HumanoidRootPart.AssemblyLinearVelocity = roblox.Vector3.zero
 	-- Lune has no derived BasePart.Position/physics synchronization.
@@ -191,6 +289,17 @@ do
 	rig.HumanoidRootPart.AssemblyLinearVelocity = roblox.Vector3.new(26,0,0)
 	service:_updateTrails()
 	expect(rig.CatchAppearance.trail_cyan.Enabled,"Sprint trail appears during real movement")
+	rig:SetAttribute("RoundFrozen",true)
+	service:_updateTrails()
+	expect(not rig.CatchAppearance.trail_cyan.Enabled,"Frozen character never emits movement trails")
+	rig:SetAttribute("RoundFrozen",false)
+	rig:FindFirstChildOfClass("Humanoid").Health=0
+	service:_updateTrails()
+	expect(not rig.CatchAppearance.trail_cyan.Enabled,"Corpse motion never emits sprint trails")
+	rig:FindFirstChildOfClass("Humanoid").Health=100
+	rig.HumanoidRootPart.AssemblyLinearVelocity=roblox.Vector3.new(0,50,0)
+	service:_updateTrails()
+	expect(not rig.CatchAppearance.trail_cyan.Enabled,"Falling or jumping in place never emits sprint trails")
 	rig:SetAttribute("Sprinting",false)
 	service:_updateTrails()
 	expect(not rig.CatchAppearance.trail_cyan.Enabled,"Sprint trail stops when sprint ends")
@@ -204,6 +313,29 @@ do
 	profile.owned.tag_bloom,profile.equipped.tagEffects = true,"tag_bloom"
 	service:TagEffect(player,rig)
 	expect(notices[#notices].action=="tag_bloom" and notices[#notices].victimUserId==nil,"Practice bot supports selected cosmetic effect")
+	player:SetAttribute("RoundRole","Hunter")
+	service:UpdateRole(player)
+	local appearanceFolder = rig.CatchAppearance
+	expect(rig:FindFirstChild("CatchRoleAppearance")~=nil and rig:GetAttribute("CatchAppearanceRole")=="Hunter","Service updates actual Hunter role identity")
+	player:SetAttribute("RoundRole","Spectator")
+	service:UpdateRole(player)
+	expect(not rig:FindFirstChild("CatchRoleAppearance") and rig.CatchAppearance==appearanceFolder,"Elimination removes Hunter cues without losing equipped outfit")
+	local savedProfile = profile
+	profile = nil
+	rig.CatchAppearance:Destroy()
+	expect(not service:Apply(player) and rig.CatchAppearance:FindFirstChild("DispatchSatchel"),"Slow profile loads show free streetwear without granting premium ownership")
+	local loadingOutfit = rig.CatchAppearance
+	service:Apply(player)
+	expect(rig.CatchAppearance==loadingOutfit,"Loading retry preserves the existing free outfit")
+	local lateAccessory = roblox.Instance.new("Accessory")
+	local handle = roblox.Instance.new("Part")
+	handle.Name,handle.Parent,lateAccessory.Parent = "Handle",lateAccessory,rig
+	local colors = roblox.Instance.new("BodyColors")
+	colors.Parent = rig
+	service:Apply(player,true)
+	expect(handle.Transparency==1 and colors.HeadColor3==rig.Head.Color,"Late accessories and BodyColors refresh even while profile loading")
+	profile = savedProfile
+	expect(service:Apply(player) and rig.CatchAppearance:FindFirstChild("HoodCrown"),"Verified saved outfit replaces temporary free streetwear")
 	local shoulder = rig.UpperTorso:FindFirstChild("RightShoulder")
 	local rest = shoulder.C0
 	expect(service:Emote(player,"emote_wave"),"Owned equipped emote starts in lobby")
@@ -243,8 +375,66 @@ do
 		service:ShowWinners({})
 		expect(old.Parent==nil and service.podiums==nil and heartbeat.Count()==0,"Next round removes podium models and animation listeners")
 	end
+	local r6 = buildR6()
+	r6.Parent,player.Character = world,r6
+	phase,now = "Waiting",15
+	profile.equipped.emotes = "emote_wave"
+	local r6Shoulder = r6.Torso:FindFirstChild("Right Shoulder")
+	local original = r6Shoulder.C0
+	expect(service:Apply(player) and service:Emote(player,"emote_wave"),"R6 fallback supports owned outfit and wave emote")
+	now += 0.4
+	heartbeat:Fire()
+	expect(r6Shoulder.C0~=original,"R6 shoulder naming is supported by visible emote feedback")
+	service:_stopEmote(player)
+	expect(r6Shoulder.C0==original and heartbeat.Count()==0,"R6 emote restores joint and disconnects on cleanup")
+	-- A spawn that completes after the retry window must recover from the last
+	-- arriving Humanoid, including a slow profile read and a later respawn.
+	player.Parent = world
+	local lateHumanoid = r6:FindFirstChildOfClass("Humanoid")
+	lateHumanoid.Parent = nil
+	r6.CatchAppearance:Destroy()
+	profile = nil
+	service:_watchPlayer(player)
+	expect(#spawns==1,"One bounded initial appearance retry loop starts per character")
+	table.remove(spawns,1)()
+	expect(#warnings==1 and not r6:FindFirstChild("CatchAppearance"),"Incomplete rig expires without constructing a partial outfit")
+	lateHumanoid.Parent = r6
+	r6.ChildAdded:Fire(lateHumanoid)
+	local lateColors = roblox.Instance.new("BodyColors")
+	lateColors.Parent = r6
+	r6.ChildAdded:Fire(lateColors)
+	expect(#deferred==1,"One deferred refresh coalesces late spawn instances")
+	table.remove(deferred,1)()
+	expect(r6:FindFirstChild("CatchAppearance") and r6.CatchAppearance:FindFirstChild("DispatchSatchel"),"Humanoid arriving after deadline restores free outfit while data remains pending")
+	profile = savedProfile
+	service:Apply(player)
+	expect(r6.CatchAppearance:FindFirstChild("HoodCrown")~=nil,"Late profile restores owned equipment after spawn recovery")
+	player:SetAttribute("RoundRole","Hunter")
+	player:GetAttributeChangedSignal("RoundRole"):Fire()
+	expect(r6:FindFirstChild("CatchRoleAppearance")~=nil,"Actual subscribed role signal applies Hunter identity")
+	local accessoryAfterDeadline = roblox.Instance.new("Accessory")
+	accessoryAfterDeadline.Parent = r6
+	r6.ChildAdded:Fire(accessoryAfterDeadline)
+	local priorOutfit = r6.CatchAppearance
+	player.CharacterRemoving:Fire(r6)
+	expect(r6.ChildAdded:Count()==0 and r6:GetAttributeChangedSignal("RoundRole"):Count()==0,"Respawn disconnects old rig lifecycle listeners")
+	local replacement = Appearance.BuildPreview("skin_courier","")
+	replacement:SetAttribute("CatchPreview",false)
+	for _, part in ipairs(replacement:GetChildren()) do if part:IsA("BasePart") then part.Anchored=false end end
+	replacement.Parent,player.Character = world,replacement
+	player.CharacterAdded:Fire(replacement)
+	table.remove(deferred,1)()
+	expect(r6.CatchAppearance==priorOutfit,"A queued refresh cannot modify a previous character after respawn")
+	table.remove(spawns,1)()
+	expect(replacement.CatchAppearance:FindFirstChild("HoodCrown") and replacement:FindFirstChild("CatchRoleAppearance"),"Respawn reapplies owned skin and current role to the new avatar")
+	services.Players.PlayerAdded,services.Players.PlayerRemoving = signal(),signal()
+	service:Start()
+	expect(player.CharacterAdded:Count()==1 and replacement.ChildAdded:Count()==1,"Starting twice cannot duplicate player and character watchers")
+	service:Start()
+	services.Players.PlayerRemoving:Fire(player)
+	expect(player.CharacterAdded:Count()==0 and replacement.ChildAdded:Count()==0,"Disconnect releases all player and character lifecycle listeners")
 	world:Destroy()
 	player:Destroy()
 	victim:Destroy()
 end
-print("Appearance tests passed: "..checks.." checks, "..combinations.." combinations, maximum "..maximum.." avatar parts")
+print("Appearance tests passed: "..checks.." checks, "..combinations.." preview/live R15 combinations, "..r6Combinations.." live R6 combinations, maximum "..maximum.." avatar parts including Hunter identity")

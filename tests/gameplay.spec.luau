@@ -5,6 +5,7 @@ local fs = require("@lune/fs")
 local luau = require("@lune/luau")
 local roblox = require("@lune/roblox")
 local Rules = require("../src/shared/Rules")
+local Config = require("../src/shared/Config")
 local Vector3, CFrame, Enum = roblox.Vector3, roblox.CFrame, roblox.Enum
 local checks = 0
 
@@ -50,6 +51,7 @@ local function object(className)
 		value.Size = Vector3.new(2, 2, 1)
 		value.AssemblyLinearVelocity = Vector3.zero
 		value.AssemblyAngularVelocity = Vector3.zero
+		value.AssemblyMass = 12
 		value.Anchored = false
 		value.CanCollide = true
 		setmetatable(value, { __index = function(self, key) if key == "Position" then return self.CFrame.Position end end })
@@ -83,7 +85,8 @@ local function fixture(playerCount, studio)
 	end
 	local environment = {
 		game = { GetService = function(_, name) return assert(services[name], name) end },
-		Vector3 = Vector3, CFrame = CFrame, Enum = Enum,
+		Vector3 = Vector3, Vector2 = roblox.Vector2, CFrame = CFrame, Enum = Enum,
+		Instance = { new = object },
 		Random = { new = function() return { NextInteger = function(_, _, high) return high end } end },
 		RaycastParams = { new = function() return {} end },
 		OverlapParams = { new = function() return {} end },
@@ -96,7 +99,7 @@ local function fixture(playerCount, studio)
 	local ctx = {
 		Config = {
 			Round = { MaxPlayers = 12, MinimumPlayers = 2, Duration = 180, Intermission = 16, ResultsDuration = 10, HeadStart = 5, FinalSeconds = 30, RespawnDelay = 2, StudioSolo = true },
-			Movement = { WalkSpeed = 17, RunnerSprint = 26, HunterSprint = 27, Acceleration = 7, JumpPower = 48, SlideSpeed = 35, SlideDuration = 0.65, SlideCooldown = 3, VaultCooldown = 1.1, VaultDistance = 5, VaultHeight = 4.5, TagRange = 5.8, TagCooldown = 0.65 },
+			Movement = table.clone(Config.Movement),
 		},
 		Rules = Rules, Services = {},
 		World = { LobbySpawn = CFrame.new(0, 3, 250), RunnerSpawns = { CFrame.new(20, 3, 0) }, HunterSpawns = { CFrame.new(0, 3, 0) }, Bounds = { min = Vector3.new(-155, -25, -140), max = Vector3.new(155, 100, 145) } },
@@ -117,7 +120,7 @@ local function fixture(playerCount, studio)
 	local Movement = luau.load(fs.readFile("src/server/Services/MovementService.lua"), { environment = environment, debugName = "MovementService" })()
 	local round, movement = Round.new(ctx), Movement.new(ctx)
 	ctx.Services.RoundService, ctx.Services.MovementService = round, movement
-	local f = { ctx = ctx, round = round, movement = movement, players = roster, playersService = players, world = world, ground = ground, notices = notices, snapshots = snapshots, awards = awards }
+	local f = { ctx = ctx, round = round, movement = movement, players = roster, playersService = players, run = run, world = world, ground = ground, notices = notices, snapshots = snapshots, awards = awards }
 	function f:advance(seconds)
 		local target, executions = timestamp + seconds, 0
 		while true do
@@ -145,8 +148,10 @@ local function fixture(playerCount, studio)
 		player.UserId, player.Name, player.DisplayName, player.Parent = id, "Player" .. id, "Player " .. id, players
 		player.CharacterAdded = signal()
 		humanoid.Health, humanoid.HipHeight, humanoid.WalkSpeed, humanoid.JumpPower = 100, 2, 17, 48
+		humanoid.AutoRotate = true
 		humanoid.Died, humanoid.state = signal(), Enum.HumanoidStateType.Running
 		function humanoid:GetState() return self.state end
+		function humanoid:ChangeState(state) self.state = state end
 		root.CFrame = CFrame.new(0, 3, 0)
 		root.Parent, humanoid.Parent = character, character
 		character.children.Humanoid, character.children.HumanoidRootPart = humanoid, root
@@ -355,25 +360,185 @@ do
 	expect(not f.movement:ValidatePosition(player), "Repeated fast vertical climbing must exhaust movement credit")
 end
 
--- Slide requires ground and momentum, has a server cooldown, and yields ownership.
+-- Slide requires measured ground momentum, even while Shift is held. It must
+-- retain a horizontal actuator across frames instead of pulsing character speed.
 do
 	local f = fixture(1)
 	local player = f.players[1]
-	local root, state = player.Character.children.HumanoidRootPart, f.movement:_state(player)
+	local humanoid, root, state = player.Character.children.Humanoid, player.Character.children.HumanoidRootPart, f.movement:_state(player)
 	f.movement:Handle(player, "Slide", {})
 	expect(not player.Character:GetAttribute("Sliding"), "Stationary nonsprinting player must not slide")
 	f.movement:Handle(player, "Sprint", { active = true })
 	f.movement:Handle(player, "Slide", {})
+	expect(not state.slideMotion and state.lastSlide == -math.huge and #f.notices == 0,
+		"Holding Shift while stationary must not create propulsion or consume cooldown")
+	root.AssemblyLinearVelocity = Vector3.new(26, -2, 0)
+	root.Anchored = true
+	f.movement:Handle(player, "Slide", {})
+	expect(not state.slideMotion and #f.notices == 0, "An anchored avatar must not begin an actuator slide")
+	root.Anchored = false
+	f.world.raycast = function() return nil end
+	f.movement:Handle(player, "Slide", {})
+	expect(not state.slideMotion and #f.notices == 0, "Airborne slide must not create an air dash or acknowledge cooldown")
+	f.world.raycast = nil
+	f.movement:Handle(player, "Slide", {})
+	local motion = state.slideMotion
 	expect(player.Character:GetAttribute("Sliding") and root.owner == "server", "Accepted slide must take server network ownership")
+	expect(motion and humanoid:GetState() == Enum.HumanoidStateType.Physics and humanoid.WalkSpeed == 0 and not humanoid.AutoRotate,
+		"Slide must suppress the Humanoid motor that otherwise brakes away its propulsion")
+	expect(motion.velocity.PlaneVelocity == roblox.Vector2.new(26, 0) and state.slideDirection == Vector3.xAxis,
+		"Slide must follow measured forward travel rather than force the camera-facing axis")
+	expect(motion.velocity.VelocityConstraintMode == Enum.VelocityConstraintMode.Plane and motion.velocity.ForceLimitsEnabled
+		and motion.velocity.MaxPlanarAxesForce.X > 0 and motion.velocity.MaxPlanarAxesForce.Y > 0,
+		"Slide must apply bounded horizontal force while leaving gravity unconstrained")
+	expect(#f.notices == 1 and f.notices[1].notice.action == "Slide" and f.notices[1].notice.cooldown == 3,
+		"Only an accepted slide should start the displayed server cooldown")
+	-- The fixture does not simulate physics. Real Roblox serialization catches
+	-- misspelled/unsupported actuator properties in addition to these policy tests.
+	local model, actualRoot = roblox.Instance.new("Model"), roblox.Instance.new("Part")
+	actualRoot.Parent = model
+	local actualAttachment = roblox.Instance.new("Attachment"); actualAttachment.Parent = actualRoot
+	for _, record in ipairs({ motion.velocity, motion.orientation }) do
+		local instance = roblox.Instance.new(record.ClassName)
+		for key, value in pairs(record) do
+			if type(value) ~= "function" and key ~= "ClassName" and key ~= "children" and key ~= "attributes"
+				and key ~= "Parent" and key ~= "Attachment0" then instance[key] = value end
+		end
+		instance.Attachment0, instance.Parent = actualAttachment, actualRoot
+	end
+	expect(#roblox.serializeModel({ model }) > 0, "Slide actuator properties must serialize as valid Roblox objects")
+	model:Destroy()
 	local first = state.lastSlide
-	f:advance(0.1)
+	f:advance(Config.Movement.SlideAccelerationTime)
+	f.movement:_stepSlide(player, state, 1 / 60)
+	expect(math.abs(motion.velocity.PlaneVelocity.Magnitude - Config.Movement.SlideSpeed) < 0.001,
+		"Slide should ramp smoothly to its configured speed")
 	f.movement:Handle(player, "Slide", {})
 	expect(state.lastSlide == first, "Slide request must not refresh an active slide")
-	f:advance(0.6)
+	f:advance(0.3)
+	f.movement:_stepSlide(player, state, 1 / 60)
+	expect(motion.velocity.PlaneVelocity.Magnitude < Config.Movement.SlideSpeed
+		and motion.velocity.PlaneVelocity.Magnitude > Config.Movement.RunnerSprint,
+		"Slide should ease back toward running speed before releasing control")
+	f:advance(Config.Movement.SlideDuration)
 	f.movement:_step(player, 0.08)
 	expect(not player.Character:GetAttribute("Sliding") and root.owner == "auto", "Slide completion must restore automatic network ownership")
+	expect(not state.slideMotion and motion.velocity.destroyed and motion.orientation.destroyed and motion.attachment.destroyed,
+		"Slide completion must remove every temporary force and attachment")
+	expect(humanoid.AutoRotate and humanoid.WalkSpeed == Config.Movement.RunnerSprint and humanoid:GetState() == Enum.HumanoidStateType.Running,
+		"Slide completion must restore normal Humanoid locomotion")
 	f.movement:Handle(player, "Slide", {})
 	expect(state.lastSlide == first, "Cooldown must continue after slide animation ends")
+	f:advance(3)
+	f.movement:Handle(player, "Slide", {})
+	expect(state.lastSlide > first and #f.notices == 2, "A moving player must be able to slide again after the server cooldown")
+end
+
+local function slidingFixture()
+	local f = fixture(1)
+	local player = f.players[1]
+	local root, humanoid = player.Character.children.HumanoidRootPart, player.Character.children.Humanoid
+	root.AssemblyLinearVelocity = Vector3.new(0, 0, -20)
+	f.movement:Handle(player, "Slide", {})
+	local state = f.movement:_state(player)
+	assert(state.slideMotion, "Sliding test setup failed")
+	return f, player, humanoid, root, state, state.slideMotion
+end
+
+-- Obstacles, ledges, jumping, death, teleports and respawn must never retain a
+-- force or Physics state from the preceding slide.
+for _, ending in ipairs({ "wall", "ledge", "jump", "death", "freeze", "seat", "anchor", "teleport", "correction", "respawn", "disconnect" }) do
+	local f, player, humanoid, root, state, motion = slidingFixture()
+	local character = player.Character
+	if ending == "wall" then
+		f.world.blockcast = function() return { Instance = f.ground, Normal = Vector3.zAxis } end
+	elseif ending == "ledge" then
+		f.world.raycast = function() return nil end
+	elseif ending == "jump" then
+		f.movement:Handle(player, "Vault", {})
+	elseif ending == "death" then
+		humanoid.Health = 0
+	elseif ending == "freeze" then
+		character:SetAttribute("RoundFrozen", true)
+	elseif ending == "seat" then
+		humanoid.Sit = true
+	elseif ending == "anchor" then
+		root.Anchored = true
+	elseif ending == "teleport" then
+		f:pose(player, 20, 3, 20, true)
+	elseif ending == "correction" then
+		f:advance(0.1)
+		f:pose(player, 100, 3, 0)
+		expect(not f.movement:ValidatePosition(player), "Illegal movement during a slide must still be corrected")
+	elseif ending == "respawn" then
+		local replacement = f:addPlayer(2)
+		player.Character = replacement.Character
+		f.movement:ResetPlayer(player)
+	elseif ending == "disconnect" then
+		f.movement:Start()
+		f:remove(player)
+	end
+	f.movement:_stepSlide(player, state, 1 / 60)
+	expect(not state.slideMotion and not character:GetAttribute("Sliding"), ending .. " must clear the replicated slide state")
+	expect(motion.velocity.destroyed and motion.orientation.destroyed and motion.attachment.destroyed,
+		ending .. " must destroy forces belonging to the old avatar")
+	if ending ~= "anchor" then expect(root.owner == "auto", ending .. " must release server network ownership") end
+	if ending == "jump" then
+		expect(humanoid:GetState() == Enum.HumanoidStateType.Jumping and root.AssemblyLinearVelocity.Y == Config.Movement.JumpPower,
+			"Jump must leave the slide immediately and preserve a normal jump impulse")
+	elseif ending == "ledge" then
+		expect(humanoid:GetState() == Enum.HumanoidStateType.Freefall, "Leaving a ledge must return to gravity-driven freefall")
+	elseif ending == "freeze" then
+		expect(humanoid.WalkSpeed == 0 and humanoid.JumpPower == 0, "Slide cleanup must respect a newly frozen round state")
+		expect(humanoid:GetState() ~= Enum.HumanoidStateType.Physics, "Freezing must not strand an avatar in Physics after the next release")
+	elseif ending == "respawn" then
+		expect(humanoid:GetState() ~= Enum.HumanoidStateType.Physics and not player.Character:GetAttribute("Sliding"),
+			"Respawn must release the old Humanoid without applying its pose to the replacement")
+		player.Character.children.HumanoidRootPart.AssemblyLinearVelocity = Vector3.new(0, 0, -20)
+		f.movement:Handle(player, "Slide", {})
+		expect(state.slideMotion and state.slideMotion.character == player.Character, "Fresh avatar must slide immediately after respawning")
+	end
+end
+
+-- Before activation, a wall rejects the move without burning a cooldown. The
+-- accepted slide actuator then updates each frame independent of the 12.5 Hz
+-- general validation budget.
+do
+	local f = fixture(1)
+	local player = f.players[1]
+	local root, state = player.Character.children.HumanoidRootPart, f.movement:_state(player)
+	root.AssemblyLinearVelocity = Vector3.new(0, 0, -20)
+	f.world.raycast = function(origin, delta)
+		return { Instance = f.ground, Position = origin + delta, Normal = delta.Y < 0 and Vector3.yAxis or Vector3.zAxis }
+	end
+	f.movement:Handle(player, "Slide", {})
+	expect(not state.slideMotion and state.lastSlide == -math.huge and #f.notices == 0, "A close wall must reject slide before cooldown begins")
+	f.world.raycast = nil
+	f.movement:Start()
+	f.movement:Handle(player, "Slide", {})
+	local before = state.slideMotion.velocity.PlaneVelocity.Magnitude
+	f:advance(1 / 60)
+	f.run.Heartbeat:Fire(1 / 60)
+	expect(state.slideMotion.velocity.PlaneVelocity.Magnitude > before and f.movement.accumulator < 0.08,
+		"Slide speed should update each Heartbeat without waiting for general validation")
+end
+
+-- Starting a round during a lobby slide holds a hunter, then releases it with
+-- the standard Humanoid controller restored after the five-second head start.
+do
+	local f = fixture(2)
+	local hunter = f.players[1]
+	local root, humanoid = hunter.Character.children.HumanoidRootPart, hunter.Character.children.Humanoid
+	root.AssemblyLinearVelocity = Vector3.new(0, 0, -20)
+	f.movement:Handle(hunter, "Slide", {})
+	expect(humanoid:GetState() == Enum.HumanoidStateType.Physics, "Round transition fixture must begin in a real slide state")
+	f.round:_startRound(f.round:_eligible())
+	expect(root.Anchored and not f.movement:_state(hunter).slideMotion and humanoid:GetState() ~= Enum.HumanoidStateType.Physics,
+		"Head start must anchor a sliding hunter after cleaning up its Physics state")
+	f:advance(5)
+	f.round:_activate()
+	expect(not root.Anchored and humanoid.AutoRotate and humanoid.WalkSpeed > 0 and humanoid:GetState() ~= Enum.HumanoidStateType.Physics,
+		"Head start release must restore movement after an interrupted lobby slide")
 end
 
 -- Vault accepts only server-detected low obstacles and a clear swept path.
@@ -402,6 +567,21 @@ do
 	expect(not root.Anchored and not player.Character:GetAttribute("Vaulting") and root.owner == "auto", "Completed vault must release its anchor and ownership")
 	expect(math.abs(root.Position.Z + 5.2) < 0.001 and math.abs(root.Position.Y - 3.15) < 0.001, "Vault must land at the server-computed clear destination")
 	expect(f.movement:ValidatePosition(player), "Completed server vault must seed valid movement history")
+	local vaultRaycast = f.world.raycast
+	f.world.raycast = nil
+	f:pose(player, 0, 3, 0, true)
+	root.AssemblyLinearVelocity = Vector3.new(0, 0, -20)
+	f.movement:Handle(player, "Slide", {})
+	local slideMotion = f.movement:_state(player).slideMotion
+	expect(slideMotion ~= nil, "Slide-vault fixture must begin with active propulsion")
+	f.world.raycast = vaultRaycast
+	f.movement:Handle(player, "Vault", {})
+	expect(not f.movement:_state(player).slideMotion and slideMotion.velocity.destroyed
+		and player.Character:GetAttribute("Vaulting") and root.Anchored,
+		"Vault should replace slide propulsion with one bounded anchored trajectory")
+	f:advance(0.5)
+	expect(not root.Anchored and player.Character.children.Humanoid:GetState() ~= Enum.HumanoidStateType.Physics,
+		"A slide-vault sequence must return to normal locomotion")
 	f:pose(player, 0, 3, 0, true)
 	f.movement:Handle(player, "Vault", {})
 	f:advance(0.12)

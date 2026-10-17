@@ -63,21 +63,34 @@ local function ownedEquipment(ctx, profile)
 end
 
 function CosmeticService.new(ctx)
-	return setmetatable({ctx=ctx, connections={}, playerConnections={}, emotes={}, lastEmote={}, podiums=nil, podiumSpin=nil},CosmeticService)
+	return setmetatable({ctx=ctx, connections={}, playerConnections={}, characterConnections={}, emotes={}, lastEmote={}, podiums=nil, podiumSpin=nil},CosmeticService)
 end
 
-function CosmeticService:Apply(player)
+function CosmeticService:Apply(player, refreshLoadingAppearance)
 	local data = self.ctx.Services.DataService
 	local profile = data and data:Get(player)
 	local rig = player.Character
-	if not profile or not rig or not rig:FindFirstChild("HumanoidRootPart") then return false end
-	local equipped = ownedEquipment(self.ctx,profile)
+	if not Appearance.IsRigReady(rig) then return false end
+	-- A slow profile read should not expose an unfinished avatar. Render the free
+	-- outfit once while loading; DataService reapplies verified owned items on load.
+	if not profile and not refreshLoadingAppearance and rig:FindFirstChild("CatchAppearance")
+		and rig:GetAttribute("CatchAppearanceVersion") == Appearance.Version then return false end
+	local equipped = profile and ownedEquipment(self.ctx,profile) or self.ctx.Catalog.DefaultEquipment
 	local folder = Appearance.Apply(rig,equipped.skins,equipped.masks,equipped)
 	if not folder then return false end
 	nameplate(folder,rig,player.DisplayName,equipped.nameplates)
+	Appearance.ApplyRole(rig,player:GetAttribute("RoundRole") or rig:GetAttribute("RoundRole") or "Lobby")
 	local humanoid = rig:FindFirstChildOfClass("Humanoid")
 	if humanoid then humanoid.DisplayDistanceType = Enum.HumanoidDisplayDistanceType.None end
-	return true
+	return profile ~= nil
+end
+
+function CosmeticService:UpdateRole(player)
+	local rig = player.Character
+	if rig and rig:FindFirstChild("CatchAppearance") then
+		local role = player:GetAttribute("RoundRole") or rig:GetAttribute("RoundRole") or "Lobby"
+		if rig:GetAttribute("CatchAppearanceRole") ~= role then Appearance.ApplyRole(rig,role) end
+	end
 end
 
 function CosmeticService:Preview(rig, skinId, maskId, extra)
@@ -132,9 +145,10 @@ function CosmeticService:Emote(player, id)
 	local motors = {}
 	local named = {}
 	for _, descendant in ipairs(character:GetDescendants()) do
-		if descendant:IsA("Motor6D") and (descendant.Name == "RightShoulder" or descendant.Name == "LeftShoulder" or descendant.Name == "Waist") then
+		local jointName = descendant.Name:gsub("%s", "")
+		if descendant:IsA("Motor6D") and (jointName == "RightShoulder" or jointName == "LeftShoulder" or jointName == "Waist") then
 			motors[descendant] = descendant.C0
-			named[descendant.Name] = descendant
+			named[jointName] = descendant
 		end
 	end
 	local current = {character=character,motors=motors,connection=nil}
@@ -212,22 +226,45 @@ end
 
 function CosmeticService:_watchPlayer(player)
 	if self.playerConnections[player] then return end
+	local function clearCharacter()
+		for _, connection in ipairs(self.characterConnections[player] or {}) do connection:Disconnect() end
+		self.characterConnections[player] = nil
+	end
 	local function applyWhenReady(character)
+		clearCharacter()
+		local refreshQueued = false
+		self.characterConnections[player] = {
+			character:GetAttributeChangedSignal("RoundRole"):Connect(function() self:UpdateRole(player) end),
+			character.ChildAdded:Connect(function(child)
+				-- Roblox may insert BodyColors/accessories after CharacterAdded even
+				-- when LoadCharacterAppearance is disabled. Our own folders are ignored.
+				if (child:IsA("BodyColors") or child:IsA("Accessory") or child:IsA("BasePart") or child:IsA("Humanoid")) and not refreshQueued then
+					refreshQueued = true
+					task.defer(function()
+						refreshQueued = false
+						if player.Character==character then self:Apply(player,true) end
+					end)
+				end
+			end),
+		}
 		task.spawn(function()
-			if not character:WaitForChild("HumanoidRootPart",10) then return end
 			local deadline = os.clock()+20
 			while player.Parent and player.Character==character and os.clock()<deadline do
 				if self:Apply(player) then return end
 				task.wait(0.25)
+			end
+			if player.Character==character and not character:FindFirstChild("CatchAppearance") then
+				warn("[Catch cosmetics] Outfit unavailable for "..tostring(player.UserId).."; character needs a complete R15 or R6 rig. Appearance version "..Appearance.Version)
 			end
 		end)
 	end
 	self.playerConnections[player] = {
 		player.CharacterAdded:Connect(function(character) self:_stopEmote(player); applyWhenReady(character) end),
 		player.CharacterAppearanceLoaded:Connect(function(character)
-			if player.Character == character then self:Apply(player) end
+			if player.Character == character then self:Apply(player,true) end
 		end),
-		player.CharacterRemoving:Connect(function() self:_stopEmote(player) end),
+		player.CharacterRemoving:Connect(function() self:_stopEmote(player); clearCharacter() end),
+		player:GetAttributeChangedSignal("RoundRole"):Connect(function() self:UpdateRole(player) end),
 	}
 	if player.Character then applyWhenReady(player.Character) end
 end
@@ -237,8 +274,11 @@ function CosmeticService:_updateTrails()
 		local rig = player.Character
 		local root = rig and rig:FindFirstChild("HumanoidRootPart")
 		local folder = rig and rig:FindFirstChild("CatchAppearance")
-		if root and folder then
-			local enabled = rig:GetAttribute("Sprinting") == true and root.AssemblyLinearVelocity.Magnitude > 3
+		local humanoid = rig and rig:FindFirstChildOfClass("Humanoid")
+		if folder then
+			local enabled = root ~= nil and humanoid ~= nil and humanoid.Health > 0 and not root.Anchored
+				and rig:GetAttribute("RoundFrozen") ~= true and rig:GetAttribute("Sprinting") == true
+				and Vector3.new(root.AssemblyLinearVelocity.X,0,root.AssemblyLinearVelocity.Z).Magnitude > 3
 			for _, effect in ipairs(folder:GetChildren()) do
 				if effect:IsA("Trail") and effect.Enabled ~= enabled then effect.Enabled = enabled end
 			end
@@ -258,7 +298,9 @@ function CosmeticService:Start()
 	table.insert(self.connections,Players.PlayerRemoving:Connect(function(player)
 		self:_stopEmote(player)
 		for _, connection in ipairs(self.playerConnections[player] or {}) do connection:Disconnect() end
+		for _, connection in ipairs(self.characterConnections[player] or {}) do connection:Disconnect() end
 		self.playerConnections[player] = nil
+		self.characterConnections[player] = nil
 		self.lastEmote[player] = nil
 	end))
 	for _, player in ipairs(Players:GetPlayers()) do self:_watchPlayer(player) end

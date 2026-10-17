@@ -15,6 +15,62 @@ local READY_ATTRIBUTES = {
 	Tag = "CatchTagReadyAt",
 }
 
+-- Authored joint offsets provide a real slide silhouette without depending on
+-- an uploaded animation. C0 leaves Roblox's Animator free to animate Transform.
+-- R6 names keep older published places usable while R15 is the intended rig.
+local SLIDE_POSE = {
+	Root = CFrame.new(0, -0.7, 0) * CFrame.Angles(-0.12, 0, 0),
+	RootJoint = CFrame.new(0, -0.45, 0) * CFrame.Angles(-0.22, 0, 0),
+	Waist = CFrame.Angles(-0.28, 0.08, 0),
+	LeftHip = CFrame.Angles(0.9, -0.12, -0.08),
+	RightHip = CFrame.Angles(0.55, 0.12, 0.08),
+	LeftKnee = CFrame.Angles(-1.35, 0, 0),
+	RightKnee = CFrame.Angles(-0.8, 0, 0),
+	LeftAnkle = CFrame.Angles(0.35, 0, 0),
+	RightAnkle = CFrame.Angles(0.22, 0, 0),
+	LeftShoulder = CFrame.Angles(-0.3, 0, -0.2),
+	RightShoulder = CFrame.Angles(-0.15, 0, 0.25),
+	["Left Hip"] = CFrame.Angles(0.8, 0, -0.12),
+	["Right Hip"] = CFrame.Angles(0.35, 0, 0.12),
+	["Left Shoulder"] = CFrame.Angles(-0.3, 0, -0.2),
+	["Right Shoulder"] = CFrame.Angles(-0.15, 0, 0.25),
+}
+
+local function collectPose(character)
+	local pose = {}
+	for _, descendant in ipairs(character:GetDescendants()) do
+		if descendant:IsA("Motor6D") and SLIDE_POSE[descendant.Name] then
+			table.insert(pose, { joint = descendant, base = descendant.C0 })
+		end
+	end
+	return pose
+end
+
+local function resetPose(pose)
+	for _, record in ipairs(pose) do
+		if record.joint.Parent and record.last and record.joint.C0 == record.last then
+			record.joint.C0 = record.base
+		end
+		record.last = nil
+	end
+end
+
+local function applyPose(pose, blend, lean)
+	for _, record in ipairs(pose) do
+		local joint = record.joint
+		if joint.Parent then
+			if joint.C0 ~= record.last then record.base = joint.C0 end
+			local offset = CFrame.new():Lerp(SLIDE_POSE[joint.Name], blend)
+			if joint.Name == "Waist" or joint.Name == "RootJoint" then
+				offset *= CFrame.Angles(lean.X, lean.Y, lean.Z)
+			end
+			-- Apply offsets in the parent's axes, including R6's rotated joint bases.
+			record.last = CFrame.new(record.base.Position) * offset * record.base.Rotation
+			joint.C0 = record.last
+		end
+	end
+end
+
 local function disconnectAll(connections)
 	for _, connection in ipairs(connections) do
 		connection:Disconnect()
@@ -29,6 +85,8 @@ function MovementController.new(ctx)
 		connections = {},
 		characterConnections = {},
 		pose = {},
+		remotePoses = {},
+		slideBlend = 0,
 		sprintRequested = false,
 		lastVaultIntent = 0,
 		lastSlideIntent = 0,
@@ -51,7 +109,6 @@ function MovementController:_canAct()
 		and self.role ~= "Spectator"
 		and self.character:GetAttribute("RoundFrozen") ~= true
 		and not self.player:GetAttribute("CatchMenuOpen")
-		and not GuiService.SelectedObject
 		and UserInputService:GetFocusedTextBox() == nil
 end
 
@@ -87,13 +144,46 @@ function MovementController:GetCooldown(action)
 end
 
 function MovementController:_resetPose()
-	for _, record in ipairs(self.pose) do
-		if record.joint.Parent and record.last and record.joint.C0 == record.last then
-			record.joint.C0 = record.base
-		end
-		record.last = nil
-	end
+	resetPose(self.pose)
 	self.lean = Vector3.zero
+	self.slideBlend = 0
+end
+
+-- Sliding is replicated by the server as an attribute. Each client renders the
+-- same eased pose for nearby opponents as well as its own avatar; no RemoteEvent
+-- is allowed to supply joint transforms or request another player's animation.
+function MovementController:_remoteFeedback(dt)
+	local seen = {}
+	local smoothing = 1 - math.exp(-18 * dt)
+	for _, player in ipairs(Players:GetPlayers()) do
+		if player ~= self.player then
+			seen[player] = true
+			local character, record = player.Character, self.remotePoses[player]
+			if record and record.character ~= character then
+				resetPose(record.pose)
+				self.remotePoses[player], record = nil, nil
+			end
+			local humanoid = character and character:FindFirstChildOfClass("Humanoid")
+			local sliding = humanoid and humanoid.Health > 0 and character:GetAttribute("Sliding") == true
+				and not character:GetAttribute("CatchEmoting") and not self:_settings().reducedMotion
+			if sliding and not record then
+				record = { character = character, pose = collectPose(character), blend = 0 }
+				self.remotePoses[player] = record
+			end
+			if record then
+				record.blend += ((sliding and 1 or 0) - record.blend) * smoothing
+				if not sliding and record.blend < 0.001 then
+					resetPose(record.pose)
+					self.remotePoses[player] = nil
+				else
+					applyPose(record.pose, record.blend, Vector3.zero)
+				end
+			end
+		end
+	end
+	for player, record in pairs(self.remotePoses) do
+		if not seen[player] then resetPose(record.pose); self.remotePoses[player] = nil end
+	end
 end
 
 function MovementController:_releaseCamera()
@@ -121,6 +211,11 @@ function MovementController:OnCharacter(character)
 	self.character = character
 	self.humanoid = nil
 	self.root = nil
+	-- Server ResetPlayer clears parkour cooldowns when a new avatar spawns.
+	-- Do not leave the previous avatar's acknowledged cooldown in the HUD.
+	self.player:SetAttribute(READY_ATTRIBUTES.Slide, nil)
+	self.player:SetAttribute(READY_ATTRIBUTES.Vault, nil)
+	self.lastSlideIntent, self.lastVaultIntent = 0, 0
 	if not character then
 		return
 	end
@@ -135,11 +230,7 @@ function MovementController:OnCharacter(character)
 		self.root = root
 		self.baseCameraOffset = humanoid.CameraOffset
 		self.bobTime = 0
-		for _, descendant in ipairs(character:GetDescendants()) do
-			if descendant:IsA("Motor6D") and descendant.Name == "Waist" then
-				table.insert(self.pose, { joint = descendant, base = descendant.C0 })
-			end
-		end
+		self.pose = collectPose(character)
 		table.insert(self.characterConnections, humanoid.Died:Connect(function()
 			self:_sprint(false)
 			self:_releaseCamera()
@@ -150,6 +241,7 @@ end
 
 function MovementController:_feedback(dt)
 	dt = math.min(dt, 0.1)
+	self:_remoteFeedback(dt)
 	local humanoid, root, character = self.humanoid, self.root, self.character
 	local camera = workspace.CurrentCamera
 	local settings = self:_settings()
@@ -199,24 +291,14 @@ function MovementController:_feedback(dt)
 		return
 	end
 	local direction = root.CFrame:VectorToObjectSpace(humanoid.MoveDirection)
-	local targetLean = Vector3.new(sliding and -0.26 or direction.Z * 0.065,
+	local targetLean = Vector3.new(sliding and 0 or direction.Z * 0.065,
 		0, -direction.X * (sprinting and 0.075 or 0.045))
 	self.lean = self.lean:Lerp(targetLean, smoothing)
-	for _, record in ipairs(self.pose) do
-		local joint = record.joint
-		if joint.Parent then
-			-- Preserve any fresh avatar/emote base pose instead of accumulating offsets.
-			if joint.C0 ~= record.last then
-				record.base = joint.C0
-			end
-			if moving or sliding or self.lean.Magnitude > 0.001 then
-				record.last = record.base * CFrame.Angles(self.lean.X, self.lean.Y, self.lean.Z)
-				joint.C0 = record.last
-			elseif record.last then
-				joint.C0 = record.base
-				record.last = nil
-			end
-		end
+	self.slideBlend += ((sliding and 1 or 0) - self.slideBlend) * (1 - math.exp(-18 * dt))
+	if moving or sliding or self.slideBlend > 0.001 or self.lean.Magnitude > 0.001 then
+		applyPose(self.pose, self.slideBlend, self.lean)
+	else
+		self:_resetPose()
 	end
 end
 
@@ -358,6 +440,8 @@ function MovementController:Destroy()
 		ContextActionService:UnbindAction(action)
 	end
 	self:OnCharacter(nil)
+	for _, record in pairs(self.remotePoses) do resetPose(record.pose) end
+	table.clear(self.remotePoses)
 	disconnectAll(self.connections)
 end
 

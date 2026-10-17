@@ -102,6 +102,10 @@ local function accent(item)
 	return rgb and Color3.fromRGB(rgb[1] or rgb.r or 68, rgb[2] or rgb.g or 230, rgb[3] or rgb.b or 231) or C.cyan
 end
 
+local function gradient(object, first, last, rotation)
+	return node("UIGradient", {Color = ColorSequence.new(first, last), Rotation = rotation or 90}, object)
+end
+
 local function clear(parent)
 	for _, child in ipairs(parent:GetChildren()) do child:Destroy() end
 end
@@ -159,11 +163,14 @@ function UIController:Start()
 	self:_buildSpectator()
 	self.panel = frame(self.root, {
 		Name = "MenuPanel", AnchorPoint = Vector2.new(0.5, 0.5), Position = UDim2.fromScale(0.5, 0.53),
-		Size = UDim2.new(1, -40, 1, -210), BackgroundColor3 = C.background, Visible = false, ZIndex = 5,
+		Size = UDim2.new(1, -40, 1, -160), BackgroundColor3 = C.background, Visible = false, ZIndex = 5,
 	}, 18)
-	node("UISizeConstraint", {MaxSize = Vector2.new(1080, 630), MinSize = Vector2.new(270, 160)}, self.panel)
+	node("UISizeConstraint", {MaxSize = Vector2.new(1180, 760), MinSize = Vector2.new(270, 160)}, self.panel)
 	stroke(self.panel)
-	self.panelTitle = label(self.panel, "THE COLLECTION", {Position = UDim2.fromOffset(20, 12), Size = UDim2.new(1, -90, 0, 27), Font = F.black, TextSize = 22})
+	gradient(self.panel, Color3.fromRGB(22, 35, 53), C.background, 110)
+	self.panelScale = node("UIScale", {Scale = 1}, self.panel)
+	frame(self.panel, {Position = UDim2.fromOffset(20, 0), Size = UDim2.fromOffset(80, 3), BackgroundColor3 = C.cyan}, 2)
+	self.panelTitle = label(self.panel, "THE COLLECTION", {Position = UDim2.fromOffset(20, 12), Size = UDim2.new(1, -90, 0, 27), Font = F.black, TextSize = 22, TextTruncate = Enum.TextTruncate.AtEnd})
 	self.panelSubtitle = label(self.panel, "", {Position = UDim2.fromOffset(20, 43), Size = UDim2.new(1, -90, 0, 20), TextColor3 = C.muted, TextSize = 11})
 	button(self.panel, "X", function() self:CloseMenu() end, {Name = "Close", Position = UDim2.new(1, -56, 0, 16), Size = UDim2.fromOffset(38, 38)})
 	self.panelContent = frame(self.panel, {Position = UDim2.fromOffset(16, 78), Size = UDim2.new(1, -32, 1, -94), BackgroundTransparency = 1})
@@ -205,10 +212,10 @@ function UIController:Start()
 	self.connections[#self.connections + 1] = RunService.Heartbeat:Connect(function(dt)
 		accumulated += dt
 		if accumulated >= 0.1 then accumulated = 0 self:_tick() end
-		if self.previewCamera and self.previewModel and self:_motion() then
-			self.previewAngle += dt * 0.22
-			local angle = self.previewAngle
-			self.previewCamera.CFrame = CFrame.lookAt(Vector3.new(math.sin(angle) * 11, 2.2, -math.cos(angle) * 11), Vector3.new(0, 0.15, 0))
+		if self.previewCamera and self.previewModel then
+			self.previewTime = (self.previewTime or 0) + dt
+			local angle = self.previewAngle + (self:_motion() and math.sin(self.previewTime * 0.38) * 0.12 or 0)
+			self.previewCamera.CFrame = CFrame.lookAt(Vector3.new(math.sin(angle) * 11, 1.4, -math.cos(angle) * 11), Vector3.new(0, 0.15, 0))
 		end
 	end)
 	self:_responsive()
@@ -222,6 +229,9 @@ function UIController:_buildHeader()
 	self.brandAccent = frame(self.header, {Position = UDim2.fromOffset(0, 56), Size = UDim2.fromOffset(36, 3), BackgroundColor3 = C.cyan}, 2)
 	self.clock = frame(self.header, {AnchorPoint = Vector2.new(0.5, 0), Position = UDim2.fromScale(0.5, 0), Size = UDim2.fromOffset(220, 67), BackgroundColor3 = C.background, BackgroundTransparency = 0.08}, 14)
 	self.clockStroke = stroke(self.clock)
+	gradient(self.clock, Color3.fromRGB(26, 43, 60), C.background)
+	self.roundTrack = frame(self.clock, {Name = "RoundProgress", Position = UDim2.new(0, 9, 1, -3), Size = UDim2.new(1, -18, 0, 2), BackgroundColor3 = C.line}, 2)
+	self.roundFill = frame(self.roundTrack, {Size = UDim2.fromScale(1, 1), BackgroundColor3 = C.cyan}, 2)
 	self.phaseLabel = label(self.clock, "WELCOME TO NEON HEIGHTS", {Position = UDim2.fromOffset(5, 6), Size = UDim2.new(1, -10, 0, 15), TextXAlignment = Enum.TextXAlignment.Center, TextSize = 9, Font = F.bold, TextColor3 = C.cyan})
 	self.timerLabel = label(self.clock, "LOBBY", {Position = UDim2.fromOffset(5, 21), Size = UDim2.new(1, -10, 0, 29), TextXAlignment = Enum.TextXAlignment.Center, TextSize = 27, Font = F.black})
 	self.aliveLabel = label(self.clock, "Waiting for players", {Position = UDim2.fromOffset(5, 50), Size = UDim2.new(1, -10, 0, 12), TextXAlignment = Enum.TextXAlignment.Center, TextSize = 9, TextColor3 = C.muted})
@@ -254,7 +264,8 @@ function UIController:_buildHero()
 		self.visited = true self.hero.Visible = false
 		self:Toast("Explore the lobby. You join the next round automatically.", "welcome")
 	end, {Position = UDim2.fromOffset(0, 188), Size = UDim2.fromOffset(225, 42), BackgroundColor3 = C.cyan, TextColor3 = C.background})
-	self.saveLabel = label(self.root, "CONNECTING TO YOUR PROFILE", {Position = UDim2.new(0, 20, 1, -25), Size = UDim2.new(1, -40, 0, 15), TextColor3 = C.muted, TextSize = 9})
+	self.saveLabel = label(self.root, "CONNECTING TO YOUR PROFILE", {Position = UDim2.new(0, 20, 1, -25), Size = UDim2.new(1, -125, 0, 15), TextColor3 = C.muted, TextSize = 9, TextTruncate = Enum.TextTruncate.AtEnd})
+	self.versionLabel = label(self.root, "BUILD " .. tostring(self.ctx.Config.Version), {Name = "BuildVersion", AnchorPoint = Vector2.new(1, 0), Position = UDim2.new(1, -20, 1, -25), Size = UDim2.fromOffset(85, 15), TextColor3 = C.muted, TextSize = 9, TextXAlignment = Enum.TextXAlignment.Right})
 end
 
 function UIController:_buildAbilities()
@@ -326,15 +337,18 @@ function UIController:_responsive()
 	self.hero.Position = short and UDim2.fromOffset(22, 156) or UDim2.new(0, 22, 0.5, -78)
 	self.heroTitle.TextSize = small and 26 or 35
 	-- Short landscape displays need a usable content viewport below the dock.
-	self.panel.Size = UDim2.new(1, -24, 1, short and -136 or -210)
-	self.panel.Position = UDim2.new(0.5, 0, 0.5, short and 58 or 6)
+	self.panel.Size = UDim2.new(1, -24, 1, short and -136 or -160)
+	self.panel.Position = UDim2.new(0.5, 0, 0.5, short and 58 or 60)
 	self.panelTitle.TextSize = small and 18 or 22
+	self.panelSubtitle.TextSize = small and 10 or 11
+	self.panelSubtitle.TextTruncate = Enum.TextTruncate.AtEnd
 	self.roleChip.Visible = not short and not self.menu
 	self.hero.Visible = not self.visited and not self.menu and (self.ctx.State.phase == "Waiting" or self.ctx.State.phase == "Intermission") and not short
 	self.abilities.Visible = not self.menu and UserInputService:GetLastInputType() ~= Enum.UserInputType.Touch and not short
 	self.spectator.Size = UDim2.fromOffset(math.min(320, size.X - 36), 62)
 	self.spectator.Position = UDim2.new(0.5, 0, 1, UserInputService.TouchEnabled and -32 or -96)
 	self.saveLabel.Visible = not short
+	self.versionLabel.Visible = not short
 	self:_updateSpectator()
 end
 
@@ -344,6 +358,8 @@ function UIController:OpenMenu(name)
 	self.menu = name
 	self.player:SetAttribute("CatchMenuOpen", true)
 	self.panel.Visible = true
+	self.panelScale.Scale = self:_motion() and 0.97 or 1
+	self:_tween(self.panelScale, 0.22, {Scale = 1})
 	self.hero.Visible = false
 	self:_renderMenu()
 	self:_responsive()
@@ -397,40 +413,47 @@ end
 
 function UIController:_renderShop()
 	local inventory = self.menu == "Inventory"
-	self.panelTitle.Text = inventory and "YOUR LOCKER" or "THE COLLECTION"
-	self.panelSubtitle.Text = inventory and "Your style. Your signature. Select a piece to equip." or "Express yourself. Every cosmetic leaves the chase fair."
-	local compact = self.panel.AbsoluteSize.X < 720 or self.panelContent.AbsoluteSize.Y < 360
+	self.panelTitle.Text = inventory and "THE FIT STUDIO" or "NEON HEIGHTS / COLLECTION"
+	self.panelSubtitle.Text = inventory and "Build your signature. Every mask works with every outfit." or "Original citywear. Try on the look. Keep the chase fair."
+	local compact = self.panel.AbsoluteSize.X < 760 or self.panelContent.AbsoluteSize.Y < 390
+	local portrait = self.panel.AbsoluteSize.X < 540
 	local profile = self.ctx.Profile
 	local owned = profile.owned or {}
 	local equipped = profile.equipped or {}
-	local items = self.ctx.Catalog.ForCategory(self.category)
 	local visible = {}
-	for _, item in ipairs(items) do if not inventory or owned[item.id] then visible[#visible + 1] = item end end
-	local columns = compact and (self.panel.AbsoluteSize.X < 440 and 1 or 2) or (self.panel.AbsoluteSize.X > 960 and 3 or 2)
-	-- One vertical scroll surface in compact mode keeps the preview and every
-	-- item reachable even on a phone in landscape; no negative-height grids.
+	for _, item in ipairs(self.ctx.Catalog.ForCategory(self.category)) do
+		if not inventory or owned[item.id] then visible[#visible + 1] = item end
+	end
+	local columns = compact and (portrait and 2 or 3) or 2
 	local surface = compact and scroll(self.panelContent, {Name = "CompactCollection"}) or self.panelContent
-	local gridHeight = math.max(140, math.ceil(#visible / columns) * 124)
+	local detailHeight = portrait and 502 or 286
+	local cellHeight = portrait and 142 or 158
+	local gridHeight = math.max(cellHeight, math.ceil(#visible / columns) * (cellHeight + 10))
 	local detail = frame(surface, {
-		Position = compact and UDim2.new() or UDim2.new(0.69, 12, 0, 0),
-		Size = compact and UDim2.new(1, 0, 0, 142) or UDim2.new(0.31, -12, 1, 0), BackgroundColor3 = C.panel,
-	}, 12)
+		Name = "FittingStage",
+		Position = UDim2.new(),
+		Size = compact and UDim2.new(1, -5, 0, detailHeight) or UDim2.new(0.44, -8, 1, 0),
+		BackgroundColor3 = C.panel,
+	}, 16)
+	stroke(detail, Color3.fromRGB(65, 91, 112), 0.3)
+	gradient(detail, Color3.fromRGB(35, 57, 74), Color3.fromRGB(13, 22, 38), 115)
 	local collection = frame(surface, {
-		Position = compact and UDim2.fromOffset(0, 154) or UDim2.new(),
-		Size = compact and UDim2.new(1, -5, 0, gridHeight + 46) or UDim2.new(0.69, 0, 1, 0), BackgroundTransparency = 1,
+		Position = compact and UDim2.fromOffset(0, detailHeight + 18) or UDim2.new(0.44, 10, 0, 0),
+		Size = compact and UDim2.new(1, -5, 0, gridHeight + 78) or UDim2.new(0.56, -10, 1, 0), BackgroundTransparency = 1,
 	})
-	local categories = scroll(collection, {Size = UDim2.new(1, 0, 0, 39)}, true)
+	label(collection, inventory and "YOUR WARDROBE" or "FIND YOUR NEXT SIGNATURE", {Size = UDim2.new(1, 0, 0, 16), Font = F.bold, TextSize = 10, TextColor3 = C.muted})
+	local categories = scroll(collection, {Position = UDim2.fromOffset(0, 25), Size = UDim2.new(1, 0, 0, 42)}, true)
 	list(categories, true, 6)
 	for index, category in ipairs(self.ctx.Catalog.Categories) do
 		button(categories, string.upper(category.label), function()
 			self.category = category.id self:_renderMenu()
-		end, {Name = "Category_" .. category.id, Size = UDim2.fromOffset(math.max(70, #category.label * 7 + 22), 31), LayoutOrder = index, TextSize = 9,
+		end, {Name = "Category_" .. category.id, Size = UDim2.fromOffset(math.max(80, #category.label * 7 + 24), 36), LayoutOrder = index, TextSize = 10,
 			BackgroundColor3 = self.category == category.id and C.cyan or C.card,
 			TextColor3 = self.category == category.id and C.background or C.muted})
 	end
-	local gridProps = {Position = UDim2.fromOffset(0, 46), Size = UDim2.new(1, 0, 1, -46), BackgroundTransparency = 1}
+	local gridProps = {Position = UDim2.fromOffset(0, 76), Size = UDim2.new(1, 0, 1, -76), BackgroundTransparency = 1}
 	local grid = compact and frame(collection, gridProps) or scroll(collection, gridProps)
-	node("UIGridLayout", {CellPadding = UDim2.fromOffset(8, 8), CellSize = UDim2.new(1 / columns, -9, 0, compact and 116 or 142), SortOrder = Enum.SortOrder.LayoutOrder}, grid)
+	node("UIGridLayout", {CellPadding = UDim2.fromOffset(10, 10), CellSize = UDim2.new(1 / columns, -6, 0, cellHeight), SortOrder = Enum.SortOrder.LayoutOrder}, grid)
 	local selected = self.ctx.Catalog.Get(self.selectedItem)
 	local selectionValid = false
 	for _, item in ipairs(visible) do if item.id == self.selectedItem then selectionValid = true break end end
@@ -439,31 +462,35 @@ function UIController:_renderShop()
 		local itemColor = accent(item)
 		local chosen = self.selectedItem == item.id
 		local card = button(grid, "", function() self.selectedItem = item.id self:_renderMenu() end, {Name = "Item_" .. item.id, LayoutOrder = index, BackgroundColor3 = chosen and Color3.fromRGB(31, 58, 72) or C.card})
-		frame(card, {Position = UDim2.fromOffset(10, 10), Size = UDim2.fromOffset(26, 3), BackgroundColor3 = itemColor}, 2)
-		label(card, string.upper(item.rarity or "Common"), {Position = UDim2.fromOffset(10, 22), Size = UDim2.new(1, -20, 0, 14), TextSize = 8, Font = F.bold, TextColor3 = itemColor})
-		label(card, item.name, {Position = UDim2.fromOffset(10, 42), Size = UDim2.new(1, -20, 0, compact and 33 or 43), Font = F.bold, TextSize = compact and 13 or 16, TextWrapped = true, TextYAlignment = Enum.TextYAlignment.Top})
+		frame(card, {Position = UDim2.fromOffset(12, 12), Size = UDim2.fromOffset(30, 4), BackgroundColor3 = itemColor}, 2)
+		label(card, string.upper(item.rarity or "Common"), {Position = UDim2.fromOffset(12, 25), Size = UDim2.new(1, -24, 0, 15), TextSize = 9, Font = F.bold, TextColor3 = itemColor})
+		label(card, item.name, {Position = UDim2.fromOffset(12, 47), Size = UDim2.new(1, -24, 0, 47), Font = F.bold, TextSize = portrait and 14 or 18, TextWrapped = true, TextYAlignment = Enum.TextYAlignment.Top})
 		local status = equipped[item.category] == item.id and "EQUIPPED" or (owned[item.id] and "OWNED" or self:_itemPrice(item))
-		label(card, status, {Position = UDim2.new(0, 10, 1, -26), Size = UDim2.new(1, -20, 0, 17), Font = F.bold, TextSize = 9, TextColor3 = owned[item.id] and C.cyan or C.amber, TextTruncate = Enum.TextTruncate.AtEnd})
+		label(card, status, {Position = UDim2.new(0, 12, 1, -30), Size = UDim2.new(1, -24, 0, 20), Font = F.bold, TextSize = 10, TextColor3 = owned[item.id] and C.cyan or C.amber, TextTruncate = Enum.TextTruncate.AtEnd})
 	end
 	if #visible == 0 then
-		label(collection, inventory and "Your collection starts here.\nFind your next favorite in the shop." or "More pieces are on the way.", {Position = UDim2.fromOffset(12, 65), Size = UDim2.new(1, -24, 0, 80), TextWrapped = true, TextColor3 = C.muted, TextXAlignment = Enum.TextXAlignment.Center})
+		label(collection, "Your signature starts here.\nFind your next favorite in the collection.", {Position = UDim2.fromOffset(12, 86), Size = UDim2.new(1, -24, 0, 80), TextWrapped = true, TextColor3 = C.muted, TextXAlignment = Enum.TextXAlignment.Center})
+		button(collection, "EXPLORE COLLECTION", function() self:OpenMenu("Shop") end, {Name = "ExploreShop", Position = UDim2.fromOffset(12, 176), Size = UDim2.new(1, -24, 0, 42), BackgroundColor3 = C.cyan, TextColor3 = C.background})
 	end
-	self:_renderItemDetail(detail, selected, compact)
+	self:_renderItemDetail(detail, selected, compact and not portrait)
 end
 
-function UIController:_renderItemDetail(parent, item, compact)
+function UIController:_renderItemDetail(parent, item, horizontal)
 	if not item then label(parent, "SELECT YOUR SIGNATURE", {TextColor3 = C.muted, TextSize = 11, TextXAlignment = Enum.TextXAlignment.Center}) return end
 	local profile = self.ctx.Profile
 	local owned = (profile.owned or {})[item.id] == true
 	local equipped = profile.equipped or {}
+	label(parent, "LIVE FIT / " .. string.upper(item.category), {Position = UDim2.fromOffset(16, 13), Size = UDim2.new(1, -32, 0, 17), Font = F.bold, TextSize = 9, TextColor3 = C.cyan})
+	local stage = frame(parent, {Name = "PreviewStage", Position = UDim2.fromOffset(8, 35), Size = horizontal and UDim2.new(0.46, -8, 1, -43) or UDim2.new(1, -16, 1, -249), BackgroundTransparency = 1})
+	local plate = frame(stage, {AnchorPoint = Vector2.new(0.5, 1), Position = UDim2.new(0.5, 0, 1, -42), Size = UDim2.new(0.72, 0, 0, 25), BackgroundColor3 = accent(item), BackgroundTransparency = 0.83}, 100)
+	stroke(plate, accent(item), 0.5)
 	local view = node("ViewportFrame", {
-		BackgroundTransparency = 1, Size = compact and UDim2.new(0.28, 0, 1, -6) or UDim2.new(1, 0, 0.53, 0),
-		Ambient = Color3.fromRGB(170, 188, 219), LightColor = C.text, LightDirection = Vector3.new(-1, -1, -1),
-	}, parent)
+		Name = "CharacterPreview", BackgroundTransparency = 1, Size = UDim2.new(1, 0, 1, -36),
+		Ambient = Color3.fromRGB(190, 207, 230), LightColor = Color3.fromRGB(255, 240, 219), LightDirection = Vector3.new(-1, -0.6, -1),
+	}, stage)
 	local world = node("WorldModel", {}, view)
 	local extra = table.clone(equipped)
 	if self.ctx.Catalog.IsEquippable(item.category) then extra[item.category] = item.id end
-	-- Collection previews show their included outfit and mask before purchase.
 	for _, grantedId in ipairs(item.grants or {}) do
 		local granted = self.ctx.Catalog.Get(grantedId)
 		if granted and self.ctx.Catalog.IsEquippable(granted.category) then extra[granted.category] = granted.id end
@@ -474,15 +501,20 @@ function UIController:_renderItemDetail(parent, item, compact)
 	if success and rig then
 		rig.Parent = world
 		self.previewModel = rig
-		local camera = node("Camera", {FieldOfView = 38, CFrame = CFrame.lookAt(Vector3.new(4, 2.2, -11), Vector3.new(0, 0.15, 0))}, view)
-		view.CurrentCamera = camera self.previewCamera = camera self.previewAngle = 0.3
+		self.previewAngle, self.previewTime = 0.18, 0
+		local camera = node("Camera", {FieldOfView = 38, CFrame = CFrame.lookAt(Vector3.new(2, 1.4, -11), Vector3.new(0, 0.15, 0))}, view)
+		view.CurrentCamera = camera self.previewCamera = camera
 	else
-		label(parent, "PREVIEW UNAVAILABLE", {Size = view.Size, TextColor3 = C.muted, TextSize = 10, TextXAlignment = Enum.TextXAlignment.Center})
+		label(stage, "PREVIEW UNAVAILABLE", {Size = view.Size, TextColor3 = C.muted, TextSize = 10, TextXAlignment = Enum.TextXAlignment.Center})
 	end
-	local info = frame(parent, {Position = compact and UDim2.new(0.29, 0, 0, 9) or UDim2.new(0, 14, 0.54, 0), Size = compact and UDim2.new(0.71, -12, 1, -18) or UDim2.new(1, -28, 0.46, -12), BackgroundTransparency = 1})
-	label(info, string.upper(item.rarity or "COMMON"), {Size = UDim2.new(1, 0, 0, 13), TextSize = 8, Font = F.bold, TextColor3 = accent(item)})
-	label(info, item.name, {Position = UDim2.fromOffset(0, 16), Size = UDim2.new(1, 0, 0, compact and 21 or 42), TextSize = compact and 14 or 20, Font = F.black, TextWrapped = true})
-	label(info, item.description or "", {Position = UDim2.fromOffset(0, compact and 39 or 62), Size = UDim2.new(1, 0, 0, compact and 30 or 49), TextSize = compact and 9 or 11, TextColor3 = C.muted, TextWrapped = true, TextYAlignment = Enum.TextYAlignment.Top})
+	local controls = frame(stage, {AnchorPoint = Vector2.new(0.5, 1), Position = UDim2.fromScale(0.5, 1), Size = UDim2.fromOffset(184, 34), BackgroundTransparency = 1})
+	button(controls, "<", function() self.previewAngle -= math.pi / 4 end, {Name = "PreviewLeft", Size = UDim2.fromOffset(40, 32), TextSize = 16})
+	button(controls, "FRONT VIEW", function() self.previewAngle, self.previewTime = 0, 0 end, {Name = "PreviewFront", Position = UDim2.fromOffset(46, 0), Size = UDim2.fromOffset(92, 32), TextSize = 9})
+	button(controls, ">", function() self.previewAngle += math.pi / 4 end, {Name = "PreviewRight", Position = UDim2.fromOffset(144, 0), Size = UDim2.fromOffset(40, 32), TextSize = 16})
+	local info = frame(parent, {Name = "ItemInformation", Position = horizontal and UDim2.new(0.46, 8, 0, 42) or UDim2.new(0, 18, 1, -196), Size = horizontal and UDim2.new(0.54, -26, 1, -60) or UDim2.new(1, -36, 0, 178), BackgroundTransparency = 1})
+	label(info, string.upper(item.rarity or "COMMON"), {Size = UDim2.new(1, 0, 0, 15), TextSize = 9, Font = F.bold, TextColor3 = accent(item)})
+	label(info, item.name, {Position = UDim2.fromOffset(0, 20), Size = UDim2.new(1, 0, 0, 45), TextSize = 23, Font = F.black, TextWrapped = true})
+	label(info, item.description or "", {Position = UDim2.fromOffset(0, 74), Size = UDim2.new(1, 0, 0, 50), TextSize = 11, TextColor3 = C.muted, TextWrapped = true, TextYAlignment = Enum.TextYAlignment.Top})
 	local configured = item.currency ~= "Robux" or (item.gamePassId or 0) > 0
 	local canUnequip = owned and equipped[item.category] == item.id
 		and (item.category ~= "skins" or item.id ~= self.ctx.Catalog.DefaultEquipment.skins)
@@ -513,26 +545,31 @@ function UIController:_renderItemDetail(parent, item, compact)
 				if self.menu == "Shop" or self.menu == "Inventory" then self:_renderMenu() end
 			end
 		end)
-	end, {Name = "ItemAction", AnchorPoint = Vector2.new(0, 1), Position = UDim2.new(0, 0, 1, 0), Size = UDim2.new(1, 0, 0, compact and 35 or 40), TextSize = compact and 9 or 10, BackgroundColor3 = canAct and C.cyan or C.card, TextColor3 = canAct and C.background or C.muted})
+	end, {Name = "ItemAction", AnchorPoint = Vector2.new(0, 1), Position = UDim2.new(0, 0, 1, 0), Size = UDim2.new(1, 0, 0, 42), TextSize = 11, BackgroundColor3 = canAct and C.cyan or C.card, TextColor3 = canAct and C.background or C.muted})
 end
 
 function UIController:_renderQuests()
 	self.panelTitle.Text = "DAILY DISPATCH"
-	self.panelSubtitle.Text = "A fresh route every day / resets at 00:00 UTC"
+	self.panelSubtitle.Text = "Three reasons for one more chase / refreshes at 00:00 UTC"
 	local container = scroll(self.panelContent)
 	list(container, false, 12)
 	local quests = self.ctx.Profile.quests or {}
+	local narrow = self.panelContent.AbsoluteSize.X < 520
 	for index, quest in ipairs(quests) do
-		local card = frame(container, {Size = UDim2.new(1, -5, 0, 123), LayoutOrder = index}, 12)
+		local card = frame(container, {Name = "Dispatch_" .. quest.id, Size = UDim2.new(1, -5, 0, narrow and 182 or 140), LayoutOrder = index}, 14)
+		stroke(card, quest.claimed and C.line or C.cyan, 0.75)
 		local ratio = math.clamp((quest.progress or 0) / math.max(quest.goal or 1, 1), 0, 1)
-		label(card, string.format("DISPATCH %02d", index), {Position = UDim2.fromOffset(16, 12), Size = UDim2.new(1, -32, 0, 15), TextSize = 9, TextColor3 = C.cyan, Font = F.bold})
-		label(card, quest.text, {Position = UDim2.fromOffset(16, 33), Size = UDim2.new(1, -155, 0, 38), TextSize = 15, Font = F.bold, TextWrapped = true})
-		label(card, number(math.min(quest.progress or 0, quest.goal or 0)) .. " / " .. number(quest.goal) .. "     +" .. number(quest.xp) .. " XP  +" .. number(quest.coins) .. " COINS", {Position = UDim2.fromOffset(16, 80), Size = UDim2.new(1, -32, 0, 16), TextSize = 10, TextColor3 = C.muted})
-		local track = frame(card, {Position = UDim2.fromOffset(16, 107), Size = UDim2.new(1, -32, 0, 4), BackgroundColor3 = C.line}, 2)
-		frame(track, {Size = UDim2.fromScale(ratio, 1), BackgroundColor3 = quest.claimed and C.muted or C.cyan}, 2)
-		button(card, quest.claimed and "CLAIMED" or (ratio >= 1 and "CLAIM" or "IN PROGRESS"), function()
+		label(card, string.format("%02d / DAILY CHALLENGE", index), {Position = UDim2.fromOffset(18, 14), Size = UDim2.new(1, -36, 0, 15), TextSize = 9, TextColor3 = quest.claimed and C.muted or C.cyan, Font = F.bold})
+		label(card, quest.text, {Position = UDim2.fromOffset(18, 39), Size = UDim2.new(1, narrow and -36 or -168, 0, 40), TextSize = 17, Font = F.bold, TextWrapped = true})
+		label(card, "+" .. number(quest.xp) .. " XP  /  +" .. number(quest.coins) .. " COINS", {Position = UDim2.fromOffset(18, 85), Size = UDim2.new(1, -36, 0, 17), TextSize = 11, Font = F.bold, TextColor3 = C.amber})
+		local track = frame(card, {Position = UDim2.fromOffset(18, 114), Size = UDim2.new(1, -36, 0, 5), BackgroundColor3 = C.line}, 3)
+		frame(track, {Size = UDim2.fromScale(ratio, 1), BackgroundColor3 = quest.claimed and C.muted or C.cyan}, 3)
+		if narrow then
+			label(card, number(math.min(quest.progress or 0, quest.goal or 0)) .. " / " .. number(quest.goal), {Position = UDim2.fromOffset(18, 132), Size = UDim2.new(1, -155, 0, 31), Font = F.bold, TextSize = 12, TextColor3 = C.muted})
+		end
+		button(card, quest.claimed and "CLAIMED" or (ratio >= 1 and "CLAIM REWARD" or (number(math.min(quest.progress or 0, quest.goal or 0)) .. " / " .. number(quest.goal))), function()
 			if ratio >= 1 and not quest.claimed then self:_send("ClaimQuest", {id = quest.id}) end
-		end, {Name = "Quest_" .. quest.id, Position = UDim2.new(1, -128, 0, 33), Size = UDim2.fromOffset(110, 35), TextSize = 9, BackgroundColor3 = ratio >= 1 and not quest.claimed and C.cyan or C.card, TextColor3 = ratio >= 1 and not quest.claimed and C.background or C.muted})
+		end, {Name = "Quest_" .. quest.id, Position = UDim2.new(1, -142, 0, narrow and 132 or 41), Size = UDim2.fromOffset(124, 36), TextSize = 10, BackgroundColor3 = ratio >= 1 and not quest.claimed and C.cyan or C.card, TextColor3 = ratio >= 1 and not quest.claimed and C.background or C.muted})
 	end
 	if #quests == 0 then label(container, "Your daily dispatch is loading.", {Size = UDim2.new(1, 0, 0, 50), TextColor3 = C.muted}) end
 end
@@ -571,7 +608,7 @@ end
 
 function UIController:_renderSettings()
 	self.panelTitle.Text = "MAKE IT YOURS"
-	self.panelSubtitle.Text = "Preferences are saved with your player profile."
+	self.panelSubtitle.Text = "NEON HEIGHTS / " .. tostring(self.ctx.Config.Version or "v0.2.0") .. " / Preferences save with your profile."
 	local container = scroll(self.panelContent)
 	list(container, false, 10)
 	local settings = self.ctx.Profile.settings or {}
@@ -617,24 +654,29 @@ end
 
 function UIController:_renderResults()
 	local state = self.ctx.State
-	self.panelTitle.Text = state.practice and "PRACTICE COMPLETE" or "THE CHASE IS OVER"
-	self.panelSubtitle.Text = state.practice and "Studio practice / no coins, XP, rating, or wins awarded" or "The city remembers a great chase. Your next round is coming."
+	local winners = state.winners or {}
+	local won = table.find(winners, self.player.UserId) ~= nil
+	self.panelTitle.Text = state.practice and "ROUTE LEARNED. CHASE NEXT." or (won and "YOUR CITY. YOUR MOMENT." or "THE CHASE IS OVER")
+	self.panelSubtitle.Text = state.practice and "Solo practice / no coins, XP, rating, or wins awarded" or "Celebrate the escape. The next chase starts automatically."
 	local container = scroll(self.panelContent)
 	list(container, false, 12)
-	local headline = frame(container, {Size = UDim2.new(1, -5, 0, 96), LayoutOrder = 0}, 12)
-	label(headline, state.resultText or "ROUND COMPLETE", {Position = UDim2.fromOffset(18, 17), Size = UDim2.new(1, -36, 0, 56), TextSize = 25, Font = F.black, TextColor3 = C.amber, TextWrapped = true, TextXAlignment = Enum.TextXAlignment.Center})
-	local winners = state.winners or {}
+	local headline = frame(container, {Name = "WinnerHeadline", Size = UDim2.new(1, -5, 0, 132), LayoutOrder = 0}, 16)
+	gradient(headline, Color3.fromRGB(65, 48, 35), Color3.fromRGB(24, 32, 48), 20)
+	stroke(headline, C.amber, 0.4)
+	label(headline, state.practice and "NEON HEIGHTS / PRACTICE" or "NEON HEIGHTS / VICTORY LAP", {Position = UDim2.fromOffset(18, 16), Size = UDim2.new(1, -36, 0, 18), TextSize = 10, Font = F.bold, TextColor3 = C.amber, TextXAlignment = Enum.TextXAlignment.Center})
+	label(headline, state.resultText or "ROUND COMPLETE", {Position = UDim2.fromOffset(18, 47), Size = UDim2.new(1, -36, 0, 60), TextSize = 30, Font = F.black, TextColor3 = C.text, TextWrapped = true, TextXAlignment = Enum.TextXAlignment.Center, TextScaled = true})
 	for index, userId in ipairs(winners) do
 		local name = "Player " .. tostring(userId)
 		for _, entry in ipairs(state.players or {}) do if entry.userId == userId then name = entry.displayName or entry.name break end end
-		local card = frame(container, {Size = UDim2.new(1, -5, 0, 80), LayoutOrder = index}, 12)
-		frame(card, {Position = UDim2.fromOffset(0, 12), Size = UDim2.fromOffset(4, 56), BackgroundColor3 = C.amber}, 2)
-		label(card, "WINNER", {Position = UDim2.fromOffset(18, 12), Size = UDim2.new(1, -36, 0, 16), TextColor3 = C.amber, Font = F.bold, TextSize = 10})
-		label(card, name .. (userId == self.player.UserId and "  /  YOU" or ""), {Position = UDim2.fromOffset(18, 35), Size = UDim2.new(1, -36, 0, 30), Font = F.black, TextSize = 22, TextTruncate = Enum.TextTruncate.AtEnd})
+		local card = frame(container, {Size = UDim2.new(1, -5, 0, 86), LayoutOrder = index, BackgroundColor3 = userId == self.player.UserId and Color3.fromRGB(42, 53, 56) or C.panel}, 12)
+		label(card, string.format("%02d", index), {Position = UDim2.fromOffset(17, 18), Size = UDim2.fromOffset(48, 50), TextColor3 = C.amber, Font = F.black, TextSize = 32})
+		label(card, "CHASE CHAMPION", {Position = UDim2.fromOffset(78, 16), Size = UDim2.new(1, -96, 0, 16), TextColor3 = C.amber, Font = F.bold, TextSize = 9})
+		label(card, name .. (userId == self.player.UserId and " / YOU" or ""), {Position = UDim2.fromOffset(78, 40), Size = UDim2.new(1, -96, 0, 27), Font = F.bold, TextSize = 20, TextTruncate = Enum.TextTruncate.AtEnd})
 	end
-	local footer = frame(container, {Size = UDim2.new(1, -5, 0, 70), LayoutOrder = 100}, 10)
-	label(footer, "LEVEL " .. number(self.ctx.Profile.level) .. "   /   " .. number(self.ctx.Profile.xp) .. " TOTAL XP   /   " .. number(self.ctx.Profile.coins) .. " COINS", {Position = UDim2.fromOffset(16, 10), Size = UDim2.new(1, -32, 0, 24), Font = F.bold, TextSize = 11, TextColor3 = C.cyan, TextWrapped = true})
-	label(footer, "Close this panel to see the winners on the city podium.", {Position = UDim2.fromOffset(16, 40), Size = UDim2.new(1, -32, 0, 20), TextColor3 = C.muted, TextSize = 10, TextWrapped = true})
+	local footer = frame(container, {Size = UDim2.new(1, -5, 0, 116), LayoutOrder = 100}, 12)
+	label(footer, "LEVEL " .. number(self.ctx.Profile.level) .. "  /  " .. number(self.ctx.Profile.xp) .. " XP  /  " .. number(self.ctx.Profile.coins) .. " COINS", {Position = UDim2.fromOffset(16, 12), Size = UDim2.new(1, -32, 0, 30), Font = F.bold, TextSize = 11, TextColor3 = C.cyan, TextWrapped = true, TextXAlignment = Enum.TextXAlignment.Center})
+	button(footer, "VIEW PODIUM", function() self:CloseMenu() end, {Name = "ViewPodium", Position = UDim2.fromOffset(12, 58), Size = UDim2.new(0.5, -18, 0, 42), BackgroundColor3 = C.cyan, TextColor3 = C.background, TextSize = 10})
+	button(footer, "YOUR CAREER", function() self:OpenMenu("Progress") end, {Name = "ViewCareer", Position = UDim2.new(0.5, 6, 0, 58), Size = UDim2.new(0.5, -18, 0, 42), TextSize = 10})
 end
 
 function UIController:Toast(text, kind)
@@ -716,6 +758,9 @@ function UIController:_tick()
 	local final = state.phase == "Active" and (state.finalChase or remaining <= 30)
 	self.timerLabel.TextColor3 = final and C.coral or C.text
 	self.clockStroke.Color = final and C.coral or C.line
+	local durations = {Intermission = self.ctx.Config.Round.Intermission, HeadStart = self.ctx.Config.Round.HeadStart, Active = self.ctx.Config.Round.Duration, Results = self.ctx.Config.Round.ResultsDuration}
+	self.roundFill.Size = UDim2.fromScale(state.phase == "Waiting" and 1 or math.clamp(remaining / math.max(durations[state.phase] or 1, 1), 0, 1), 1)
+	self.roundFill.BackgroundColor3 = final and C.coral or C.cyan
 	if final then self.phaseLabel.Text = state.lastRunner and "LAST RUNNER / FINAL CHASE" or "FINAL CHASE" self.phaseLabel.TextColor3 = C.coral end
 	local role = myRole(state)
 	for action, widgets in pairs(self.abilityLabels) do

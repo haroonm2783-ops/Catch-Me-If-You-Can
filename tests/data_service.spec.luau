@@ -416,4 +416,46 @@ do
 	item.gamePassId = previousId
 end
 
+-- A skin and mask remain independent across wardrobe changes and a new server.
+-- This exercises production serialization through the fake store; it is not a
+-- claim that a live Roblox DataStore or a paid purchase has been exercised.
+do
+	local f = fixture(false)
+	f.data:_Load(f.player)
+	expect(f.data:Grant(f.player, {"skin_shadow", "mask_phantom", "skin_neon"}), "Server entitlement grants populate the test wardrobe")
+	expect(f.data:Equip(f.player, "skins", "skin_shadow"), "Owned premium skin equips")
+	expect(f.data:Equip(f.player, "masks", "mask_phantom"), "Independent owned mask equips")
+	expect(f.data:Equip(f.player, "skins", "skin_neon"), "Switching an owned skin works")
+	expect(f.data:Get(f.player).equipped.masks == "mask_phantom", "Skin changes cannot remove the selected mask")
+	expect(f.data:_SaveRecord(f.data.records[f.player], true), "Outfit selection saves and releases the lease")
+	local nextServer = fixture(false, f.store)
+	nextServer.data:_Load(nextServer.player)
+	local restored = nextServer.data:Get(nextServer.player)
+	expect(restored.equipped.skins == "skin_neon" and restored.equipped.masks == "mask_phantom", "New server restores both selected slots")
+	expect(restored.owned.skin_shadow and restored.owned.skin_neon and restored.owned.mask_phantom, "Wardrobe ownership survives the same round trip")
+	expect(nextServer.data:Equip(nextServer.player, "skins", ""), "Use default look resolves to the free courier")
+	expect(restored.equipped.skins == "skin_courier" and restored.equipped.masks == "mask_phantom", "Default-look action preserves the independent mask")
+	expect(nextServer.data:Equip(nextServer.player, "masks", ""), "Mask can be unequipped independently")
+	expect(nextServer.data:_SaveRecord(nextServer.data.records[nextServer.player], true), "Unequipped mask saves")
+	local finalServer = fixture(false, f.store)
+	finalServer.data:_Load(finalServer.player)
+	expect(finalServer.data:Get(finalServer.player).equipped.masks == "", "An intentionally empty mask slot stays empty on rejoin")
+end
+
+do
+	local f = fixture(true)
+	f.data:_Load(f.player)
+	local paid = 0
+	for id, item in pairs(Catalog.Items) do
+		if item.currency == "Robux" then
+			paid += 1
+			local configuredId = item.gamePassId
+			item.gamePassId = 0
+			expect(not f.shop:Purchase(f.player, id), "No delivered paid item opens an unconfigured sale: " .. id)
+			item.gamePassId = configuredId
+		end
+	end
+	expect(paid > 0 and f.marketplace.prompts == 0, "Every pass entry stays disabled when its ID is zero")
+end
+
 print("Data and shop service tests passed: " .. checks .. " checks")

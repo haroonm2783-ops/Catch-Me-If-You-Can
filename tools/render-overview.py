@@ -43,6 +43,9 @@ def mesh(part):
                 a=i*2*math.pi/n
                 vertices.append((math.cos(lat)*math.cos(a)*x,math.sin(lat)*y,math.cos(lat)*math.sin(a)*z))
         faces=[[j*n+i,j*n+(i+1)%n,(j+1)*n+(i+1)%n,(j+1)*n+i] for j in range(m) for i in range(n)]
+    elif part['shape']=='Wedge':
+        vertices=[(-x,-y,-z),(x,-y,-z),(-x,-y,z),(x,-y,z),(-x,y,z),(x,y,z)]
+        faces=[[0,2,3,1],[2,4,5,3],[0,1,5,4],[0,4,2],[1,3,5]]
     else:
         vertices=[(-x,-y,-z),(x,-y,-z),(x,y,-z),(-x,y,-z),(-x,-y,z),(x,-y,z),(x,y,z),(-x,y,z)]
         faces=[[0,3,2,1],[4,5,6,7],[0,4,7,3],[1,2,6,5],[3,7,6,2],[0,1,5,4]]
@@ -113,7 +116,9 @@ for point,text in labels:
     box=d.textbbox((0,0),text,font=f);width=box[2]+20
     d.rounded_rectangle((x-width/2,y-27,x+width/2,y-3),radius=6,fill=(14,27,44),outline=(66,131,145))
     d.text((x-width/2+10,y-24),text,font=f,fill=(224,246,242))
-d.text((62,H-62),'1528 AUTHORED PARTS     /     12 BRIDGE + RAMP ROUTES     /     6 ROOFTOP DISTRICTS',font=font(17,True),fill=(91,223,215))
+part_count=scene.get('partCount',len(scene['parts']))
+route_count=scene.get('routes',12)
+d.text((62,H-62),f'{part_count:,} AUTHORED PARTS     /     {route_count} BRIDGE + RAMP ROUTES     /     6 ROOFTOP DISTRICTS',font=font(17,True),fill=(91,223,215))
 d.text((62,H-32),'Geometric overview generated from the baked place. Lighting and rendering must be reviewed in Roblox Studio.',font=font(13),fill=(145,166,187))
 output=ROOT/'docs/NeonHeights-overview.png'
 image.save(output)

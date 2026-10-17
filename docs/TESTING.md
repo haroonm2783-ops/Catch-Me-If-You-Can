@@ -6,6 +6,12 @@ are the acceptance work still required. Record device, place version, client
 count, result, and reproduction steps for each test; do not mark a check passed
 from source inspection alone.
 
+The user confirmed that the previous delivered place runs, sprints, and vaults
+in Studio, and reported a broken C slide and insufficient visual quality. This
+is evidence about that previous build. Begin the **0.2.0** regression pass with
+[the update checklist](UPDATE_0_2.md); do not count prior play as verification of
+the new slide, appearance, map decoration, or UI changes.
+
 ## Reproduce automated checks
 
 From the repository root:
@@ -18,7 +24,7 @@ From the repository root:
 
 Tool versions are pinned in `aftman.toml` and `tools/bootstrap.sh`; use those
 versions for repeatable output. The build produces both
-`dist/CatchMeIfYouCan.rbxl` and `dist/CatchMeIfYouCan.rbxlx`, with the city baked
+`dist/Catch-Me-If-You-Can-Final.rbxl` and `dist/Catch-Me-If-You-Can-Final.rbxlx`, with the city baked
 into the place and the gameplay scripts included. Open either final file using
 **Roblox Studio → File → Open from File**. The intermediate sources-only place is
 not the playable deliverable.
@@ -30,7 +36,7 @@ not the playable deliverable.
 | `data_service.spec.luau` | Production data/shop logic with mocked service boundaries, leases, retries, duplicate protection | Real DataStore quotas, availability, or paid settlement |
 | `gameplay.spec.luau` | Production round and movement logic under deterministic inputs | Roblox network ownership, collision feel, or lag fairness |
 | `map.spec.luau` | Generated geometry, spawns, routes, and analytic clearance checks | Engine navigation, visibility, streaming, or GPU performance |
-| `appearance.spec.luau` | Cosmetic combinations, instance properties, equipment and podium construction | Visual quality on live R15 avatars |
+| `appearance.spec.luau` | Cosmetic combinations, instance properties, equipment and podium construction | Visual quality and animation clipping on real R15/R6 avatars |
 | `client_controllers.spec.luau` | Menu construction, input/focus, cameras and settings with simulated boundaries | Actual device ergonomics, engine layout/rendering, or audio audibility |
 | Place serialization checks | Both final formats deserialize and contain required content | Studio loading and live gameplay |
 
@@ -42,7 +48,7 @@ assuming that the existence of a test means it passed on your current changes.
 1. Open the final place and inspect the baked Neon Heights map before pressing
    Play. Confirm `CatchShared`, `CatchServer`, and `CatchClient` exist in the
    services mapped by `default.project.json`.
-2. Open **Output** and run Play. Confirm the initialization message, no script
+2. Open **Output** and run Play. Confirm the initialization message ends in **0.2.0**, no script
    errors, one map instance, a loaded avatar, and a responsive HUD. Stop and Play
    again to check cleanup/reinitialization.
 3. Before published multiplayer testing, set the experience's maximum player
@@ -90,7 +96,8 @@ multiple players on one machine, not device performance or real internet latency
   Hunters win when every Runner is eliminated. Results, progression, roster,
   podium, and the next round must agree on the winner.
 - Sprint, slide, jump, vault low obstacles, climb ladders, and traverse all ramps
-  and bridges. Slide needs grounded motion and has a 3-second cooldown; vault
+  and bridges. Slide needs grounded motion (at least 4 studs/second), lasts 0.72 seconds and
+  has a 3-second cooldown; vault
   requires a clear server-detected route and has a 1.1-second cooldown. Check
   ceiling clearance, edges, angled walls, landing, repeated inputs, and respawns.
 - Traverse both animated **TIMING / BYPASS** gates while they rise and lower.
@@ -125,7 +132,9 @@ multiple players on one machine, not device performance or real internet latency
 - Try every available skin/mask pair in previews and on a live avatar. Masks must
   stay independent when switching skins; unequipping a mask or trail must remove
   it. Respawns/repeated equips must not accumulate accessories or alter gameplay
-  speed/collision. Test scaled R15 body proportions.
+  speed/collision. Test scaled R15 body proportions and the R6 compatibility fallback. Reset while
+  a profile is still loading; the complete free outfit must appear and then
+  yield to the selected owned outfit when loading finishes.
 - Check earned unlocks, coin debit once, insufficient balance, owned-item states,
   trails during sprinting, tag-effect variants, lobby/results emotes, and victory
   poses on the podium. Collection/VIP previews must represent their grants.

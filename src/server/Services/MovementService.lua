@@ -60,6 +60,7 @@ function MovementService:_state(player)
 end
 
 function MovementService:_clearMotion(player, state)
+	self:_finishSlide(player, state)
 	state.modeId += 1
 	state.sprint = false
 	state.slideUntil, state.vaultUntil = 0, 0
@@ -77,6 +78,52 @@ function MovementService:_clearMotion(player, state)
 				end)
 			end
 		end
+	end
+end
+
+function MovementService:_targetSpeed(player, state)
+	local config = self.ctx.Config.Movement
+	return state.sprint and (self.ctx.Services.RoundService:GetRole(player) == "Hunter" and config.HunterSprint or config.RunnerSprint)
+		or config.WalkSpeed
+end
+
+-- Keep the exact old avatar references: a respawn can replace player.Character
+-- before cleanup runs. No actuator or Physics state may survive its own slide.
+function MovementService:_finishSlide(player, state, jump)
+	local motion = state.slideMotion
+	state.slideUntil = 0
+	state.slideMotion = nil
+	if not motion then return end
+	for _, object in ipairs({ motion.velocity, motion.orientation, motion.attachment }) do
+		object:Destroy()
+	end
+	local character, humanoid, root = motion.character, motion.humanoid, motion.root
+	character:SetAttribute("Sliding", false)
+	if not root.Parent or not humanoid.Parent then return end
+	local frozen = character:GetAttribute("RoundFrozen") == true
+	local targetSpeed = self:_targetSpeed(player, state)
+	humanoid.AutoRotate = not frozen and motion.autoRotate
+	humanoid.WalkSpeed = frozen and 0 or targetSpeed
+	humanoid.JumpPower = frozen and 0 or self.ctx.Config.Movement.JumpPower
+	if humanoid.Health > 0 then
+		local velocity = horizontal(root.AssemblyLinearVelocity)
+		if velocity.Magnitude > targetSpeed then velocity = velocity.Unit * targetSpeed end
+		local grounded = self:_grounded(character, humanoid, root)
+		local jumping = jump and grounded and not frozen
+		root.AssemblyLinearVelocity = frozen and Vector3.zero or velocity + Vector3.new(0,
+			jumping and self.ctx.Config.Movement.JumpPower or root.AssemblyLinearVelocity.Y, 0)
+		-- Physics does not exit on its own. Restore locomotion even if the round
+		-- just froze this avatar; anchoring and zero speed still hold the hunter,
+		-- and releasing the head start must not leave it permanently in Physics.
+		humanoid:ChangeState(jumping and Enum.HumanoidStateType.Jumping
+			or (grounded and Enum.HumanoidStateType.Running or Enum.HumanoidStateType.Freefall))
+		if jumping then
+			state.airStart = now()
+			state.groundY = root.Position.Y
+		end
+	end
+	if not root.Anchored then
+		pcall(function() root:SetNetworkOwnershipAuto() end)
 	end
 end
 
@@ -234,7 +281,7 @@ end
 
 function MovementService:_canMove(player)
 	local character, humanoid, root = avatar(player)
-	if not character or character:GetAttribute("RoundFrozen") or humanoid.Sit then
+	if not character or character:GetAttribute("RoundFrozen") or humanoid.Sit or root.Anchored then
 		return nil
 	end
 	if not self:ValidatePosition(player) then
@@ -257,14 +304,11 @@ function MovementService:_slide(player)
 	if timestamp - state.lastSlide < config.SlideCooldown or state.vaultUntil > timestamp or state.slideUntil > timestamp then
 		return
 	end
-	if not self:_grounded(character, humanoid, root) or (not state.sprint and horizontal(root.AssemblyLinearVelocity).Magnitude < 6) then
+	local momentum = horizontal(root.AssemblyLinearVelocity)
+	if not self:_grounded(character, humanoid, root) or momentum.Magnitude < config.SlideMinimumSpeed then
 		return
 	end
-	local direction = horizontal(root.CFrame.LookVector)
-	if direction.Magnitude < 0.1 then
-		return
-	end
-	direction = direction.Unit
+	local direction = momentum.Unit
 	-- Do not propel a player into a wall or launch a slide through thin geometry.
 	local wall = Workspace:Raycast(root.Position - Vector3.new(0, 0.8, 0), direction * 3, rayParameters(character))
 	if wall and math.abs(wall.Normal.Y) < 0.65 then
@@ -273,11 +317,84 @@ function MovementService:_slide(player)
 	state.lastSlide, state.slideUntil = timestamp, timestamp + config.SlideDuration
 	state.slideDirection = direction
 	state.credit = math.max(state.credit, config.SlideSpeed * 0.25)
-	character:SetAttribute("Sliding", true)
 	pcall(function()
 		root:SetNetworkOwner(nil)
 	end)
+	-- A velocity pulse once every 0.08 seconds competes with the Humanoid's
+	-- ground controller. Hold a bounded horizontal target through the physics
+	-- solver instead; gravity still owns Y and every obstacle remains collidable.
+	local attachment = Instance.new("Attachment")
+	attachment.Name = "CatchSlideAttachment"
+	attachment.Parent = root
+	local velocity = Instance.new("LinearVelocity")
+	velocity.Name = "CatchSlideVelocity"
+	velocity.Attachment0 = attachment
+	velocity.RelativeTo = Enum.ActuatorRelativeTo.World
+	velocity.VelocityConstraintMode = Enum.VelocityConstraintMode.Plane
+	velocity.PrimaryTangentAxis = Vector3.xAxis
+	velocity.SecondaryTangentAxis = Vector3.zAxis
+	velocity.ForceLimitsEnabled = true
+	velocity.ForceLimitMode = Enum.ForceLimitMode.PerAxis
+	local force = math.max(root.AssemblyMass, 1) * 1200
+	velocity.MaxPlanarAxesForce = Vector2.new(force, force)
+	local initialSpeed = math.clamp(momentum.Magnitude, config.WalkSpeed, config.SlideSpeed)
+	velocity.PlaneVelocity = Vector2.new(direction.X, direction.Z) * initialSpeed
+	velocity.Parent = root
+	local orientation = Instance.new("AlignOrientation")
+	orientation.Name = "CatchSlideUpright"
+	orientation.Attachment0 = attachment
+	orientation.Mode = Enum.OrientationAlignmentMode.OneAttachment
+	orientation.CFrame = CFrame.lookAt(Vector3.zero, direction)
+	orientation.MaxTorque = math.max(root.AssemblyMass, 1) * 4000
+	orientation.MaxAngularVelocity = 20
+	orientation.Responsiveness = 40
+	orientation.Parent = root
+	state.slideMotion = {
+		character = character, humanoid = humanoid, root = root,
+		attachment = attachment, velocity = velocity, orientation = orientation,
+		autoRotate = humanoid.AutoRotate, initialSpeed = initialSpeed,
+	}
+	humanoid.AutoRotate = false
+	humanoid.WalkSpeed = 0
+	humanoid:ChangeState(Enum.HumanoidStateType.Physics)
+	root.AssemblyAngularVelocity = Vector3.zero
+	character:SetAttribute("Sliding", true)
 	self:_ack(player, "Slide", config.SlideCooldown)
+end
+
+function MovementService:_stepSlide(player, state, dt)
+	local motion = state.slideMotion
+	if not motion then return end
+	local character, humanoid, root = motion.character, motion.humanoid, motion.root
+	local timestamp, config = now(), self.ctx.Config.Movement
+	if player.Character ~= character or not root.Parent or humanoid.Health <= 0 or humanoid.Sit or root.Anchored
+		or character:GetAttribute("RoundFrozen") or timestamp >= state.slideUntil then
+		self:_finishSlide(player, state)
+		return
+	end
+	local direction = state.slideDirection
+	local grounded = self:_grounded(character, humanoid, root)
+	-- A torso sweep catches corners that a single center ray misses. Leaving a
+	-- ledge ends propulsion, so sliding cannot become a sustained air dash.
+	local lookAhead = config.SlideSpeed * math.min(dt, 0.1) + 0.6
+	local wall = Workspace:Blockcast(root.CFrame, Vector3.new(1.8, 1.5, 1.8), direction * lookAhead, rayParameters(character))
+	if not grounded or (wall and math.abs(wall.Normal.Y) < 0.65) then
+		self:_finishSlide(player, state)
+		return
+	end
+	local elapsed = timestamp - state.lastSlide
+	local attack = config.SlideAccelerationTime
+	local alpha, speed
+	if elapsed < attack then
+		alpha = math.clamp(elapsed / attack, 0, 1)
+		alpha = alpha * alpha * (3 - 2 * alpha)
+		speed = motion.initialSpeed + (config.SlideSpeed - motion.initialSpeed) * alpha
+	else
+		alpha = math.clamp((elapsed - attack) / (config.SlideDuration - attack), 0, 1)
+		alpha = alpha * alpha * (3 - 2 * alpha)
+		speed = config.SlideSpeed + (self:_targetSpeed(player, state) - config.SlideSpeed) * alpha
+	end
+	motion.velocity.PlaneVelocity = Vector2.new(direction.X, direction.Z) * speed
 end
 
 function MovementService:_clearBox(character, cframe, size)
@@ -300,6 +417,9 @@ function MovementService:_vault(player)
 	end
 	local state, config = self:_state(player), self.ctx.Config.Movement
 	local timestamp = now()
+	-- Space/A/native touch Jump uses this existing intent too. Release the slide
+	-- physics state immediately, then allow either a jump or the usual vault.
+	if state.slideMotion then self:_finishSlide(player, state, true) end
 	if timestamp - state.lastVault < config.VaultCooldown or state.slideUntil > timestamp or state.vaultUntil > timestamp then
 		return
 	end
@@ -430,6 +550,8 @@ end
 function MovementService:_step(player, dt)
 	local character, humanoid, root = avatar(player)
 	if not character then
+		local oldState = self.states[player]
+		if oldState and oldState.slideMotion then self:_finishSlide(player, oldState) end
 		return
 	end
 	local state = self:_state(player)
@@ -439,6 +561,7 @@ function MovementService:_step(player, dt)
 	local config, timestamp = self.ctx.Config.Movement, now()
 	local frozen = character:GetAttribute("RoundFrozen") == true
 	if frozen then
+		self:_finishSlide(player, state)
 		root.Anchored = true
 		humanoid.WalkSpeed, humanoid.JumpPower = 0, 0
 		state.lastPosition, state.lastTime = root.Position, timestamp
@@ -447,33 +570,12 @@ function MovementService:_step(player, dt)
 	if not self:ValidatePosition(player) then
 		return
 	end
-	local targetSpeed = state.sprint and (self.ctx.Services.RoundService:GetRole(player) == "Hunter" and config.HunterSprint or config.RunnerSprint) or config.WalkSpeed
-	humanoid.WalkSpeed += (targetSpeed - humanoid.WalkSpeed) * math.min(1, config.Acceleration * dt)
+	local targetSpeed = self:_targetSpeed(player, state)
+	if not state.slideMotion then
+		humanoid.WalkSpeed += (targetSpeed - humanoid.WalkSpeed) * math.min(1, config.Acceleration * dt)
+	end
 	humanoid.JumpPower = config.JumpPower
-	if state.slideUntil > timestamp then
-		local direction = state.slideDirection
-		local distance = config.SlideSpeed * dt + 1.7
-		local wall = Workspace:Raycast(root.Position - Vector3.new(0, 0.8, 0), direction * distance, rayParameters(character))
-		if wall and math.abs(wall.Normal.Y) < 0.65 then
-			state.slideUntil = 0
-		else
-			local progress = math.clamp((timestamp - state.lastSlide) / config.SlideDuration, 0, 1)
-			local slideSpeed = config.SlideSpeed * (1 - 0.28 * progress)
-			root.AssemblyLinearVelocity = direction * slideSpeed + Vector3.new(0, root.AssemblyLinearVelocity.Y, 0)
-		end
-	end
-	if character:GetAttribute("Sliding") and state.slideUntil <= timestamp then
-		character:SetAttribute("Sliding", false)
-		local velocity = horizontal(root.AssemblyLinearVelocity)
-		if velocity.Magnitude > targetSpeed then
-			root.AssemblyLinearVelocity = velocity.Unit * targetSpeed + Vector3.new(0, root.AssemblyLinearVelocity.Y, 0)
-		end
-		if not root.Anchored then
-			pcall(function()
-				root:SetNetworkOwnershipAuto()
-			end)
-		end
-	end
+	self:_stepSlide(player, state, dt)
 	-- A fallen avatar is eliminated through the same death path as a reset.
 	local bounds = self.ctx.World.Bounds
 	if bounds and root.Position.Y < bounds.min.Y - 35 then
@@ -494,6 +596,17 @@ function MovementService:Start()
 		self.states[player] = nil
 	end)
 	RunService.Heartbeat:Connect(function(dt)
+		-- Smooth actuator updates run every frame; expensive general movement
+		-- validation retains its bounded 12.5 Hz cadence for twelve-player games.
+		for player, state in pairs(self.states) do
+			if state.slideMotion then
+				local ok, err = xpcall(function() self:_stepSlide(player, state, dt) end, debug.traceback)
+				if not ok then
+					self:_finishSlide(player, state)
+					warn("[Catch] Slide update failed: " .. tostring(err))
+				end
+			end
+		end
 		self.accumulator += dt
 		if self.accumulator < 0.08 then
 			return

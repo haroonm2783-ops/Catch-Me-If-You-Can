@@ -19,6 +19,7 @@ local WHITE = Color3.fromRGB(237, 249, 255)
 local BUILTIN_AUDIO = {
 	Sprint = { path = "action_footsteps_plastic.mp3", pitch = 1.2, gain = 0.4 },
 	Slide = { path = "action_footsteps_plastic.mp3", pitch = 0.7, gain = 0.4 },
+	Land = { path = "action_footsteps_plastic.mp3", pitch = 0.82, gain = 0.38 },
 	Vault = { path = "action_jump.mp3", pitch = 1.08, gain = 0.5 },
 	Tag = { path = "electronicpingshort.wav", pitch = 1.25, gain = 0.55 },
 	Win = { path = "electronicpingshort.wav", pitch = 1.4, gain = 0.6 },
@@ -63,13 +64,14 @@ function EffectsController.new(ctx)
 	}, EffectsController)
 end
 
-function EffectsController:_play(sound, predicate)
+function EffectsController:_play(sound, predicate, setting)
+	setting = setting or "sfx"
 	local source = sound.SoundId
 	if self.audioAvailability[source] == false or self.pendingSounds[sound] then
 		return
 	end
 	local function playIfAllowed()
-		if not self.destroyed and sound.Parent and self:_settings().sfx ~= false
+		if not self.destroyed and sound.Parent and self:_settings()[setting] ~= false
 			and (not predicate or predicate()) then
 			pcall(function()
 				sound:Play()
@@ -145,7 +147,9 @@ function EffectsController:_music()
 		if self.music.TimePosition > 0 then
 			self.music:Resume()
 		else
-			self.music:Play()
+			-- Validate a configured soundtrack just like SFX. Music has its own
+			-- preference: muting footsteps must not mute an enabled soundtrack.
+			self:_play(self.music, nil, "music")
 		end
 	end
 end
@@ -154,7 +158,8 @@ function EffectsController:_sprintAudio()
 	local character = self.player.Character
 	local humanoid = character and character:FindFirstChildOfClass("Humanoid")
 	local active = self:_settings().sfx ~= false and character
-		and character:GetAttribute("Sprinting") == true and humanoid
+		and character:GetAttribute("Sprinting") == true
+		and character:GetAttribute("Sliding") ~= true and character:GetAttribute("Vaulting") ~= true and humanoid
 		and humanoid.Health > 0 and humanoid.MoveDirection.Magnitude > 0.1
 		and humanoid.FloorMaterial ~= Enum.Material.Air
 	self.sprintWanted = active == true
@@ -226,6 +231,11 @@ function EffectsController:_banner(text, color, duration, large)
 	label.Font = Enum.Font.GothamBlack
 	label.TextColor3 = color
 	label.TextSize = large and 82 or 25
+	label.TextScaled = true
+	local textLimit = Instance.new("UITextSizeConstraint")
+	textLimit.MaxTextSize = large and 82 or 25
+	textLimit.MinTextSize = large and 34 or 13
+	textLimit.Parent = label
 	label.TextStrokeColor3 = Color3.fromRGB(14, 23, 40)
 	label.TextStrokeTransparency = 0.3
 	label.TextTransparency = 0
@@ -371,6 +381,32 @@ function EffectsController:OnState(state)
 	self.roundId = state.roundId
 end
 
+function EffectsController:OnCharacter(character)
+	if self.character == character then return end
+	if self.landingConnection then self.landingConnection:Disconnect() self.landingConnection = nil end
+	self.character = character
+	self.airborneAt = nil
+	if not character then return end
+	task.spawn(function()
+		local humanoid = character:WaitForChild("Humanoid", 10)
+		if not humanoid or self.destroyed or self.character ~= character then return end
+		self.landingConnection = humanoid.StateChanged:Connect(function(_, nextState)
+			if nextState == Enum.HumanoidStateType.Freefall then
+				self.airborneAt = os.clock()
+			elseif nextState == Enum.HumanoidStateType.Landed then
+				local duration = self.airborneAt and os.clock() - self.airborneAt or 0
+				self.airborneAt = nil
+				if duration >= 0.2 and humanoid.Health > 0 and not character:GetAttribute("Vaulting") then
+					self:_sound("Land", math.min(0.28, 0.12 + duration * 0.06))
+					if not self:_settings().reducedMotion and self:_settings().cameraShake ~= false then self:_pulse(WHITE, 0.12) end
+				end
+			elseif nextState == Enum.HumanoidStateType.Dead or nextState == Enum.HumanoidStateType.Seated then
+				self.airborneAt = nil
+			end
+		end)
+	end)
+end
+
 function EffectsController:OnProfile(_profile)
 	self:_music()
 	if self:_settings().sfx == false then
@@ -454,6 +490,7 @@ end
 
 function EffectsController:Destroy()
 	self.destroyed = true
+	if self.landingConnection then self.landingConnection:Disconnect() self.landingConnection = nil end
 	for _, connection in ipairs(self.connections) do
 		connection:Disconnect()
 	end

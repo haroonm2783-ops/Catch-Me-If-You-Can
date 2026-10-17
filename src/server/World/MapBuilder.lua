@@ -6,6 +6,7 @@ local TweenService = game:GetService("TweenService")
 
 local MapBuilder = {}
 local built
+local MAP_VERSION = 2
 local P = {
 	ink = Color3.fromRGB(19, 29, 48),
 	navy = Color3.fromRGB(30, 48, 70),
@@ -27,11 +28,11 @@ local P = {
 }
 
 local function applyLighting()
-	Lighting.ClockTime = 18.6
-	Lighting.Brightness = 2.3
-	Lighting.Ambient = Color3.fromRGB(91, 91, 119)
-	Lighting.OutdoorAmbient = Color3.fromRGB(111, 118, 146)
-	Lighting.ExposureCompensation = 0.12
+	Lighting.ClockTime = 18.35
+	Lighting.Brightness = 2.5
+	Lighting.Ambient = Color3.fromRGB(86, 91, 119)
+	Lighting.OutdoorAmbient = Color3.fromRGB(121, 125, 151)
+	Lighting.ExposureCompensation = 0.08
 	Lighting.GlobalShadows = true
 	Lighting.ShadowSoftness = 0.4
 	Lighting.EnvironmentDiffuseScale = 0.55
@@ -42,12 +43,12 @@ local function applyLighting()
 	end
 	local atmosphere = Instance.new("Atmosphere")
 	atmosphere.Name = "CatchAtmosphere"
-	atmosphere.Density = 0.29
+	atmosphere.Density = 0.32
 	atmosphere.Offset = 0.12
-	atmosphere.Color = Color3.fromRGB(182, 196, 227)
-	atmosphere.Decay = Color3.fromRGB(101, 90, 132)
-	atmosphere.Glare = 0.15
-	atmosphere.Haze = 1.2
+	atmosphere.Color = Color3.fromRGB(205, 196, 223)
+	atmosphere.Decay = Color3.fromRGB(119, 101, 142)
+	atmosphere.Glare = 0.12
+	atmosphere.Haze = 1.35
 	atmosphere.Parent = Lighting
 	local bloom = Instance.new("BloomEffect")
 	bloom.Name = "CatchBloom"
@@ -58,8 +59,8 @@ local function applyLighting()
 	local color = Instance.new("ColorCorrectionEffect")
 	color.Name = "CatchColor"
 	color.Contrast = 0.1
-	color.Saturation = -0.025
-	color.TintColor = Color3.fromRGB(255, 245, 237)
+	color.Saturation = 0.06
+	color.TintColor = Color3.fromRGB(255, 244, 232)
 	color.Parent = Lighting
 end
 
@@ -99,7 +100,7 @@ function MapBuilder.Build(options)
 	if built and built.Model.Parent then return built end
 	local static = options and options.Static == true
 	local existing = workspace:FindFirstChild("NeonHeights")
-	if existing and existing:GetAttribute("CatchMapVersion") == 1 then
+	if existing and existing:GetAttribute("CatchMapVersion") == MAP_VERSION then
 		built = readBaked(existing)
 		applyLighting()
 		if not static then activateObstacles(existing) end
@@ -108,7 +109,7 @@ function MapBuilder.Build(options)
 	local model = Instance.new("Model")
 	model.Name = "NeonHeights"
 	model:SetAttribute("MapName", "NEON HEIGHTS")
-	model:SetAttribute("ArtDirection", "Twilight couriers / warm concrete / electric mint")
+	model:SetAttribute("ArtDirection", "Sunset district / painted masonry / mint transit / rooftop gardens")
 	local partCount = 0
 	local gates = {}
 	local function group(name)
@@ -144,9 +145,32 @@ function MapBuilder.Build(options)
 	local function box(parent, name, x, y, z, sx, sy, sz, color, material, collide)
 		return part(parent, name, Vector3.new(sx, sy, sz), Vector3.new(x, y, z), color, material, collide)
 	end
+	-- Art-only additions are mounted on solid facades or above head height. This explicit
+	-- flag lets geometry checks enforce that visual polish never changes chase collision.
+	local function art(parent, name, size, cf, color, material)
+		local p = part(parent, name, size, cf, color, material, false)
+		p:SetAttribute("VisualPolish", true)
+		return p
+	end
+	local function beamFrame(a, b)
+		local direction = b-a
+		assert(direction.Magnitude > 0.001, "Beam endpoints must differ")
+		-- A vertical beam is parallel to lookAt's default up axis, producing an
+		-- undefined rotation in data-only builders. Supply a perpendicular axis.
+		local up = math.abs(direction.Unit.Y) > 0.99 and Vector3.xAxis or Vector3.yAxis
+		return CFrame.lookAt((a+b)/2, b, up)
+	end
+	local function artBeam(parent, name, a, b, width, color, material)
+		return art(parent, name, Vector3.new(width, width, (b-a).Magnitude), beamFrame(a,b), color, material)
+	end
+	local function disc(parent, name, cf, diameter, thickness, color, material)
+		local p = art(parent, name, Vector3.new(thickness, diameter, diameter), cf * CFrame.Angles(0, math.pi/2, 0), color, material)
+		p.Shape = Enum.PartType.Cylinder
+		return p
+	end
 	local function beam(parent, name, a, b, width, color, material, collide)
 		local delta = b - a
-		return part(parent, name, Vector3.new(width, width, delta.Magnitude), CFrame.lookAt((a + b) / 2, b), color, material, collide)
+		return part(parent, name, Vector3.new(width, width, delta.Magnitude), beamFrame(a,b), color, material, collide)
 	end
 	local function cylinder(parent, name, center, diameter, height, color, material, collide)
 		local p = part(parent, name, Vector3.new(height, diameter, diameter), CFrame.new(center) * CFrame.Angles(0, 0, math.pi / 2), color, material, collide)
@@ -508,6 +532,128 @@ function MapBuilder.Build(options)
 	part(market, "SolarCanopy", Vector3.new(37, 0.4, 7), CFrame.new(0, 23, 86) * CFrame.Angles(math.rad(-10), 0, 0), P.navy, Enum.Material.Metal, false)
 	for i = -3, 3 do part(market, "SolarCell", Vector3.new(4.4, 0.05, 6), CFrame.new(i * 5, 23.3, 86) * CFrame.Angles(math.rad(-10), 0, 0), P.glass, Enum.Material.Glass, false) end
 
+	-- A deliberately different silhouette for every rooftop. These canopy surfaces sit
+	-- well above standing avatars; the original walking decks, routes and cover remain.
+	-- The city-facing side is +Z, matching the arcade marquee below it.
+	local citrus = CFrame.new(-101, 31.5, -104.9) * CFrame.Angles(0, math.pi, 0)
+	disc(arcade, "CitrusMarqueeHalo", citrus, 13, 0.55, P.gold, Enum.Material.Metal)
+	disc(arcade, "CitrusMarqueeFruit", citrus * CFrame.new(0,0,-0.36), 10.5, 0.24, P.coral, Enum.Material.SmoothPlastic)
+	for spoke=1,6 do
+		art(arcade,"CitrusSegment",Vector3.new(0.28,4.1,0.14),citrus*CFrame.new(0,0,-0.55)*CFrame.Angles(0,0,spoke*math.pi/3)*CFrame.new(0,2.25,0),P.cream)
+	end
+	art(arcade,"CitrusLeaf",Vector3.new(4.8,1.5,0.4),citrus*CFrame.new(4.2,6,-0.1)*CFrame.Angles(0,0,math.rad(28)),P.leaf)
+	for _,side in ipairs({-1,1}) do
+		local endcap=disc(arcade,"MarqueeRoundedEnd",CFrame.new(-101+side*15,22,-104),8,0.8,P.ink,Enum.Material.Metal)
+		endcap:SetAttribute("DistrictLandmark","Citrus")
+	end
+	artBeam(arcade,"TankFeedPipe",Vector3.new(-60,25.5,-93),Vector3.new(-60,29,-93),0.55,P.cream,Enum.Material.Metal)
+	art(arcade,"TankRainCap",Vector3.new(2.5,0.3,2.5),Vector3.new(-60,29,-93),P.gold,Enum.Material.Metal)
+
+	for _,side in ipairs({-1,1}) do
+		local roof=art(noodle,"MoonSweptRoof",Vector3.new(16.4,0.55,27),CFrame.new(-86+side*7.4,31,49)*CFrame.Angles(0,0,-side*math.rad(18)),P.coral,Enum.Material.Metal)
+		roof:SetAttribute("DistrictLandmark","Moon")
+		art(noodle,"MoonEaveLip",Vector3.new(3.4,0.35,28),CFrame.new(-86+side*16,29.1,49)*CFrame.Angles(0,0,side*math.rad(12)),P.cream,Enum.Material.Metal)
+		for _,z in ipairs({35,63}) do
+			artBeam(noodle,"MoonRoofFascia",Vector3.new(-86,33.7,z),Vector3.new(-86+side*17,28.9,z),0.35,P.gold,Enum.Material.Metal)
+		end
+	end
+	artBeam(noodle,"MoonRidge",Vector3.new(-86,33.8,34),Vector3.new(-86,33.8,64),0.65,P.navy,Enum.Material.Metal)
+	-- Steam ribbons are static graphic curves, with no particles or per-frame work.
+	for _,x in ipairs({-108,-104}) do
+		artBeam(noodle,"NoodleSteam",Vector3.new(x,28,26),Vector3.new(x-1.2,30,26),0.24,P.cream)
+		artBeam(noodle,"NoodleSteam",Vector3.new(x-1.2,30,26),Vector3.new(x,32,26),0.24,P.cream)
+	end
+
+	-- Garden's crest and hanging foliage contrast with the industrial roofs. Open
+	-- transparent glazing retains visibility through the greenhouse chase route.
+	for _,x in ipairs({67,93}) do
+		for _,z in ipairs({-97,-73}) do
+			local hanging=sphere(greenhouse,"HangingGarden",Vector3.new(x,30.6,z),Vector3.new(3.5,2.3,3.5),P.green)
+			hanging:SetAttribute("VisualPolish",true)
+			art(greenhouse,"HangingVine",Vector3.new(0.45,3.5,0.45),Vector3.new(x,29,z),P.leaf,Enum.Material.Grass)
+		end
+	end
+	local gardenCrest=disc(greenhouse,"BotanicalCrest",CFrame.new(80,39.5,-85),6,0.4,P.gold,Enum.Material.Metal)
+	gardenCrest:SetAttribute("DistrictLandmark","Garden")
+	for _,side in ipairs({-1,1}) do
+		art(greenhouse,"BotanicalLeaf",Vector3.new(1.8,4.2,0.3),CFrame.new(80+side*1.5,39.5,-85.3)*CFrame.Angles(0,0,side*math.rad(35)),P.green)
+		art(greenhouse,"GardenSunshade",Vector3.new(18,0.22,5),CFrame.new(80+side*7,35.7,-85)*CFrame.Angles(0,0,-side*math.rad(21)),P.cream,Enum.Material.Fabric)
+	end
+
+	-- A giant washer dial forms Polar's instantly recognizable round skyline sign.
+	local dialCf=CFrame.new(111,30,88) * CFrame.Angles(0, math.pi, 0)
+	local washer=disc(laundry,"PolarWasherHalo",dialCf,13,1.1,P.cream,Enum.Material.Metal)
+	washer:SetAttribute("DistrictLandmark","Polar")
+	disc(laundry,"PolarWasherDrum",dialCf*CFrame.new(0,0,-0.62),10.2,0.3,P.teal,Enum.Material.Metal)
+	disc(laundry,"PolarWasherGlass",dialCf*CFrame.new(0,0,-0.82),7.9,0.12,P.glass,Enum.Material.Glass)
+	for _,side in ipairs({-1,1}) do
+		art(laundry,"PolarDialPointer",Vector3.new(0.55,3.5,0.18),dialCf*CFrame.new(side*2.2,side*1.2,-0.95)*CFrame.Angles(0,0,math.rad(45)),P.cyan,Enum.Material.Neon)
+		art(laundry,"PolarSignLeg",Vector3.new(0.6,5,0.6),Vector3.new(111+side*3,21,88),P.steel,Enum.Material.Metal)
+	end
+	for _,z in ipairs({40.8,46,51.2}) do
+		art(laundry,"ReservoirBrace",Vector3.new(16.2,0.25,0.4),Vector3.new(69,16.3,z),P.cream,Enum.Material.Metal)
+	end
+
+	-- The market is a copper butterfly pavilion; lifted outer edges frame the solar
+	-- roof without adding a wall that runners could disappear behind.
+	for _,side in ipairs({-1,1}) do
+		local wing=art(market,"MarketButterflyRoof",Vector3.new(20,0.5,11),CFrame.new(side*9.5,25.7,86)*CFrame.Angles(0,0,side*math.rad(13)),P.coral,Enum.Material.Metal)
+		wing:SetAttribute("DistrictLandmark","Ember")
+		artBeam(market,"MarketRoofEdge",Vector3.new(side*19,27.9,80.3),Vector3.new(side*19,27.9,91.7),0.4,P.gold,Enum.Material.Metal)
+	end
+	for _,x in ipairs({-12,0,12}) do
+		artBeam(market,"PendantWire",Vector3.new(x,24,81),Vector3.new(x,21.5,81),0.06,P.navy)
+		local pendant=disc(market,"MarketPendant",CFrame.new(x,21.5,81)*CFrame.Angles(math.pi/2,0,0),2.2,0.8,P.gold,Enum.Material.Neon)
+		pendant.CastShadow=false
+	end
+	-- Meridian receives an Art Deco crown; its four clock faces remain readable.
+	for _,side in ipairs({-1,1}) do
+		for _,front in ipairs({-1,1}) do
+			art(clock,"MeridianCrownFin",Vector3.new(1.3,13,1.3),Vector3.new(side*7,54,-91+front*7),P.gold,Enum.Material.Metal)
+			artBeam(clock,"MeridianCrownSlope",Vector3.new(side*7,60.5,-91+front*7),Vector3.new(0,64,-91),0.65,P.cream,Enum.Material.Metal)
+		end
+	end
+	clock.ClockCrown:SetAttribute("DistrictLandmark","Meridian")
+
+	-- Ground-level detail is deliberately concentrated on solid facade planes: framed
+	-- shop portals, projecting lintels, shutter fins and balcony rails give depth while
+	-- preserving every original street and spawn. The bold color bands aid wayfinding.
+	for _,entry in ipairs({
+		{arcade,-84,-49.1,72,16,P.teal,P.cyan,math.pi},
+		{noodle,-85,20.1,70,20,P.coral,P.gold,0},
+		{greenhouse,81,-47.1,82,24,P.cream,P.green,math.pi},
+		{laundry,86,24.1,72,14,P.purple,P.cyan,0},
+		{market,0,51.1,50,14,P.cream,P.coral,0},
+		{clock,0,-56.1,38,24,P.teal,P.gold,math.pi},
+	}) do
+		local parent,x,z,width,height,color,accent,rotation=table.unpack(entry)
+		local frame=CFrame.new(x,0,z)*CFrame.Angles(0,rotation,0)
+		for _,side in ipairs({-1,1}) do
+			local offset=side*(width/2-5)
+			art(parent,"FacadePierInlay",Vector3.new(1.4,height-3,0.25),frame*CFrame.new(offset,height/2,-0.16),accent,Enum.Material.Brick)
+			art(parent,"ShopLintel",Vector3.new(9,0.5,1.1),frame*CFrame.new(side*width*0.27,7.1,-0.3),P.cream,Enum.Material.Concrete)
+			art(parent,"ShopDoorFrame",Vector3.new(0.3,5.5,0.55),frame*CFrame.new(side*3.1,3.7,-0.2),color,Enum.Material.Metal)
+			if height>15 then
+				art(parent,"BalconyShelf",Vector3.new(7.3,0.45,2),frame*CFrame.new(side*width*0.31,height-7.5,-0.7),P.cream,Enum.Material.Concrete)
+				art(parent,"BalconyRail",Vector3.new(7.2,1.4,0.15),frame*CFrame.new(side*width*0.31,height-6.6,-1.5),accent,Enum.Material.Metal)
+			end
+		end
+		art(parent,"DoorTransom",Vector3.new(6.4,0.6,0.45),frame*CFrame.new(0,6.8,-0.2),accent,Enum.Material.Metal)
+	end
+	-- Two high roof antennas, visible duct elbows, and street service panels break up
+	-- the skyline at medium distance without a field of expensive animated detail.
+	for _,entry in ipairs({{arcade,-116,27,-89},{laundry,118,25,66}}) do
+		local parent,x,y,z=table.unpack(entry)
+		art(parent,"AerialMast",Vector3.new(0.24,12,0.24),Vector3.new(x,y,z),P.steel,Enum.Material.Metal)
+		for i=1,3 do art(parent,"AerialCrossbar",Vector3.new(6-i,0.16,0.16),Vector3.new(x,y+i*1.7,z),P.cream,Enum.Material.Metal) end
+	end
+	for _,entry in ipairs({{arcade,-120.8,-66,P.cyan},{noodle,-120.8,66,P.gold},{laundry,122.8,73,P.pink}}) do
+		local parent,x,z,color=table.unpack(entry)
+		local service=art(parent,"ServiceCabinet",Vector3.new(0.5,4.4,5),Vector3.new(x,3.1,z),P.steel,Enum.Material.Metal)
+		for i=1,3 do art(parent,"ServiceVent",Vector3.new(0.1,0.18,3.5),service.CFrame*CFrame.new(x<0 and -0.3 or 0.3,i*0.55-1.1,0),P.ink,Enum.Material.Metal) end
+		art(parent,"ServiceIndicator",Vector3.new(0.15,0.25,0.7),service.CFrame*CFrame.new(x<0 and -0.35 or 0.35,1.5,-1),color,Enum.Material.Neon)
+	end
+
 	-- Central landmark: a dry fountain ring with a clear crossing, four district wayfinders.
 	cylinder(terrain, "CompassInset", Vector3.new(0, 0.2, 0), 22, 0.3, P.navy, Enum.Material.Concrete)
 	cylinder(terrain, "CompassCenter", Vector3.new(0, 0.4, 0), 13, 0.3, P.teal, Enum.Material.Concrete)
@@ -563,15 +709,54 @@ function MapBuilder.Build(options)
 	}
 	for i, t in ipairs(towers) do
 		local x, z, w, d, h, c = table.unpack(t)
-		box(skyline, "Tower", x, h / 2 - 14, z, w, h, d, c, Enum.Material.Concrete, false)
-		box(skyline, "TowerCrown", x, h - 13, z, w + 2, 2, d + 2, P.steel, Enum.Material.Metal, false)
-		box(skyline, "TowerSetback", x, h - 8, z, w * 0.65, 10, d * 0.65, c, Enum.Material.Concrete, false)
+		local profile=i%4
+		if profile==2 then
+			-- Rounded hotel towers interrupt the straight rooflines.
+			cylinder(skyline,"RoundTower",Vector3.new(x,h/2-14,z),w,h,c,Enum.Material.Concrete,false)
+			cylinder(skyline,"RoundCrown",Vector3.new(x,h-12,z),w+2,3,P.steel,Enum.Material.Metal,false)
+			cylinder(skyline,"RoundPenthouse",Vector3.new(x,h-6,z),w*0.65,9,c,Enum.Material.Glass,false)
+		elseif profile==3 then
+			-- Twin shafts and an open sky bridge read clearly even through atmosphere.
+			for _,side in ipairs({-1,1}) do
+				box(skyline,"TwinTower",x+side*w*0.28,h/2-14,z,w*0.43,h,d,c,Enum.Material.Concrete,false)
+			end
+			box(skyline,"SkyBridge",x,h*0.72-14,z,w,7,d*0.7,P.steel,Enum.Material.Metal,false)
+			box(skyline,"TwinCrown",x,h-12,z,w+2,2,d+2,P.cream,Enum.Material.Metal,false)
+		else
+			-- Offset terraces avoid the repeated box-and-lid silhouette.
+			box(skyline,"TowerPodium",x,h*0.35-14,z,w,h*0.7,d,c,Enum.Material.Concrete,false)
+			box(skyline,"TowerSetback",x+w*0.11,h*0.8-14,z-d*0.1,w*0.72,h*0.4,d*0.72,c,Enum.Material.Concrete,false)
+			art(skyline,"TowerSlopedCrown",Vector3.new(w*0.78,2,d*0.79),CFrame.new(x+w*0.11,h-12,z-d*0.1)*CFrame.Angles(0,0,math.rad(i%2==0 and 8 or -8)),P.steel,Enum.Material.Metal)
+		end
 		for row = 1, math.floor(h / 13) do
 			local y = row * 11 - 7
 			local glow = (row + i) % 3 == 0 and P.gold or P.cyan
-			box(skyline, "SkylineWindowBand", x, y, z + d / 2 + 0.1, w - 8, 0.55, 0.12, glow, Enum.Material.Neon, false)
-			box(skyline, "SkylineWindowBand", x - w / 2 - 0.1, y, z, 0.12, 0.55, d - 8, glow, Enum.Material.Neon, false)
+			if profile==2 then
+				cylinder(skyline,"RoundWindowBand",Vector3.new(x,y,z),w+0.1,0.4,glow,Enum.Material.Neon,false)
+			elseif profile==3 then
+				-- Separate window clusters preserve the open slot between twin towers.
+				box(skyline,"SkylineWindowBand",x+((row%2==0) and 1 or -1)*w*0.28,y,z+d/2+0.1,w*0.34,0.6,0.12,glow,Enum.Material.Neon,false)
+			else
+				local upper=y>h*0.7-14
+				box(skyline,"SkylineWindowBand",x+(upper and w*0.11 or 0),y,z+(upper and d*0.26 or d/2)+0.1,upper and w*0.58 or w-8,0.55,0.12,glow,Enum.Material.Neon,false)
+			end
 		end
+		if profile~=2 then
+			for _,side in ipairs({-1,1}) do
+				art(skyline,"TowerFacadeFin",Vector3.new(0.7,h*0.65,0.8),Vector3.new(x+side*(w/2-2),h*0.325-14,z+d/2+0.35),P.steel,Enum.Material.Metal)
+			end
+		end
+	end
+	-- A quieter, desaturated second skyline layer gives genuine parallax and depth.
+	for i,entry in ipairs({{-292,-237,51,88},{-205,-284,54,145},{-114,-297,60,94},{-17,-310,57,129},{94,-296,61,158},{190,-276,53,111},{282,-223,61,139}}) do
+		local x,z,width,height=table.unpack(entry)
+		art(skyline,"FarSilhouette",Vector3.new(width,height,width*0.8),Vector3.new(x,height/2-26,z),i%2==0 and P.navy or P.steel,Enum.Material.Concrete)
+		art(skyline,"FarSteppedRoof",Vector3.new(width*0.45,15,width*0.5),Vector3.new(x-width*0.18,height-20,z),P.navy,Enum.Material.Concrete)
+	end
+	-- Scenery outside the arena contributes silhouette, not playable cover or shadow
+	-- detail. Avoid spending mobile shadow rendering on these distant structures.
+	for _,scenery in ipairs(skyline:GetChildren()) do
+		if scenery:IsA("BasePart") then scenery.CastShadow=false end
 	end
 
 	-- Social deck: a separate, safe viewing terrace with a stage and welcoming little rooms.
@@ -603,6 +788,25 @@ function MapBuilder.Build(options)
 	box(lobby, "EntryHeader", 0, 21, 280, 60, 1.1, 2.5, P.teal, Enum.Material.Metal)
 	sign(lobby, "CATCH ME IF YOU CAN", Vector3.new(0, 17.7, 279), 55, 5, P.cyan)
 	sign(lobby, "NEON HEIGHTS / SOCIAL DECK", Vector3.new(0, 13.4, 279), 36, 2, P.cream)
+	-- The arrival canopy borrows the station's warm metal and the city's mint rails.
+	-- Its folded shell stays above the existing entry sign, spawn and camera corridor.
+	for _,side in ipairs({-1,1}) do
+		art(lobby,"ArrivalCanopyWing",Vector3.new(32,0.65,18),CFrame.new(side*15,25,276)*CFrame.Angles(0,0,side*math.rad(10)),P.teal,Enum.Material.Metal)
+		artBeam(lobby,"ArrivalCanopyRim",Vector3.new(side*31,27.9,267),Vector3.new(side*31,27.9,285),0.4,P.cream,Enum.Material.Metal)
+		artBeam(lobby,"ArrivalCanopyBrace",Vector3.new(side*29,21,280),Vector3.new(side*13,25,276),0.4,P.gold,Enum.Material.Metal)
+		for i=1,4 do
+			art(lobby,"ArrivalCeilingSlat",Vector3.new(0.4,0.22,15),CFrame.new(side*i*6.4,23.8+i*0.9,275.5),P.cream,Enum.Material.Wood)
+		end
+	end
+	-- Frame the champion stage with a large sunrise medallion and two inset panels.
+	local champion=disc(lobby,"ChampionHalo",CFrame.new(0,25,212.3),13,0.6,P.gold,Enum.Material.Metal)
+	champion:SetAttribute("DistrictLandmark","Social")
+	disc(lobby,"ChampionHaloInset",CFrame.new(0,25,212.75),10.7,0.25,P.navy,Enum.Material.Metal)
+	for _,side in ipairs({-1,1}) do
+		art(lobby,"ChampionBolt",Vector3.new(1.6,7.3,0.3),CFrame.new(side*1.8,25,213.05)*CFrame.Angles(0,0,math.rad(-32)),P.cream,Enum.Material.Metal)
+		art(lobby,"StageBackdropWing",Vector3.new(12,12,0.5),CFrame.new(side*34,14,213)*CFrame.Angles(0,side*math.rad(-12),0),P.teal,Enum.Material.Metal)
+		art(lobby,"StageBackdropInset",Vector3.new(0.25,10,0.25),Vector3.new(side*34,14,213.6),P.gold,Enum.Material.Neon)
+	end
 	for _, x in ipairs({ -40, 40 }) do
 		planter(lobby, x, 6.3, 277, 18, 0, true)
 		tree(lobby, x, 6.3, 213, 0.85)
@@ -656,7 +860,7 @@ function MapBuilder.Build(options)
 		Podiums = podiums,
 		Bounds = { min = Vector3.new(-155, -25, -140), max = Vector3.new(155, 100, 145) },
 	}
-	model:SetAttribute("CatchMapVersion", 1)
+	model:SetAttribute("CatchMapVersion", MAP_VERSION)
 	model:SetAttribute("LobbySpawn", built.LobbySpawn)
 	model:SetAttribute("BoundsMin", built.Bounds.min)
 	model:SetAttribute("BoundsMax", built.Bounds.max)

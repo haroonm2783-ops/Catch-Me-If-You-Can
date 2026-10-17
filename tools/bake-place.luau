@@ -24,6 +24,9 @@ verifySources(place:GetService("ReplicatedStorage").CatchShared,"src/shared")
 verifySources(place:GetService("ServerScriptService").CatchServer,"src/server")
 verifySources(place:GetService("StarterPlayer").StarterPlayerScripts.CatchClient,"src/client")
 local builder=luau.load(fs.readFile("src/server/World/MapBuilder.lua"),{environment=env,debugName="MapBuilder"})()
+local config=luau.load(fs.readFile("src/shared/Config.lua"),{environment=env,debugName="Config"})()
+-- DataModel attributes are not retained by place serialization; Workspace is.
+world:SetAttribute("CatchGameVersion",config.Version)
 local map=builder.Build({Static=true})
 assert(map.Model.Parent==world,"Map must be in Workspace")
 local count, lights, neon, signs, routes = 0,0,0,0,0
@@ -33,12 +36,15 @@ for _, instance in ipairs(map.Model:GetDescendants()) do
 		count+=1
 		assert(instance.Anchored,"Every map part is anchored: "..instance.Name)
 		assert(instance.Size.X>0 and instance.Size.Y>0 and instance.Size.Z>0,"Positive geometry")
+		for _, value in ipairs({instance.CFrame:GetComponents()}) do
+			assert(value==value and math.abs(value)<math.huge,"Finite geometry transform: "..instance.Name)
+		end
 		if instance.Material==roblox.Enum.Material.Neon then neon+=1 end
 		if instance:GetAttribute("TraversalRoute") then routes+=1 end
 		if instance.Transparency<0.99 then
 			table.insert(parts,{name=instance.Name,cf={instance.CFrame:GetComponents()},size={instance.Size.X,instance.Size.Y,instance.Size.Z},
 				color={instance.Color.R,instance.Color.G,instance.Color.B},alpha=instance.Transparency,
-				shape=instance:IsA("Part") and instance.Shape.Name or "Block",neon=instance.Material==roblox.Enum.Material.Neon})
+				shape=instance:IsA("WedgePart") and "Wedge" or (instance:IsA("Part") and instance.Shape.Name or "Block"),neon=instance.Material==roblox.Enum.Material.Neon})
 		end
 	elseif instance:IsA("PointLight") then lights+=1
 	elseif instance:IsA("SurfaceGui") then signs+=1 end
@@ -58,15 +64,24 @@ camera.Parent=world
 world.CurrentCamera=camera
 -- The Roblox player camera controller takes over in Play mode.
 place:GetService("StarterPlayer").GameSettingsAvatar=roblox.Enum.GameAvatarType.R15
-fs.writeFile("dist/CatchMeIfYouCan.rbxlx",roblox.serializePlace(place,true))
-fs.writeFile("dist/CatchMeIfYouCan.rbxl",roblox.serializePlace(place,false))
-fs.writeFile("dist/map-geometry.json",serde.encode("json",{parts=parts},true))
+local xml, binary = roblox.serializePlace(place,true), roblox.serializePlace(place,false)
+-- Generate the requested delivery names from this build, retaining the existing
+-- canonical paths for current Rojo workflows and links. They are byte-identical.
+local deliverables = {
+	["dist/Catch-Me-If-You-Can-Final.rbxlx"] = xml,
+	["dist/Catch-Me-If-You-Can-Final.rbxl"] = binary,
+	["dist/CatchMeIfYouCan.rbxlx"] = xml,
+	["dist/CatchMeIfYouCan.rbxl"] = binary,
+}
+for path, contents in pairs(deliverables) do fs.writeFile(path,contents) end
+fs.writeFile("dist/map-geometry.json",serde.encode("json",{parts=parts,partCount=count,routes=routes,version=config.Version},true))
 local scripts=0
 for _, object in ipairs(place:GetDescendants()) do if object:IsA("LuaSourceContainer") then scripts+=1; assert(#object.Source>0,"No empty script") end end
 print(string.format("Baked Neon Heights: %d parts, %d neon accents, %d signs, %d lights, %d traversal routes, %d scripts.",count,neon,signs,lights,routes,scripts))
--- Deserialize BOTH final deliverables and assert their critical content, not just extension.
-for _, path in ipairs({"dist/CatchMeIfYouCan.rbxlx","dist/CatchMeIfYouCan.rbxl"}) do
+-- Deserialize both formats under both filenames; assert content, not extension.
+for path in pairs(deliverables) do
 	local reopened=roblox.deserializePlace(fs.readFile(path))
+	assert(reopened:GetService("Workspace"):GetAttribute("CatchGameVersion")==config.Version,"Game version identifies the updated artifact")
 	assert(reopened:GetService("Workspace"):FindFirstChild("NeonHeights"),"Missing baked city")
 	assert(reopened:GetService("Workspace").StreamingEnabled == false,"Whole arena remains available to spectators")
 	verifySources(reopened:GetService("ServerScriptService").CatchServer,"src/server")
