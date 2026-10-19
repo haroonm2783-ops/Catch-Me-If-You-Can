@@ -39,7 +39,7 @@ local function object(className)
 		for _, child in pairs(self.children) do if child.ClassName == name then return child end end
 	end
 	function value:FindFirstAncestorOfClass() return nil end
-	function value:IsA(name) return self.ClassName == name end
+	function value:IsA(name) return self.ClassName == name or (name == "BasePart" and self.ClassName == "Part") end
 	function value:IsDescendantOf(parent) return self.Parent == parent end
 	function value:SetAttribute(name, attribute) self.attributes[name] = attribute end
 	function value:GetAttribute(name) return self.attributes[name] end
@@ -148,6 +148,7 @@ local function fixture(playerCount, studio)
 		player.UserId, player.Name, player.DisplayName, player.Parent = id, "Player" .. id, "Player " .. id, players
 		player.CharacterAdded = signal()
 		humanoid.Health, humanoid.HipHeight, humanoid.WalkSpeed, humanoid.JumpPower = 100, 2, 17, 48
+		humanoid.RigType = Enum.HumanoidRigType.R15
 		humanoid.AutoRotate = true
 		humanoid.Died, humanoid.state = signal(), Enum.HumanoidStateType.Running
 		function humanoid:GetState() return self.state end
@@ -358,6 +359,71 @@ do
 	f:advance(0.1)
 	f:pose(player, 0, 32.2, 0)
 	expect(not f.movement:ValidatePosition(player), "Repeated fast vertical climbing must exhaust movement credit")
+end
+
+-- Reproduce Studio's R6 HipHeight=0 with finite-length ground intersections.
+-- Earlier R15-only fixtures concealed this rejection: an R6 root stands
+-- 3 studs above the floor, beyond the old 2.25-stud query. R15, scaled rigs,
+-- and the small tolerated floor gap must keep their existing behavior.
+for _, rig in ipairs({
+	{ name = "R6", kind = Enum.HumanoidRigType.R6, root = 2, leg = 2, hip = 0, support = 3 },
+	{ name = "scaled R6", kind = Enum.HumanoidRigType.R6, root = 3, leg = 3, hip = 0.4, support = 4.9 },
+	{ name = "R6 right-leg fallback", kind = Enum.HumanoidRigType.R6, root = 2, leg = 2, hip = 0, support = 3, right = true },
+	{ name = "R15", kind = Enum.HumanoidRigType.R15, root = 2, leg = 20, hip = 2, support = 3 },
+	{ name = "scaled R15", kind = Enum.HumanoidRigType.R15, root = 3, hip = 3, support = 4.5 },
+	{ name = "small R15", kind = Enum.HumanoidRigType.R15, root = 1, hip = 1, support = 1.5 },
+}) do
+	local f = fixture(1)
+	local player = f.players[1]
+	local character = player.Character
+	local humanoid, root = character.children.Humanoid, character.children.HumanoidRootPart
+	humanoid.RigType, humanoid.HipHeight = rig.kind, rig.hip
+	root.Size = Vector3.new(2, rig.root, 1)
+	if rig.leg then
+		local leg = object("Part")
+		leg.Size, leg.Parent = Vector3.new(1, rig.leg, 1), character
+		character.children[rig.right and "Right Leg" or "Left Leg"] = leg
+	end
+	f:pose(player, 0, rig.support, 0, true)
+	local rayLength, excluded
+	f.world.raycast = function(origin, delta, parameters)
+		if delta.X == 0 and delta.Z == 0 and delta.Y < 0 then
+			rayLength, excluded = -delta.Y, parameters.FilterDescendantsInstances[1]
+			if origin.Y >= 0 and origin.Y + delta.Y <= 0 then
+				return { Position = Vector3.new(origin.X, 0, origin.Z), Normal = Vector3.yAxis, Instance = f.ground }
+			end
+		end
+		return nil
+	end
+	expect(f.movement:_grounded(character, humanoid, root), rig.name .. " standing on the floor must be grounded")
+	local tolerance = math.clamp(rig.root * 0.625, 0.5, 1.25)
+	expect(math.abs(rayLength - rig.support - tolerance) < 0.001 and excluded == character,
+		rig.name .. " must query its actual support height plus bounded tolerance, excluding its own shoes")
+	f:pose(player, 0, rig.support + tolerance + 0.1, 0, true)
+	expect(not f.movement:_grounded(character, humanoid, root), rig.name .. " above the bounded floor gap must remain airborne")
+	root.AssemblyLinearVelocity = Vector3.new(0, 0, -20)
+	f.movement:Handle(player, "Slide", {})
+	expect(not f.movement:_state(player).slideMotion and #f.notices == 0,
+		rig.name .. " airborne slide must be rejected without consuming cooldown")
+	f:pose(player, 0, rig.support, 0, true)
+	root.AssemblyLinearVelocity = Vector3.new(0, 0, -20)
+	f.movement:Handle(player, "Slide", {})
+	local state = f.movement:_state(player)
+	local motion = state.slideMotion
+	expect(motion ~= nil and character:GetAttribute("Sliding") and #f.notices == 1,
+		rig.name .. " moving on the floor must actually start a slide and acknowledge its cooldown")
+	f:advance(0.1)
+	f.movement:_step(player, 0.1)
+	expect(state.slideMotion == motion and motion.velocity.PlaneVelocity.Magnitude > 20,
+		rig.name .. " slide must stay grounded and accelerate on subsequent server updates")
+	f:advance(Config.Movement.SlideDuration)
+	f.movement:_step(player, 0.1)
+	expect(not state.slideMotion and humanoid:GetState() == Enum.HumanoidStateType.Running,
+		rig.name .. " slide must clean up to Running instead of misclassifying the floor as Freefall")
+	f:pose(player, 0, rig.support, 0, true)
+	root.AssemblyLinearVelocity = Vector3.new(0, 0, -20)
+	f.movement:Handle(player, "Slide", {})
+	expect(state.slideMotion ~= nil, rig.name .. " trusted spawn/reset must permit a fresh slide")
 end
 
 -- Slide requires measured ground momentum, even while Shift is held. It must

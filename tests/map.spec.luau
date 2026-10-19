@@ -17,7 +17,7 @@ local env={game=place,workspace=world}
 for _, k in ipairs({"Instance","CFrame","Vector3","Color3","UDim2","Enum","Font"}) do env[k]=roblox[k] end
 local builder=luau.load(fs.readFile("src/server/World/MapBuilder.lua"),{environment=env})()
 local result=builder.Build({Static=true})
-expect(map:GetAttribute("CatchMapVersion")==2,"Latest art-pass map version is baked")
+expect(map:GetAttribute("CatchMapVersion")==3,"Roof surface fix is baked into the delivered map")
 expect(result.Model==map,"Baked map reused in place")
 expect(builder.Build({Static=true})==result,"Repeat Build is idempotent")
 local sameName=0
@@ -34,10 +34,11 @@ for _, part in ipairs(map:GetDescendants()) do
 end
 expect(#colliders==310,"Art pass preserves the 310 original gameplay colliders")
 -- Analytic OBB ray intersections validate authored geometry; this is not a physics simulation.
-local function rayBox(origin,direction,part)
+local function rayBox(origin,direction,part,edgeTolerance)
 	local o=part.CFrame:PointToObjectSpace(origin)
 	local d=part.CFrame:VectorToObjectSpace(direction)
-	local half=part.Size/2
+	local tolerance=edgeTolerance or 0
+	local half=part.Size/2+roblox.Vector3.new(tolerance,tolerance,tolerance)
 	local near,far=0,math.huge
 	for _,axis in ipairs({"X","Y","Z"}) do
 		if math.abs(d[axis])<0.000001 then
@@ -50,6 +51,78 @@ local function rayBox(origin,direction,part)
 	end
 	return near
 end
+
+-- The Studio report showed dark triangles flickering across roofs. Each roof cap
+-- previously finished at exactly the same height as its walking panel. Check all
+-- broad, visible, horizontal block faces, including rotated level bridges and the
+-- street/lobby; narrow neon strips, mullions and trim are not walking surfaces.
+local function topHeight(part) return part.CFrame.Position.Y+part.Size.Y/2 end
+local function horizontalOverlap(a,b)
+	-- Separating-axis test in the horizontal plane, rather than axis-aligned bounds
+	-- that would incorrectly report collisions for diagonal rectangular decks.
+	local delta=b.CFrame.Position-a.CFrame.Position
+	for _,axis in ipairs({a.CFrame.RightVector,a.CFrame.LookVector,b.CFrame.RightVector,b.CFrame.LookVector}) do
+		local ar=math.abs(a.CFrame.RightVector:Dot(axis))*a.Size.X/2+math.abs(a.CFrame.LookVector:Dot(axis))*a.Size.Z/2
+		local br=math.abs(b.CFrame.RightVector:Dot(axis))*b.Size.X/2+math.abs(b.CFrame.LookVector:Dot(axis))*b.Size.Z/2
+		if ar+br-math.abs(delta:Dot(axis))<0.01 then return false end
+	end
+	return true
+end
+local topFaces,walkingRoofs={},{}
+for _,part in ipairs(map:GetDescendants()) do
+	if part:IsA("Part") and part.Shape==roblox.Enum.PartType.Block and part.Transparency<0.95
+		and part.Size.X>=2 and part.Size.Z>=2 and part.CFrame.UpVector.Y>0.99999 then
+		table.insert(topFaces,part)
+	end
+	if part.Name=="WalkingRoof" then table.insert(walkingRoofs,part) end
+end
+expect(#topFaces>=150,"Coplanar regression covers the whole arena, lobby and large props")
+expect(#walkingRoofs==6,"All six chase roofs are included")
+for i,a in ipairs(topFaces) do
+	for j=i+1,#topFaces do
+		local b=topFaces[j]
+		if math.abs(topHeight(a)-topHeight(b))<0.005 then
+			expect(not horizontalOverlap(a,b),"Coplanar top faces z-fight: "..a:GetFullName().." / "..b:GetFullName())
+		end
+	end
+end
+
+-- Trimming a bridge fixes flicker only if it still meets the roof. Sample both
+-- sides of every flat deck-to-roof seam across its usable width so a gap, step,
+-- or over-trim fails independently of the coplanar-face check above.
+local roofSeams=0
+for _,deck in ipairs(map.ParkourRoutes:GetChildren()) do
+	if deck:IsA("BasePart") and deck:GetAttribute("TraversalRoute") and deck.CFrame.UpVector.Y>0.99999 then
+		for _,side in ipairs({-1,1}) do
+			local beyond=deck.CFrame*roblox.Vector3.new(0,deck.Size.Y/2+0.5,side*(deck.Size.Z/2+0.2))
+			local meetsRoof=false
+			for _,roof in ipairs(walkingRoofs) do
+				local distance=rayBox(beyond,roblox.Vector3.new(0,-1,0),roof)
+				if distance and math.abs(distance-0.5)<0.01 then meetsRoof=true end
+			end
+			if meetsRoof then
+				roofSeams+=1
+				for _,x in ipairs({-deck.Size.X/2+0.6,0,deck.Size.X/2-0.6}) do
+					for _,offset in ipairs({-0.2,0,0.2}) do
+						local origin=deck.CFrame*roblox.Vector3.new(x,deck.Size.Y/2+0.5,side*(deck.Size.Z/2+offset))
+						local nearest=math.huge
+						local floors=table.clone(walkingRoofs)
+						table.insert(floors,deck)
+						for _,part in ipairs(floors) do
+							-- Binary CFrames round butt-joined edges by a few millionths of
+							-- a stud. Ignore only that serialization error, never a real gap.
+							local distance=rayBox(origin,roblox.Vector3.new(0,-1,0),part,0.0001)
+							if distance then nearest=math.min(nearest,distance) end
+						end
+						expect(math.abs(nearest-0.5)<0.01,"Continuous, flush roof seam: "..deck.Name.." side "..side.." x "..x.." offset "..offset.." distance "..nearest)
+					end
+				end
+			end
+		end
+	end
+end
+expect(roofSeams==7,"Two level bridges and three ramp landings meet seven roof edges")
+
 local function checkSpawn(cf,label)
 	local nearest=math.huge
 	for _,part in ipairs(colliders) do
@@ -152,13 +225,13 @@ expect(map.SocialDeck.ChampionHaloInset.CFrame.Position.Z>map.SocialDeck.Champio
 local stalePlace=roblox.deserializePlace(fs.readFile(placePath))
 local staleWorld=stalePlace:GetService("Workspace")
 local staleMap=staleWorld.NeonHeights
-staleMap:SetAttribute("CatchMapVersion",1)
+staleMap:SetAttribute("CatchMapVersion",2)
 local freshEnv=table.clone(env)
 freshEnv.game=stalePlace; freshEnv.workspace=staleWorld
 local reloaded=luau.load(fs.readFile("src/server/World/MapBuilder.lua"),{environment=freshEnv})()
 local rebuilt=reloaded.Build({Static=true})
 expect(staleMap.Parent==nil and rebuilt.Model~=staleMap,"Previous baked map is replaced without duplicate geometry")
-expect(rebuilt.Model:GetAttribute("CatchMapVersion")==2,"Replacement uses latest map version")
+expect(rebuilt.Model:GetAttribute("CatchMapVersion")==3,"Replacement uses fixed roof geometry")
 expect(reloaded.Build({Static=true})==rebuilt,"Replacement is reused on repeated builds")
 expect(sameTransform(rebuilt.LobbySpawn,result.LobbySpawn),"Version migration preserves lobby spawn")
 for _,kind in ipairs({"RunnerSpawns","HunterSpawns","Podiums"}) do

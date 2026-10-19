@@ -6,7 +6,7 @@ local TweenService = game:GetService("TweenService")
 
 local MapBuilder = {}
 local built
-local MAP_VERSION = 2
+local MAP_VERSION = 3
 local P = {
 	ink = Color3.fromRGB(19, 29, 48),
 	navy = Color3.fromRGB(30, 48, 70),
@@ -215,11 +215,18 @@ function MapBuilder.Build(options)
 		point.Shadows = false
 		point.Parent = bulb
 	end
-	local function route(name, a, b, width, color, rails)
+	local function route(name, a, b, width, color, rails, trimStart, trimEnd)
 		-- These broad, continuous surfaces stay below the default humanoid slope limit.
 		local cf = CFrame.lookAt((a + b) / 2, b)
 		local length = (b - a).Magnitude
-		local deck = part(routes, name, Vector3.new(width, 0.7, length + 0.4), cf * CFrame.new(0, -0.35, 0), P.steel, Enum.Material.Metal)
+		-- Sloped decks overlap their landings slightly. Level decks stop at the exact
+		-- roof edge: overlapping two opaque top faces at the same height z-fights.
+		-- Trimming removes only floor already supplied by a roof, never a route gap.
+		local direction = (b - a).Unit
+		local deckA = a + direction * (trimStart or -0.2)
+		local deckB = b - direction * (trimEnd or -0.2)
+		local deckFrame = CFrame.lookAt((deckA + deckB) / 2, deckB)
+		local deck = part(routes, name, Vector3.new(width, 0.7, (deckB - deckA).Magnitude), deckFrame * CFrame.new(0, -0.35, 0), P.steel, Enum.Material.Metal)
 		deck:SetAttribute("TraversalRoute", true)
 		for _, side in ipairs({ -1, 1 }) do
 			part(routes, name .. "_Edge", Vector3.new(0.18, 0.08, length), cf * CFrame.new(side * (width / 2 - 0.25), 0.07, 0), color or P.cyan, Enum.Material.Neon, false)
@@ -313,7 +320,9 @@ function MapBuilder.Build(options)
 		box(folder, "Facade", x, h / 2 - 0.2, z, w, h - 0.4, d, color, Enum.Material.Concrete)
 		box(folder, "GroundFloorBand", x, 4.2, z, w + 0.4, 6.4, d + 0.4, P.ink, Enum.Material.Brick)
 		box(folder, "StringCourse", x, 7.6, z, w + 0.8, 0.6, d + 0.8, P.cream, Enum.Material.Concrete)
-		box(folder, "RoofCornice", x, h - 0.6, z, w + 1.6, 1.2, d + 1.6, P.cream, Enum.Material.Concrete)
+		-- The roof finishes at h. Its support cap ends at the roof's underside,
+		-- avoiding the previous cream/navy coplanar faces across the entire roof.
+		box(folder, "RoofCornice", x, h - 0.75, z, w + 1.6, 0.9, d + 1.6, P.cream, Enum.Material.Concrete)
 		box(folder, "WalkingRoof", x, h - 0.15, z, w, 0.3, d, P.navy, Enum.Material.Concrete)
 		for _, side in ipairs({ -1, 1 }) do
 			-- Layered corner pilasters and restrained neon cornices give every block depth.
@@ -349,14 +358,16 @@ function MapBuilder.Build(options)
 	end
 
 	-- The arena is a raised city island. Streets form a cross plus a complete outer loop.
-	box(terrain, "CityIsland", 0, -3, 0, 310, 6, 280, P.navy, Enum.Material.Concrete)
+	-- Keep the road at zero, with its supporting island ending below the asphalt.
+	box(terrain, "CityIsland", 0, -3.15, 0, 310, 5.7, 280, P.navy, Enum.Material.Concrete)
 	box(terrain, "Asphalt", 0, -0.15, 0, 302, 0.3, 272, P.road, Enum.Material.Asphalt)
 	box(terrain, "PlazaPaving", 0, 0.08, -1, 40, 0.16, 36, P.concrete, Enum.Material.Concrete)
 	for _, x in ipairs({ -138, 138 }) do
 		box(terrain, "OuterFootpath", x, 0.15, 0, 12, 0.3, 268, P.concrete, Enum.Material.Concrete)
 	end
 	for _, z in ipairs({ -126, 126 }) do
-		box(terrain, "OuterFootpath", 0, 0.15, z, 288, 0.3, 12, P.concrete, Enum.Material.Concrete)
+		-- Butt-join the north/south strips to the east/west strips at x = +/-132.
+		box(terrain, "OuterFootpath", 0, 0.15, z, 264, 0.3, 12, P.concrete, Enum.Material.Concrete)
 	end
 	for i = -6, 6 do
 		if math.abs(i) > 1 then
@@ -372,7 +383,7 @@ function MapBuilder.Build(options)
 		box(terrain, "IslandLight", x, 4.45, 0, 0.22, 0.12, 276, P.cyan, Enum.Material.Neon, false)
 	end
 	for _, z in ipairs({ -137, 137 }) do
-		box(terrain, "IslandWall", 0, 2.2, z, 302, 4.4, 2, P.navy, Enum.Material.Concrete)
+		box(terrain, "IslandWall", 0, 2.2, z, 300, 4.4, 2, P.navy, Enum.Material.Concrete)
 		box(terrain, "IslandLight", 0, 4.45, z, 302, 0.12, 0.22, P.cyan, Enum.Material.Neon, false)
 	end
 	for _, edge in ipairs({ { -154, 0, 2, 280 }, { 154, 0, 2, 280 }, { 0, -139, 310, 2 }, { 0, 139, 310, 2 } }) do
@@ -422,16 +433,16 @@ function MapBuilder.Build(options)
 	route("CitrusToMoon", Vector3.new(-85, 16, -51), Vector3.new(-85, 20, 22), 12, P.pink, true)
 	route("GardenToPolar", Vector3.new(86, 24, -49), Vector3.new(86, 14, 26), 12, P.cyan, true)
 	route("MoonToEmber", Vector3.new(-51, 20, 67), Vector3.new(-24, 14, 67), 12, P.gold, true)
-	route("EmberToPolar", Vector3.new(24, 14, 78), Vector3.new(51, 14, 78), 12, P.cyan, true)
+	route("EmberToPolar", Vector3.new(24, 14, 78), Vector3.new(51, 14, 78), 12, P.cyan, true, 1, 1)
 	route("CitrusToMeridian", Vector3.new(-49, 16, -75), Vector3.new(-18, 24, -75), 12, P.gold, true)
-	route("MeridianToGarden", Vector3.new(18, 24, -75), Vector3.new(41, 24, -75), 12, P.cyan, true)
+	route("MeridianToGarden", Vector3.new(18, 24, -75), Vector3.new(41, 24, -75), 12, P.cyan, true, 1, 1)
 	-- Ground-access ramps: around the west arcade, garden's north facade, and south market.
 	route("WestStreetRamp", Vector3.new(-126, 0.4, -36), Vector3.new(-126, 16, -82), 11, P.cyan, true)
-	route("WestRampLanding", Vector3.new(-126, 16, -82), Vector3.new(-115, 16, -82), 11, P.cyan, false)
+	route("WestRampLanding", Vector3.new(-126, 16, -82), Vector3.new(-115, 16, -82), 11, P.cyan, false, -0.2, 5)
 	route("GardenStreetRamp", Vector3.new(43, 0.4, -116), Vector3.new(98, 24, -116), 11, P.cyan, true)
-	route("GardenRampLanding", Vector3.new(98, 24, -116), Vector3.new(98, 24, -103), 11, P.cyan, false)
+	route("GardenRampLanding", Vector3.new(98, 24, -116), Vector3.new(98, 24, -103), 11, P.cyan, false, -0.2, 5)
 	route("MarketStreetRamp", Vector3.new(36, 0.4, 111), Vector3.new(0, 14, 111), 11, P.gold, true)
-	route("MarketRampLanding", Vector3.new(0, 14, 111), Vector3.new(0, 14, 100), 11, P.gold, false)
+	route("MarketRampLanding", Vector3.new(0, 14, 111), Vector3.new(0, 14, 100), 11, P.gold, false, -0.2, 4)
 	ladder(-48.5, 40, 20, math.pi / 2)
 	ladder(123, 58, 14, math.pi / 2)
 	ladder(38.5, -63, 24, math.pi / 2)

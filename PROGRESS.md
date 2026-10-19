@@ -1,10 +1,11 @@
 # Catch Me If You Can — preserved development state
 
-## Current delivery — version 0.2.0
+## Current delivery — version 0.2.1
 
 The existing implementation has been continued and integrated, not restarted.
 `main` was created and the initial commit `c4fc037` pushed to
-`haroonm2783-ops/Catch-Me-If-You-Can`. The current polish update extends integration commit `158f2c8` on that same
+`haroonm2783-ops/Catch-Me-If-You-Can`. This correction extends the 0.2.0 delivery,
+commit `14d04c6`, on that same
 `main` branch. No gameplay systems or saved profile schema were restarted.
 
 **Direct-open artifacts exist:**
@@ -12,9 +13,9 @@ The existing implementation has been continued and integrated, not restarted.
 - `dist/Catch-Me-If-You-Can-Final.rbxl` — binary Roblox place, recommended download.
 - `dist/Catch-Me-If-You-Can-Final.rbxlx` — equivalent XML Roblox place.
 
-These are freshly generated from version 0.2.0 source, not renamed old files.
+These are freshly generated from version 0.2.1 source, not renamed old files.
 The older `CatchMeIfYouCan` paths are also rebuilt as byte-identical compatibility
-copies. `Workspace.CatchGameVersion`, Studio Output and the UI show **0.2.0**.
+copies. `Workspace.CatchGameVersion`, Studio Output and the UI show **0.2.1**.
 
 Both contain all 15 production scripts, the complete baked city, lighting, spawn
 metadata, R15 settings, and runtime service hierarchy. Both were deserialized
@@ -46,19 +47,51 @@ codes are preserved. The latest complete run passed:
 
 - **Rules:** 301 economy/profile/rank/quest/catalog assertions.
 - **Data and shop:** 136 production-service checks with mocked Roblox APIs.
-- **Gameplay:** 149 production-service checks with mocked timers, characters,
+- **Gameplay:** 197 production-service checks with mocked timers, characters,
   raycasts, input, and lifecycle events.
 - **Appearance:** 157,251 geometry/property/serialization/lifecycle assertions:
   all 42 skin/mask combinations in previews, live R15 and live R6; maximum 87
   avatar parts including Hunter identity. Counts include repeated coordinate
   and collision-flag checks, not independent Studio play scenarios.
 - **Client controllers:** 430 mocked UI/input/camera/preview/feedback checks.
-- **Map:** 28,089 geometry, spawn-clearance, route, and baked-map reuse assertions.
+- **Map:** 28,292 geometry, spawn-clearance, route, and baked-map reuse assertions.
 - **Places:** both `.rbxl` and `.rbxlx` deserialize and contain the expected city,
   15 exact embedded scripts, R15 settings, and complete game hierarchy.
 
 Tool versions: Rojo 7.7.1, Luau 0.742, Lune 0.11.0. Linux bootstrap downloads were
 verified against official release SHA-256 digests. No integrity checks were bypassed.
+
+## Completed in the 0.2.1 roof/slide correction
+
+The user tested 0.2.0 in Studio and reported that roofs still flickered and C
+still did not slide. Their screenshot showed that version running. This pass
+addresses two concrete defects missed by the earlier automated coverage:
+
+- **R6 ground detection:** the old ray reached only 2.25 studs below a standard
+  R6 root, which stands 3 studs above the floor. It rejected a grounded slide
+  before creating its actuator. Ground support now includes R6 leg height;
+  R15 keeps its own HipHeight calculation. Vault landing/clearance uses the same
+  rig-aware offset. The floor-gap allowance stays bounded.
+- Added standard/scaled R6 and R15 cases, right-leg fallback, airborne rejection,
+  slide start/acceleration/cleanup and reset checks using finite-length rays.
+  The existing C, controller B and touch input paths remain connected to the
+  same server action, propulsion, cooldown and pose systems. Running these new
+  tests against the previous movement source fails at R6 ground detection.
+- **Roof flicker:** each roof panel and its cream support cornice had identical
+  top elevations. Moved support tops to the panel underside while keeping all
+  walking roof heights unchanged. Also removed duplicate broad top faces at the
+  street foundation, footpath/island-wall corners and flat roof/bridge junctions.
+  A scan of 162 broad level top faces finds zero coplanar overlaps, down from 29
+  overlapping pairs in the previous place. Narrow decorative trim is excluded.
+- Trimmed only bridge floor already supplied by a roof. Sloped routes, route
+  widths, rails and spawn transforms are preserved. New geometry checks sample
+  continuous floor support across all seven flat roof/deck seams, independently
+  of existing parapet obstacles. Map schema version 3 replaces older geometry.
+- Rebuilt both final place formats from current source. Part, collision and light
+  counts remain 1,646 / 310 / 10; this fix adds no scene geometry or per-frame work.
+
+These are verified code/geometry corrections. Roblox Humanoid physics and rendered
+flicker still require the 0.2.1 Studio acceptance pass; no cloud test runs Studio.
 
 ## Completed in the 0.2.0 polish pass
 
@@ -92,10 +125,9 @@ verified against official release SHA-256 digests. No integrity checks were bypa
 - Generated both requested Final place names from current source, reopened every
   delivery/compatibility file and verified exact embedded scripts and version.
 
-The old slide implementation leaving Humanoid locomotion active is consistent
-with the reported failure, and stale UI selection was another verified input
-hazard. The actual engine cause and success of the new propulsion still need the
-Studio slide acceptance pass; headless checks cannot establish physics feel.
+That pass fixed locomotion/input hazards, but the user's subsequent Studio test
+showed that it did not resolve their slide failure. The R6 ground-height rejection
+above was found in this follow-up. Headless checks cannot establish physics feel.
 
 ## Concrete issues fixed during integration
 
@@ -133,13 +165,13 @@ geometry, generated by the optional `tools/render-overview.py` (Pillow + NumPy).
 It is **not a Roblox Studio screenshot** or evidence of rendering performance.
 `docs/Character-lineup.png` similarly depicts the actual costume geometry (all
 seven outfits plus Hunter identity), not engine materials/lighting. Both images
-were regenerated and visually inspected during this pass.
+were regenerated and visually inspected during the 0.2.0 art pass.
 
 ## Still required before public launch
 
 The user confirmed running, sprinting and vaulting in the previous Studio build,
-and reported broken sliding and insufficient visual quality. The updated 0.2.0
-physics and presentation have not been played in Studio here.
+and reported that sliding and roof rendering remained broken in 0.2.0. The updated
+0.2.1 physics and rendering have not been played in Studio here.
 
 No Roblox Studio runtime is available in this cloud container. The following
 remain unverified and are required outside it:
@@ -172,7 +204,7 @@ Current leaderboards cover the server; ranks do not perform matchmaking.
 1. Use the existing checkout on `main`; do not create another project or worktree.
 2. Read this file and README, then inspect `git status` and recent commits. Preserve
    any newer user work. Run `./tools/check.sh` to establish the current baseline.
-3. Next priority is the 0.2.0 acceptance checklist in `docs/UPDATE_0_2.md` and
+3. Next priority is the 0.2.1 acceptance checklist in `docs/UPDATE_0_2.md` and
    Studio/manual checklist, not adding unrelated systems.
    Record observed repro steps, client count, device, and Studio Output errors.
 4. Fix the smallest source change for each observed issue and add meaningful

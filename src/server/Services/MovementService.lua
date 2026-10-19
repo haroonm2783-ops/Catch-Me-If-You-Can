@@ -37,6 +37,19 @@ local function rayParameters(character)
 	return parameters
 end
 
+-- HipHeight measures different things on the two supported Humanoid rigs.
+-- R15 already includes the legs in HipHeight; R6 keeps HipHeight at zero and
+-- places its root one full leg plus half a root above the floor. Omitting that
+-- leg made every grounded R6 slide fail before its actuator could be created.
+local function groundOffset(character, humanoid, root)
+	local offset = humanoid.HipHeight + root.Size.Y * 0.5
+	if humanoid.RigType == Enum.HumanoidRigType.R6 then
+		local leg = character:FindFirstChild("Left Leg") or character:FindFirstChild("Right Leg")
+		if leg and leg:IsA("BasePart") then offset += leg.Size.Y end
+	end
+	return offset
+end
+
 function MovementService.new(ctx)
 	return setmetatable({ ctx = ctx, states = {}, connections = {}, accumulator = 0 }, MovementService)
 end
@@ -150,7 +163,10 @@ function MovementService:ResetPlayer(player)
 end
 
 function MovementService:_grounded(character, humanoid, root)
-	local distance = humanoid.HipHeight + root.Size.Y * 0.5 + 1.25
+	-- Permit small floor seams and replicated bobbing without making a taller
+	-- avatar's extra leg height into an unrestricted airborne slide allowance.
+	local tolerance = math.clamp(root.Size.Y * 0.625, 0.5, 1.25)
+	local distance = groundOffset(character, humanoid, root) + tolerance
 	local hit = Workspace:Raycast(root.Position, Vector3.new(0, -distance, 0), rayParameters(character))
 	return hit ~= nil and hit.Normal.Y > 0.3, hit
 end
@@ -438,13 +454,13 @@ function MovementService:_vault(player)
 	if not front or not front.Instance.Anchored or math.abs(front.Normal.Y) > 0.45 then
 		return
 	end
-	local groundOffset = humanoid.HipHeight + root.Size.Y * 0.5
+	local supportOffset = groundOffset(character, humanoid, root)
 	local topOrigin = front.Position + direction * 0.7 + Vector3.new(0, config.VaultHeight + 1, 0)
 	local top = Workspace:Raycast(topOrigin, Vector3.new(0, -config.VaultHeight - 2, 0), params)
 	if not top or top.Normal.Y < 0.7 then
 		return
 	end
-	local height = top.Position.Y - (root.Position.Y - groundOffset)
+	local height = top.Position.Y - (root.Position.Y - supportOffset)
 	if height < 0.5 or height > config.VaultHeight then
 		return
 	end
@@ -453,14 +469,14 @@ function MovementService:_vault(player)
 	if not landing or landing.Normal.Y < 0.65 then
 		return
 	end
-	local destination = Vector3.new(beyond.X, landing.Position.Y + groundOffset + 0.15, beyond.Z)
+	local destination = Vector3.new(beyond.X, landing.Position.Y + supportOffset + 0.15, beyond.Z)
 	if horizontal(destination - root.Position).Magnitude > config.VaultDistance + 3.5 then
 		return
 	end
-	local elevatedY = math.max(root.Position.Y, destination.Y, top.Position.Y + groundOffset + 0.4)
+	local elevatedY = math.max(root.Position.Y, destination.Y, top.Position.Y + supportOffset + 0.4)
 	local elevatedStart = Vector3.new(root.Position.X, elevatedY, root.Position.Z)
 	local elevatedEnd = Vector3.new(destination.X, elevatedY, destination.Z)
-	local boxSize = Vector3.new(2.1, math.max(3, groundOffset * 2 - 0.5), 2.1)
+	local boxSize = Vector3.new(2.1, math.max(3, supportOffset * 2 - 0.5), 2.1)
 	local facing = CFrame.lookAt(Vector3.zero, direction)
 	local endCF = CFrame.new(destination) * facing
 	if not self:_clearBox(character, endCF, boxSize)

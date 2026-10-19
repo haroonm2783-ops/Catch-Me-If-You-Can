@@ -1,4 +1,4 @@
-# Neon Heights 0.2 — visual and movement update
+# Neon Heights 0.2.1 — floor and slide correction
 
 This update continues the existing game. The round rules, progression, saved
 inventory, purchase architecture, and chase layout are preserved.
@@ -8,6 +8,12 @@ sprinting, and vaulting work. They also reported that pressing C does not slide
 and that the default avatar and city need a substantial visual improvement.
 That is user-reported evidence about the previous place, not a Studio test of
 this update by Codex.
+
+Follow-up Studio feedback and a screenshot confirmed **0.2.0** still had flickering
+floor panels and a nonworking slide. The 0.2.1 correction addresses overlapping
+coplanar floor faces and the R15-only ground-height calculation that rejected R6
+characters standing on the floor. Re-test this new build; the earlier automated
+passes did not establish that these cases worked in Studio.
 
 ## Install the updated place
 
@@ -19,7 +25,7 @@ this update by Codex.
    already baked into it. No plugins, paid meshes, clothing uploads, or animation
    uploads are needed for the included procedural presentation.
 4. Press **Play**. Studio Output should include
-   `[Catch] Neon Heights initialized. 0.2.0`. Workspace also has a
+   `[Catch] Neon Heights initialized. 0.2.1`. Workspace also has a
    `CatchGameVersion` attribute. This distinguishes it from an older download.
 5. Use two local clients for Hunter/Runner testing. Solo Studio practice makes
    the player a Runner and awards no competitive progression.
@@ -38,6 +44,8 @@ separate from the automated test results in `PROGRESS.md`.
 | Existing equipment | Previously owned and selected skins/masks remain selected; mask selection is independent of skin. |
 | Hunter identity | A Hunter is visually identifiable while retaining their selected cosmetics; the role treatment clears in the lobby. |
 | Walk + C | While walking on a flat roof, C produces a visible forward slide and pose. Holding sprint is optional. |
+| R6 ground check | Repeat walking + C with an R6 avatar (`HipHeight=0`), then reset and repeat; standing on the floor must not count as airborne. Repeat with R15. |
+| Floor panels | Turn the camera across all six rooftops, roads, footpath corners and flat bridge junctions. No alternating black/cream floor triangles should flicker. |
 | Slide exit | Forward momentum eases out; walking, sprinting, jumping, vaulting, and tagging still work afterward. |
 | Slide restrictions | Repeated presses cannot extend the slide or bypass its cooldown. Stationary, airborne, and frozen players cannot initiate it. |
 | Slide collision | A wall stops the slide; stepping off a ledge does not allow floating; jumping releases the slide. |

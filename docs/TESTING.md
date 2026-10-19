@@ -8,7 +8,8 @@ from source inspection alone.
 
 The user confirmed that the previous delivered place runs, sprints, and vaults
 in Studio, and reported a broken C slide and insufficient visual quality. This
-is evidence about that previous build. Begin the **0.2.0** regression pass with
+is evidence about that previous build. Follow-up feedback confirmed slide and
+floor defects remained in 0.2.0. Begin the **0.2.1** regression pass with
 [the update checklist](UPDATE_0_2.md); do not count prior play as verification of
 the new slide, appearance, map decoration, or UI changes.
 
@@ -48,7 +49,7 @@ assuming that the existence of a test means it passed on your current changes.
 1. Open the final place and inspect the baked Neon Heights map before pressing
    Play. Confirm `CatchShared`, `CatchServer`, and `CatchClient` exist in the
    services mapped by `default.project.json`.
-2. Open **Output** and run Play. Confirm the initialization message ends in **0.2.0**, no script
+2. Open **Output** and run Play. Confirm the initialization message ends in **0.2.1**, no script
    errors, one map instance, a loaded avatar, and a responsive HUD. Stop and Play
    again to check cleanup/reinitialization.
 3. Before published multiplayer testing, set the experience's maximum player
@@ -100,6 +101,12 @@ multiple players on one machine, not device performance or real internet latency
   has a 3-second cooldown; vault
   requires a clear server-detected route and has a 1.1-second cooldown. Check
   ceiling clearance, edges, angled walls, landing, repeated inputs, and respawns.
+- Start the slide check on an open, flat roof with a moving R6 avatar, then
+  repeat with R15 and after respawning. Sweep the camera across all roofs and
+  flat bridge junctions to check for the reported black/cream flicker. The
+  Ember-to-Polar entrance has an existing low corner parapet: test jump/vault
+  access there separately from open-floor sliding; the floor seam check alone
+  does not establish an unobstructed walking route.
 - Traverse both animated **TIMING / BYPASS** gates while they rise and lower.
   Their bypass paths must remain useful, collisions must not trap players, and
   legitimate traversal must not trigger a movement correction. Try each direction
