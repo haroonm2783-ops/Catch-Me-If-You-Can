@@ -109,7 +109,7 @@ for i,cf in ipairs(result.Podiums) do
 	expect(cf.Position.Z>260 and cf.Position.Z<300,"Podium "..i.." stands in the Plaza")
 end
 expect(result.LobbySpawn.Position.Z>200,"Lobby spawn is in the separate Plaza hub")
-for _,cf in ipairs(result.RunnerSpawns) do expect(math.abs(cf.Position.Z)<92,"Runner spawn is inside the mall") end
+for _,cf in ipairs(result.RunnerSpawns) do expect(math.abs(cf.Position.Z)<104,"Runner spawn is inside the mall") end
 
 local routes,gates,stairs,escalators=0,0,0,0
 for _,part in ipairs(map:GetDescendants()) do
@@ -155,8 +155,8 @@ for _,object in ipairs(map:GetDescendants()) do
 	elseif object:IsA("SurfaceGui") then signs+=1 end
 end
 expect(emitters==2,"Only the two fountain emitters animate continuously")
-expect(partCount==map:GetAttribute("StaticPartCount") and partCount<5200,"Static part budget: "..partCount)
-expect(lightCount<=40,"Local light budget: "..lightCount)
+expect(partCount==map:GetAttribute("StaticPartCount") and partCount<7600,"Static part budget: "..partCount)
+expect(lightCount<=64,"Local light budget: "..lightCount)
 expect(polishCount>=800,"Art present")
 expect(signs>=60,"Brand signs present")
 -- Ten enterable stores: every one has a front opening and at least one other route in or out.
@@ -179,7 +179,7 @@ expect(showcase==4,"Four skin showcase figures stand in the Plaza")
 
 -- Walkability: grid flood fill over the real collision boxes. Nodes are standing surfaces;
 -- steps up to 1.3 studs walk, up to 4.4 jump/vault, drops of any height are allowed.
-local CELL,X0,X1,Z0,Z1=2,-124,124,-94,94
+local CELL,X0,X1,Z0,Z1=2,-140,140,-106,106
 local buckets={}
 local function key(i,j) return i*1000+j end
 for _,part in ipairs(colliders) do
@@ -271,7 +271,7 @@ do
 	expect(y~=nil,"Hunter spawn stands on a walkable surface")
 	seenFromHunter,huntCount=reach(i,j,y)
 end
-expect(huntCount>5000,"Hunters can reach a large walkable network: "..huntCount)
+expect(huntCount>8000,"Hunters can reach a large walkable network: "..huntCount)
 for index,cf in ipairs(starts) do
 	local i,j,y=nodeOf(cf.Position)
 	expect(y~=nil,"Spawn "..index.." has a walkable cell")
@@ -285,8 +285,8 @@ local function reachable(from,to)
 	return ty~=nil and seen[key(ti,tj)*100+math.floor(ty*2+0.5)]
 end
 local landmarks={
-	roundFountain=roblox.Vector3.new(0,3.3,-22), upperBridge=roblox.Vector3.new(0,19.3,0), foodCourt=roblox.Vector3.new(-88,3.3,0),
-	arcade=roblox.Vector3.new(92,3.3,0), department=roblox.Vector3.new(74,19.3,0), skyLounge=roblox.Vector3.new(-106,19.3,-14),
+	roundFountain=roblox.Vector3.new(0,3.3,-24), upperBridge=roblox.Vector3.new(0,19.3,0), foodCourt=roblox.Vector3.new(-104,3.3,0),
+	arcade=roblox.Vector3.new(88,3.3,0), department=roblox.Vector3.new(80,19.3,0), skyLounge=roblox.Vector3.new(-106,19.3,-44),
 }
 for index,cf in ipairs(result.RunnerSpawns) do
 	for name,target in pairs(landmarks) do
@@ -300,8 +300,11 @@ for _,store in ipairs(map.Stores:GetChildren()) do
 	if carpet then
 		local floor=carpet.CFrame.Position.Y-0.1
 		local north=carpet.CFrame.Position.Z<0
-		local inside=roblox.Vector3.new(carpet.CFrame.Position.X,floor+3.3,north and -54 or 54)
-		expect(reachable(inside,result.HunterSpawns[1].Position) and reachable(result.HunterSpawns[1].Position,inside),store.Name.." connects to the hall both ways")
+		local inside=roblox.Vector3.new(carpet.CFrame.Position.X,floor+3.3,north and -61 or 61)
+		local ii,jj,yy=nodeOf(inside)
+		expect(yy~=nil,store.Name.." entry point stands on a walkable surface "..tostring(inside))
+		expect(reachable(inside,result.HunterSpawns[1].Position),store.Name.." leads out to the hall")
+		expect(reachable(result.HunterSpawns[1].Position,inside),store.Name.." can be entered from the hall")
 	end
 end
 

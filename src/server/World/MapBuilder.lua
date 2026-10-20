@@ -177,6 +177,8 @@ function MapBuilder.Build(options)
 	local function art(parent, name, size, cf, color, material)
 		local p = part(parent, name, size, cf, color, material, false)
 		p:SetAttribute("VisualPolish", true)
+		-- Small props never cast shadows: saves GPU time on phones with no visible loss.
+		if size.Magnitude < 5 then p.CastShadow = false end
 		return p
 	end
 	local function neon(parent, name, x, y, z, sx, sy, sz, color, pulse)
@@ -409,93 +411,83 @@ function MapBuilder.Build(options)
 	end
 
 	-- =====================================================================================
-	-- MALL SHELL, FLOORS, ROOF
+	-- MALL SHELL, FLOORS, ROOF  (264 x 192 footprint; hall 144 x 112; stores 40 deep)
 	-- =====================================================================================
-	local VX, VZ = 36, 28 -- atrium void half-size
-	local HX, HZ = 64, 48 -- hall half-size (wings and store rows lie outside)
+	local OX, OZ = 132, 96 -- outer half extents
+	local HX, HZ = 72, 56 -- hall half extents (wings lie beyond HX, store rows beyond HZ)
+	local VX, VZ = 44, 34 -- atrium void half size
+	local D = 40 -- store depth
 	local TOP = 32 -- top of perimeter walls
-	local stairHoles = { { -55, -45, -30, 8 }, { 45, 55, -8, 30 } }
+	local stairHoles = { { -63, -53, -28, 10 }, { 53, 63, -10, 28 } }
 	local voidHole = { -VX, VX, -VZ, VZ }
-	local loungeHole = { -100, -76, -30, 30 }
+	local loungeHole = { -122, -82, -36, 36 }
+	local ceil1 = F2 - 1.2
 
-	box(floors, "Foundation", 0, -2.2, 0, 236, 3.6, 172, P.navy, Enum.Material.Concrete)
-	-- Ground floor: marble hall, tiled food court, carpeted arcade and two store rows.
+	box(floors, "Foundation", 0, -2.2, 0, 2 * OX + 4, 3.6, 2 * OZ + 4, P.navy, Enum.Material.Concrete)
+	-- Ground floor: marble hall, wood food court, carpeted arcade and two store rows.
 	box(floors, "HallMarble", 0, -0.2, 0, 2 * HX, 0.4, 2 * HZ, P.marble, Enum.Material.Marble)
-	box(floors, "FoodCourtFloor", -88, -0.2, 0, 48, 0.4, 96, Color3.fromRGB(196, 150, 104), Enum.Material.WoodPlanks)
-	box(floors, "ArcadeFloor", 88, -0.2, 0, 48, 0.4, 96, P.navy, Enum.Material.SmoothPlastic)
-	for _, zc in ipairs({ -64, 64 }) do box(floors, "StoreRowFloor", 0, -0.2, zc, 224, 0.4, 32, P.marble2, Enum.Material.Marble) end
+	box(floors, "FoodCourtFloor", -(HX + OX) / 2, -0.2, 0, OX - HX, 0.4, 2 * HZ, Color3.fromRGB(196, 150, 104), Enum.Material.WoodPlanks)
+	box(floors, "ArcadeFloor", (HX + OX) / 2, -0.2, 0, OX - HX, 0.4, 2 * HZ, P.navy, Enum.Material.SmoothPlastic)
+	for _, zc in ipairs({ -(HZ + OZ) / 2, (HZ + OZ) / 2 }) do box(floors, "StoreRowFloor", 0, -0.2, zc, 2 * OX, 0.4, D, P.marble2, Enum.Material.Marble) end
 	-- Checker tiles break up the hall floor so it never reads as one flat slab.
-	for ix = -5, 4 do
+	for ix = -6, 5 do
 		for iz = -4, 3 do
-			if (ix + iz) % 2 == 0 then art(floors, "FloorTile", Vector3.new(12.6, 0.06, 11.8), Vector3.new((ix + 0.5) * 12.8, 0.03, (iz + 0.5) * 12), P.marble2, Enum.Material.Marble) end
+			if (ix + iz) % 2 == 0 then art(floors, "FloorTile", Vector3.new(11.8, 0.06, 13.8), Vector3.new((ix + 0.5) * 12, 0.03, (iz + 0.5) * 14), P.marble2, Enum.Material.Marble) end
 		end
 	end
-	-- Hall inlay: concentric rings and diagonal bands give the marble a designed pattern.
-	for i, d in ipairs({ 36, 28, 20 }) do
+	for i, d in ipairs({ 44, 36, 28 }) do
 		art(floors, "InlayRing", Vector3.new(0.12, d + 12, d + 12), CFrame.new(0, 0.07, 0) * CFrame.Angles(0, 0, math.pi / 2), i == 2 and P.gold or P.blue, i == 2 and Enum.Material.Metal or Enum.Material.SmoothPlastic).Shape = Enum.PartType.Cylinder
 	end
-	for _, z in ipairs({ -40, 40 }) do
-		art(floors, "AisleInlay", Vector3.new(120, 0.1, 0.8), Vector3.new(0, 0.06, z), P.gold, Enum.Material.Metal)
-		art(floors, "AisleInlay", Vector3.new(120, 0.1, 0.35), Vector3.new(0, 0.06, z + (z < 0 and 2 or -2)), P.cyan, Enum.Material.Neon)
+	for _, z in ipairs({ -46, 46 }) do
+		art(floors, "AisleInlay", Vector3.new(136, 0.1, 0.8), Vector3.new(0, 0.06, z), P.gold, Enum.Material.Metal)
+		art(floors, "AisleInlay", Vector3.new(136, 0.1, 0.35), Vector3.new(0, 0.06, z + (z < 0 and 2 or -2)), P.cyan, Enum.Material.Neon)
 	end
 	-- Second floor slab, with the atrium void, stairwells, and lounge window cut away.
 	local function floor2(name, x1, x2, z1, z2, color, material, holes)
 		slab(floors, name, x1, x2, z1, z2, F2, 1.2, color, material, holes)
 	end
-	floor2("UpperStoreRow", -112, 112, -80, -48, P.marble2, Enum.Material.Marble)
-	floor2("UpperStoreRow", -112, 112, 48, 80, P.marble2, Enum.Material.Marble)
-	local ringHoles = { voidHole, stairHoles[1], stairHoles[2] }
-	floor2("UpperHall", -HX, HX, -HZ, HZ, P.marble, Enum.Material.Marble, ringHoles)
-	floor2("UpperWestLounge", -112, -HX, -HZ, HZ, Color3.fromRGB(196, 150, 104), Enum.Material.Marble, { loungeHole })
-	floor2("UpperEastDept", HX, 112, -HZ, HZ, P.marble2, Enum.Material.Marble)
-	-- Trim and underside lights on the balcony edge, visible from the whole ground floor.
-	local function edgeTrim(x1, x2, z1, z2)
-		local cx, cz = (x1 + x2) / 2, (z1 + z2) / 2
-		art(floors, "BalconyFascia", Vector3.new(x2 - x1 + 1, 1.8, z2 - z1 + 1), Vector3.new(cx, F2 - 1.6, cz), P.white, Enum.Material.SmoothPlastic)
-	end
+	floor2("UpperStoreRow", -OX, OX, -OZ, -HZ, P.marble2, Enum.Material.Marble)
+	floor2("UpperStoreRow", -OX, OX, HZ, OZ, P.marble2, Enum.Material.Marble)
+	floor2("UpperHall", -HX, HX, -HZ, HZ, P.marble, Enum.Material.Marble, { voidHole, stairHoles[1], stairHoles[2] })
+	floor2("UpperWestLounge", -OX, -HX, -HZ, HZ, Color3.fromRGB(196, 150, 104), Enum.Material.WoodPlanks, { loungeHole })
+	floor2("UpperEastDept", HX, OX, -HZ, HZ, P.marble2, Enum.Material.Marble)
 	for _, z in ipairs({ -VZ - 0.5, VZ + 0.5 }) do art(floors, "FasciaNeon", Vector3.new(2 * VX + 1, 0.25, 0.25), Vector3.new(0, F2 - 2.5, z), P.cyan, Enum.Material.Neon) end
 	for _, x in ipairs({ -VX - 0.5, VX + 0.5 }) do art(floors, "FasciaNeon", Vector3.new(0.25, 0.25, 2 * VZ + 1), Vector3.new(x, F2 - 2.5, 0), P.magenta, Enum.Material.Neon) end
 	for _, z in ipairs({ -VZ + 0.5, VZ - 0.5 }) do art(floors, "FasciaTrim", Vector3.new(2 * VX, 1.8, 0.8), Vector3.new(0, F2 - 1.5, z), P.white) end
 	for _, x in ipairs({ -VX + 0.5, VX - 0.5 }) do art(floors, "FasciaTrim", Vector3.new(0.8, 1.8, 2 * VZ), Vector3.new(x, F2 - 1.5, 0), P.white) end
-	-- Ground-floor ceiling lights under the second-floor ring.
-	for _, x in ipairs({ -56, 56 }) do for z = -40, 40, 16 do ceilingStrip(floors, x, F2 - 1.3, z, 6, 1.2, P.white) end end
-	for _, z in ipairs({ -40, 40 }) do for x = -24, 24, 16 do ceilingStrip(floors, x, F2 - 1.3, z, 6, 1.2, P.white) end end
+	for _, x in ipairs({ -58, 58 }) do for z = -48, 48, 16 do ceilingStrip(floors, x, F2 - 1.3, z, 6, 1.2) end end
+	for _, z in ipairs({ -45, 45 }) do for x = -32, 32, 16 do ceilingStrip(floors, x, F2 - 1.3, z, 6, 1.2) end end
 
-	-- Perimeter: solid walls with window bands and pilasters, roof slabs over stores.
+	-- Perimeter: solid walls with window bands; roof slabs over stores.
 	local wallColor = P.cream
-	for _, x in ipairs({ -113, 113 }) do box(shell, "OuterWall", x, TOP / 2, 0, 2, TOP, 160, wallColor, Enum.Material.Concrete) end
-	for _, z in ipairs({ -81, 81 }) do box(shell, "OuterWall", 0, TOP / 2, z, 228, TOP, 2, wallColor, Enum.Material.Concrete) end
-	for _, z in ipairs({ -79.8, 79.8 }) do
-		for x = -100, 100, 25 do
+	for _, x in ipairs({ -(OX + 1), OX + 1 }) do box(shell, "OuterWall", x, TOP / 2, 0, 2, TOP, 2 * OZ, wallColor, Enum.Material.Concrete) end
+	for _, z in ipairs({ -(OZ + 1), OZ + 1 }) do box(shell, "OuterWall", 0, TOP / 2, z, 2 * OX + 4, TOP, 2, wallColor, Enum.Material.Concrete) end
+	for _, z in ipairs({ -(OZ - 0.2), OZ - 0.2 }) do
+		for x = -110, 110, 22 do
 			glassBox(shell, "LoftWindow", x, 24, z, 14, 5, 0.3, 0.45, false)
 			glassBox(shell, "LoftWindow", x, 7.5, z, 14, 4, 0.3, 0.45, false)
 		end
 	end
-	for _, x in ipairs({ -111.8, 111.8 }) do
-		for z = -60, 60, 30 do
-			glassBox(shell, "LoftWindow", x, 24, z, 0.3, 5, 14, 0.45, false)
-		end
+	for _, x in ipairs({ -(OX - 0.2), OX - 0.2 }) do
+		for z = -66, 66, 22 do glassBox(shell, "LoftWindow", x, 24, z, 0.3, 5, 14, 0.45, false) end
 	end
-	for _, zc in ipairs({ -64, 64 }) do
-		slab(shell, "StoreRowRoof", -112, 112, zc - 16, zc + 16, 31.2, 1.2, P.white, Enum.Material.Concrete)
+	for _, zc in ipairs({ -(HZ + OZ) / 2, (HZ + OZ) / 2 }) do
+		slab(shell, "StoreRowRoof", -OX, OX, zc - D / 2, zc + D / 2, 31.2, 1.2, P.white, Enum.Material.Concrete)
 	end
-	-- Mall perimeter parapet cap and neon skyline line.
-	for _, z in ipairs({ -80, 80 }) do art(shell, "RoofNeon", Vector3.new(224, 0.3, 0.3), Vector3.new(0, TOP + 0.2, z), P.magenta, Enum.Material.Neon) end
-	slab(shell, "WestWingRoofSolid", -112, -HX, -HZ, HZ, 31.2, 1.2, P.white, Enum.Material.Concrete,
-		{ { -108, -68, -42, 42 } })
-	slab(shell, "EastWingRoofSolid", HX, 112, -HZ, HZ, 31.2, 1.2, P.white, Enum.Material.Concrete,
-		{ { 68, 108, -42, 42 } })
-	-- Wing skylights: glass between ribs, letting daylight reach the food court and department store.
+	for _, z in ipairs({ -OZ, OZ }) do art(shell, "RoofNeon", Vector3.new(2 * OX, 0.3, 0.3), Vector3.new(0, TOP + 0.2, z), P.magenta, Enum.Material.Neon) end
+	slab(shell, "WestWingRoofSolid", -OX, -HX, -HZ, HZ, 31.2, 1.2, P.white, Enum.Material.Concrete, { { -128, -76, -48, 48 } })
+	slab(shell, "EastWingRoofSolid", HX, OX, -HZ, HZ, 31.2, 1.2, P.white, Enum.Material.Concrete, { { 76, 128, -48, 48 } })
 	for _, side in ipairs({ -1, 1 }) do
-		local cx = side * 88
-		glassBox(shell, "WingSkylight", cx, 32.2, 0, 40, 0.3, 84, 0.5, false)
-		for i = -2, 2 do artBeam(shell, "SkylightRib", Vector3.new(cx - 20, 32.7, i * 21), Vector3.new(cx + 20, 32.7, i * 21), 0.7, P.white, Enum.Material.Metal) end
-		for i = -2, 2 do artBeam(shell, "SkylightRib", Vector3.new(cx + i * 10, 32.7, -42), Vector3.new(cx + i * 10, 32.7, 42), 0.5, P.white, Enum.Material.Metal) end
+		local cx = side * 102
+		glassBox(shell, "WingSkylight", cx, 32.2, 0, 52, 0.3, 96, 0.5, false)
+		for i = -2, 2 do artBeam(shell, "SkylightRib", Vector3.new(cx - 26, 32.7, i * 24), Vector3.new(cx + 26, 32.7, i * 24), 0.7, P.white, Enum.Material.Metal) end
+		for i = -2, 2 do artBeam(shell, "SkylightRib", Vector3.new(cx + i * 13, 32.7, -48), Vector3.new(cx + i * 13, 32.7, 48), 0.5, P.white, Enum.Material.Metal) end
 	end
-	-- Hall barrel-vault roof: arched ribs and glass panels, peak at y=44.
-	local R, rise, base = 176.7, 12, 32
+	-- Hall barrel-vault roof: arched ribs and glass panels, peak at y=46.
+	local rise, base = 14, 32
+	local R = (HX * HX + rise * rise) / (2 * rise)
 	local centerY = base + rise - R
-	local segments = 11
+	local segments = 12
 	local halfAngle = math.asin(HX / R)
 	for s = 0, segments - 1 do
 		local a0 = -halfAngle + s * (2 * halfAngle / segments)
@@ -503,11 +495,11 @@ function MapBuilder.Build(options)
 		local p0 = Vector3.new(math.sin(a0) * R, centerY + math.cos(a0) * R, 0)
 		local p1 = Vector3.new(math.sin(a1) * R, centerY + math.cos(a1) * R, 0)
 		local mid = (p0 + p1) / 2
-		local angle = -math.atan2(p1.Y - p0.Y, p1.X - p0.X) * -1
+		local angle = math.atan2(p1.Y - p0.Y, p1.X - p0.X)
 		local len = (p1 - p0).Magnitude
 		local glass = glassBox(shell, "VaultGlass", mid.X, mid.Y, 0, len + 0.05, 0.3, 2 * HZ + 2, 0.5, false, P.glass)
 		glass.CFrame = CFrame.new(mid) * CFrame.Angles(0, 0, angle)
-		for _, z in ipairs({ -HZ, -24, 0, 24, HZ }) do
+		for _, z in ipairs({ -HZ, -28, 0, 28, HZ }) do
 			local rib = artBeam(shell, "VaultRib", Vector3.new(p0.X, p0.Y + 0.1, z), Vector3.new(p1.X, p1.Y + 0.1, z), 0.7, P.white, Enum.Material.Metal)
 			rib.Size = Vector3.new(0.9, 0.9, len + 0.05)
 		end
@@ -515,27 +507,21 @@ function MapBuilder.Build(options)
 			box(shell, "VaultGable", (p0.X + p1.X) / 2, (base + mid.Y) / 2, z, len + 0.05, math.max(mid.Y - base, 0.2), 0.6, P.white, Enum.Material.Concrete, false):SetAttribute("VisualPolish", true)
 		end
 	end
-	for _, x in ipairs({ -HX, HX }) do
-		art(shell, "VaultCornice", Vector3.new(1.4, 1.2, 2 * HZ), Vector3.new(x, base + 0.6, 0), P.gold, Enum.Material.Metal)
-	end
-	for s = -3, 3 do
-		neon(shell, "VaultLight", s * 16, 43.2 - math.abs(s) * 0.4 * 0.5, 0, 0.3, 0.2, 90, P.white)
-	end
+	for _, x in ipairs({ -HX, HX }) do art(shell, "VaultCornice", Vector3.new(1.4, 1.2, 2 * HZ), Vector3.new(x, base + 0.6, 0), P.gold, Enum.Material.Metal) end
+	for s = -3, 3 do neon(shell, "VaultLight", s * 18, 45.2 - math.abs(s) * 0.5, 0, 0.3, 0.2, 100, Color3.fromRGB(214, 190, 150)) end
 
-	for _, c in ipairs({ { -48, -38 }, { 48, 38 }, { -48, 38 }, { 48, -38 }, { 0, -38 }, { 0, 38 } }) do light(atrium, Vector3.new(c[1], F2 - 1.7, c[2]), P.white, 0.7, 34) end
-	-- Support columns on the balcony edge and glass balcony railings with designated gaps.
-	local columns = {}
-	for _, z in ipairs({ -VZ, -14, 14, VZ }) do for _, x in ipairs({ -VX, VX }) do table.insert(columns, { x, z }) end end
-	for _, z in ipairs({ -VZ, VZ }) do table.insert(columns, { 0, z }) end
-	for _, c in ipairs(columns) do
-		cylinder(atrium, "Column", Vector3.new(c[1], 17.5, c[2]), 2.4, 35, P.white, Enum.Material.Marble)
-		cylinder(atrium, "ColumnBase", Vector3.new(c[1], 0.6, c[2]), 3.4, 1.2, P.gold, Enum.Material.Metal, false)
-		cylinder(atrium, "ColumnCollar", Vector3.new(c[1], F2 + 0.3, c[2]), 3, 0.6, P.gold, Enum.Material.Metal, false)
+	-- Atrium columns, glass balcony railings with designated gaps, and the skybridge.
+	for _, c in ipairs({ { -VX, -VZ }, { VX, -VZ }, { -VX, VZ }, { VX, VZ }, { -VX, -17 }, { -VX, 17 }, { VX, -17 }, { VX, 17 }, { 0, -VZ }, { 0, VZ } }) do
+		cylinder(atrium, "Column", Vector3.new(c[1], 18.5, c[2]), 2.6, 37, P.white, Enum.Material.Marble)
+		cylinder(atrium, "ColumnBase", Vector3.new(c[1], 0.6, c[2]), 3.6, 1.2, P.gold, Enum.Material.Metal, false)
+		cylinder(atrium, "ColumnCollar", Vector3.new(c[1], F2 + 0.3, c[2]), 3.2, 0.6, P.gold, Enum.Material.Metal, false)
 		neon(atrium, "ColumnLight", c[1], 10, c[2], 0.15, 12, 0.15, P.cyan)
+	end
+	for _, c in ipairs({ { -52, -46 }, { 52, 46 }, { -52, 46 }, { 52, -46 }, { 0, -46 }, { 0, 46 }, { -26, 0 }, { 26, 0 } }) do
+		light(atrium, Vector3.new(c[1], F2 - 1.7, c[2]), P.white, 0.7, 36)
 	end
 	local RAIL = 7.2
 	local function railing(axis, fixed, a1, a2, gaps)
-		local pieces = {}
 		wall(atrium, "BalconyGlass", axis, fixed, a1, a2, F2, F2 + RAIL, 0.35, P.glass, Enum.Material.Glass, gaps)
 		for _, g in ipairs(atrium:GetChildren()) do
 			if g.Name == "BalconyGlass" and not g:GetAttribute("Tinted") then
@@ -544,17 +530,15 @@ function MapBuilder.Build(options)
 				g.CastShadow = false
 			end
 		end
-		-- Metal handrail along the full run (gaps leave openings below only).
 		local cx = (a1 + a2) / 2
 		if axis == "x" then art(atrium, "Handrail", Vector3.new(a2 - a1, 0.3, 0.6), Vector3.new(cx, F2 + RAIL, fixed), P.gold, Enum.Material.Metal)
 		else art(atrium, "Handrail", Vector3.new(0.6, 0.3, a2 - a1), Vector3.new(fixed, F2 + RAIL, cx), P.gold, Enum.Material.Metal) end
 	end
-	railing("x", -VZ + 0.4, -VX, VX, { { c = -20, w = 13, h = 12 }, { c = 20, w = 11, h = 12 } }) -- escalator top / drop zone
-	railing("x", VZ - 0.4, -VX, VX, { { c = 20, w = 13, h = 12 }, { c = -20, w = 11, h = 12 } })
-	railing("z", -VX + 0.4, -VZ, VZ, { { c = 0, w = 11, h = 12 } }) -- skybridge entrance
-	railing("z", VX - 0.4, -VZ, VZ, { { c = 0, w = 11, h = 12 } })
-	for _, z in ipairs({ -VZ, VZ }) do neon(atrium, "DropZoneMarker", z < 0 and 20 or -20, F2 + 0.07, z + (z < 0 and 1.2 or -1.2), 9, 0.06, 0.5, P.yellow, 1) end
-	-- Skybridge across the atrium, directly over the fountain.
+	railing("x", -VZ + 0.4, -VX, VX, { { c = -26, w = 14, h = 12 }, { c = 26, w = 12, h = 12 } })
+	railing("x", VZ - 0.4, -VX, VX, { { c = 26, w = 14, h = 12 }, { c = -26, w = 12, h = 12 } })
+	railing("z", -VX + 0.4, -VZ, VZ, { { c = 0, w = 12, h = 12 } })
+	railing("z", VX - 0.4, -VZ, VZ, { { c = 0, w = 12, h = 12 } })
+	for _, z in ipairs({ -VZ, VZ }) do neon(atrium, "DropZoneMarker", z < 0 and 26 or -26, F2 + 0.07, z + (z < 0 and 1.2 or -1.2), 10, 0.06, 0.5, P.yellow, 1) end
 	slab(routes, "Skybridge", -VX, VX, -5, 5, F2, 1.2, P.marble2, Enum.Material.Marble)
 	for _, z in ipairs({ -5.2, 5.2 }) do
 		local g = part(routes, "BridgeGlass", Vector3.new(2 * VX, RAIL, 0.3), Vector3.new(0, F2 + RAIL / 2, z), P.glass, Enum.Material.Glass)
@@ -574,13 +558,10 @@ function MapBuilder.Build(options)
 		local frame = CFrame.lookAt((a + b) / 2, b)
 		local deck = part(routes, name, Vector3.new(10, 0.7, length), frame * CFrame.new(0, -0.35, 0), P.steel, Enum.Material.Metal)
 		deck:SetAttribute("TraversalRoute", true)
-		-- Tread bands and pulsing chevrons mark the direction of travel without moving collision.
-		for i = 1, 14 do
-			art(routes, "Tread", Vector3.new(9.2, 0.06, 0.5), frame * CFrame.new(0, 0.06, length / 2 - i * length / 15), P.ink, Enum.Material.Metal)
-		end
-		for i = 1, 5 do
+		for i = 1, 16 do art(routes, "Tread", Vector3.new(9.2, 0.06, 0.5), frame * CFrame.new(0, 0.06, length / 2 - i * length / 17), P.ink, Enum.Material.Metal) end
+		for i = 1, 6 do
 			local chev = neon(routes, "Chevron", 0, 0, 0, 3.2, 0.08, 0.5, accent, i)
-			chev.CFrame = frame * CFrame.new(0, 0.09, length / 2 - i * length / 6)
+			chev.CFrame = frame * CFrame.new(0, 0.09, length / 2 - i * length / 7)
 		end
 		for _, side in ipairs({ -1, 1 }) do
 			local rail = part(routes, "EscalatorGlass", Vector3.new(0.3, 4.2, length), frame * CFrame.new(side * 5.1, 2.1, 0), P.glass, Enum.Material.Glass)
@@ -592,8 +573,8 @@ function MapBuilder.Build(options)
 		art(routes, "EscalatorUnderside", Vector3.new(10, 0.6, length), frame * CFrame.new(0, -1.1, 0), P.white, Enum.Material.Metal)
 		return deck
 	end
-	escalator("EscalatorWest", -20, 2, -VZ, P.cyan)
-	escalator("EscalatorEast", 20, -2, VZ, P.magenta)
+	escalator("EscalatorWest", -26, 4, -VZ, P.cyan)
+	escalator("EscalatorEast", 26, -4, VZ, P.magenta)
 	local function stair(name, x, zStart, zEnd, width, accent)
 		local steps = 20
 		local sign = zEnd > zStart and 1 or -1
@@ -612,28 +593,27 @@ function MapBuilder.Build(options)
 			g.CastShadow = false
 		end
 	end
-	stair("StairWest", -50, 8, -30, 10, P.gold)
-	stair("StairEast", 50, -8, 30, 10, P.gold)
-	sign(routes, "TO LEVEL 2", Vector3.new(-50, 12, 11), 12, 2.2, P.gold, 0)
-	sign(routes, "TO LEVEL 2", Vector3.new(50, 12, -11), 12, 2.2, P.gold, math.pi)
+	stair("StairWest", -58, 10, -28, 10, P.gold)
+	stair("StairEast", 58, -10, 28, 10, P.gold)
+	sign(routes, "TO LEVEL 2", Vector3.new(-58, 12, 13), 12, 2.2, P.gold, 0)
+	sign(routes, "TO LEVEL 2", Vector3.new(58, 12, -13), 12, 2.2, P.gold, math.pi)
 
 	-- =====================================================================================
 	-- ATRIUM CENTERPIECE: tiered fountain, palms, kiosks
 	-- =====================================================================================
-	cylinder(atrium, "FountainStep", Vector3.new(0, 0.4, 0), 27, 0.8, P.marble2, Enum.Material.Marble)
-	cylinder(atrium, "FountainBasin", Vector3.new(0, 1.1, 0), 22, 1.8, P.white, Enum.Material.Marble)
-	disc(atrium, "FountainWater", CFrame.new(0, 2.05, 0), 20, 0.1, P.blue, Enum.Material.Glass).Transparency = 0.35
-	disc(atrium, "FountainGlow", CFrame.new(0, 0.9, 0), 28, 0.12, P.cyan, Enum.Material.Neon):SetAttribute("Pulse", 1)
-	cylinder(atrium, "FountainPedestal", Vector3.new(0, 4.6, 0), 4, 5.6, P.white, Enum.Material.Marble)
-	for i, tier in ipairs({ { 9, 8.4 }, { 6, 10.6 }, { 3.6, 12.2 } }) do
+	cylinder(atrium, "FountainStep", Vector3.new(0, 0.4, 0), 31, 0.8, P.marble2, Enum.Material.Marble)
+	cylinder(atrium, "FountainBasin", Vector3.new(0, 1.1, 0), 25, 1.8, P.white, Enum.Material.Marble)
+	disc(atrium, "FountainWater", CFrame.new(0, 2.05, 0), 23, 0.1, P.blue, Enum.Material.Glass).Transparency = 0.35
+	disc(atrium, "FountainGlow", CFrame.new(0, 0.9, 0), 32, 0.12, P.cyan, Enum.Material.Neon):SetAttribute("Pulse", 1)
+	cylinder(atrium, "FountainPedestal", Vector3.new(0, 4.6, 0), 4.4, 5.6, P.white, Enum.Material.Marble)
+	for i, tier in ipairs({ { 10, 8.4 }, { 6.6, 10.6 }, { 4, 12.2 } }) do
 		cylinder(atrium, "FountainTier" .. i, Vector3.new(0, tier[2], 0), tier[1], 0.7, P.white, Enum.Material.Marble, false)
 		disc(atrium, "TierWater", CFrame.new(0, tier[2] + 0.45, 0), tier[1] - 0.8, 0.08, P.cyan, Enum.Material.Glass).Transparency = 0.4
 	end
 	for i = 1, 8 do
 		local angle = i * math.pi / 4
-		local top = Vector3.new(math.cos(angle) * 8, 2.3, math.sin(angle) * 8)
-		artBeam(atrium, "WaterJet", top, Vector3.new(math.cos(angle) * 5.2, 5.8, math.sin(angle) * 5.2), 0.22, P.cyan, Enum.Material.Neon).Transparency = 0.35
-		neon(atrium, "FountainLamp", math.cos(angle) * 12.4, 1.1, math.sin(angle) * 12.4, 0.5, 0.5, 0.5, i % 2 == 0 and P.magenta or P.cyan)
+		artBeam(atrium, "WaterJet", Vector3.new(math.cos(angle) * 9, 2.3, math.sin(angle) * 9), Vector3.new(math.cos(angle) * 5.6, 5.8, math.sin(angle) * 5.6), 0.22, P.cyan, Enum.Material.Neon).Transparency = 0.35
+		neon(atrium, "FountainLamp", math.cos(angle) * 14, 1.1, math.sin(angle) * 14, 0.5, 0.5, 0.5, i % 2 == 0 and P.magenta or P.cyan)
 	end
 	local crown = sphere(atrium, "FountainCrown", Vector3.new(0, 14, 0), Vector3.new(3, 3, 3), P.gold, Enum.Material.Metal)
 	for i = 1, 4 do
@@ -652,14 +632,12 @@ function MapBuilder.Build(options)
 	spray.Color = ColorSequence.new(P.white, P.cyan)
 	spray.LightEmission = 0.6
 	spray.Parent = crown
-	-- Corner palms planted in marble rings, rising toward the second-floor balcony.
-	for _, c in ipairs({ { -30, -21 }, { 30, -21 }, { -30, 21 }, { 30, 21 } }) do
-		cylinder(atrium, "PalmRing", Vector3.new(c[1], 0.7, c[2]), 7, 1.4, P.cream, Enum.Material.Concrete)
-		cylinder(atrium, "PalmSoil", Vector3.new(c[1], 1.45, c[2]), 6, 0.1, P.soil, Enum.Material.Grass, false)
-		palm(atrium, c[1], 1.4, c[2], 1.9, c[1] < 0 and 0.06 or -0.06)
+	for _, c in ipairs({ { -36, -26 }, { 36, -26 }, { -36, 26 }, { 36, 26 } }) do
+		cylinder(atrium, "PalmRing", Vector3.new(c[1], 0.7, c[2]), 8, 1.4, P.cream, Enum.Material.Concrete)
+		cylinder(atrium, "PalmSoil", Vector3.new(c[1], 1.45, c[2]), 7, 0.1, P.soil, Enum.Material.Grass, false)
+		palm(atrium, c[1], 1.4, c[2], 2.0, c[1] < 0 and 0.06 or -0.06)
 	end
-	for _, z in ipairs({ -16, 16 }) do bench(atrium, 0, 0, z * 1.05 + (z < 0 and -1 or 1) * 0.0, z < 0 and 0 or math.pi) end
-	-- Banners hang from the roof ribs; they stay above second-floor head height.
+	for _, z in ipairs({ -19, 19 }) do bench(atrium, 0, 0, z, z < 0 and 0 or math.pi) end
 	for _, c in ipairs({ { -VX + 3, -VZ + 1 }, { VX - 3, -VZ + 1 }, { -VX + 3, VZ - 1 }, { VX - 3, VZ - 1 } }) do
 		local face = c[2] < 0 and 0 or math.pi
 		local b = part(atrium, "AtriumBanner", Vector3.new(6, 18, 0.3), CFrame.new(c[1], 31, c[2]) * CFrame.Angles(0, face, 0), P.purple, Enum.Material.Fabric, false)
@@ -667,176 +645,426 @@ function MapBuilder.Build(options)
 		surfaceText(b, Enum.NormalId.Back, "CATCH\nME IF\nYOU\nCAN", P.white, 30, 0.9, 0.9)
 		neon(atrium, "BannerTrim", c[1], 22, c[2] + (c[2] < 0 and 0.2 or -0.2), 6.2, 0.2, 0.2, P.cyan)
 	end
-	-- Perimeter palms and benches along the ground-floor corridors.
-	for _, c in ipairs({ { -60, -33 }, { 60, 33 }, { -60, 33 }, { 60, -33 }, { -30, -44 }, { 30, 44 } }) do
+	for _, c in ipairs({ { -66, -39 }, { 66, 39 }, { -66, 39 }, { 66, -39 }, { -36, -50 }, { 36, 50 } }) do
 		planter(decor, c[1], 0, c[2], 8, 0, true)
-		palm(decor, c[1], 1.4, c[2], 1.1, 0.1)
+		palm(decor, c[1], 1.4, c[2], 1.2, 0.1)
 	end
-	for _, c in ipairs({ { -40, -33 }, { 40, 33 }, { -40, 33 }, { 40, -33 } }) do bench(decor, c[1], 0, c[2], c[2] < 0 and 0 or math.pi) end
-	-- Kiosks: vaultable carts with parasol canopies, placed clear of every ramp and stair.
-	for _, c in ipairs({ { -50, 34, "SNACKS", P.coral }, { 50, -34, "TECH", P.cyan }, { -22, -42, "GIFTS", P.gold }, { 22, 42, "JUICE", P.green } }) do
-		local cart = vaultTable(decor, c[1], 0, c[2], 8, 4, P.white, 0, c[4])
+	for _, c in ipairs({ { -48, -39 }, { 48, 39 }, { -48, 39 }, { 48, -39 } }) do bench(decor, c[1], 0, c[2], c[2] < 0 and 0 or math.pi) end
+	for _, c in ipairs({ { -58, 40, "SNACKS", P.coral }, { 58, -40, "TECH", P.cyan }, { -28, -50, "GIFTS", P.gold }, { 28, 50, "JUICE", P.green } }) do
+		vaultTable(decor, c[1], 0, c[2], 8, 4, P.white, 0, c[4])
 		sign(decor, c[3], Vector3.new(c[1], 6.4, c[2] + (c[2] < 0 and 2.8 or -2.8)), 6, 1.6, c[4], c[2] < 0 and 0 or math.pi)
 		for _, dx in ipairs({ -3.6, 3.6 }) do art(decor, "CartPost", Vector3.new(0.25, 5, 0.25), Vector3.new(c[1] + dx, 4.1, c[2]), P.steel, Enum.Material.Metal) end
 		art(decor, "CartCanopy", Vector3.new(9, 0.4, 5.4), Vector3.new(c[1], 7.2, c[2]), c[4], Enum.Material.Fabric)
 	end
-	-- Wayfinding screens double as pillars of color on the long corridors.
-	for _, c in ipairs({ { -42, -45 }, { 42, 45 }, { -42, 45 }, { 42, -45 } }) do
-		local pillar = box(decor, "DirectoryPillar", c[1], 5, c[2], 1.2, 10, 3, P.navy, Enum.Material.Metal)
+	for _, c in ipairs({ { -48, -53 }, { 48, 53 }, { -48, 53 }, { 48, -53 } }) do
+		box(decor, "DirectoryPillar", c[1], 5, c[2], 1.2, 10, 3, P.navy, Enum.Material.Metal)
 		sign(decor, "MALL MAP", Vector3.new(c[1] + (c[1] < 0 and 0.7 or -0.7), 5.5, c[2]), 2.6, 3.6, P.cyan, c[1] < 0 and math.pi / 2 or -math.pi / 2)
 	end
 
 	-- =====================================================================================
-	-- STORES: ten enterable shops with two or more exits each, plus dressed storefronts.
+	-- STORES: ten enterable, themed shops. Each has a 20-stud front opening and offset side
+	-- doors into its neighbours, so stores chain into loops and never trap a runner.
 	-- =====================================================================================
-	local boundariesX = { -112, -64, -21, 21, 64, 112 }
+	local boundariesX = { -132, -72, -24, 24, 72, 132 }
+	local PAL = { P.coral, P.cyan, P.yellow, P.magenta, P.green, P.orange, P.blue, P.pink }
 	local function storeCtx(def, folder)
 		local north = def.row == "N"
 		local fy = def.floor
-		local ctx = { folder = folder, fy = fy, north = north, W = def.x2 - def.x1, accent = def.accent, color = def.color }
-		function ctx.X(u) return def.x1 + u end
-		function ctx.Z(v) return north and (-48 - v) or (48 + v) end
-		function ctx.B(u, v, w, d, h, color, material, collide)
-			return box(folder, "Prop", def.x1 + u, fy + h / 2, ctx.Z(v), w, h, d, color, material, collide)
+		local c = { folder = folder, fy = fy, north = north, W = def.x2 - def.x1, D = D, accent = def.accent, color = def.color }
+		function c.X(u) return def.x1 + u end
+		function c.Z(v) return north and (-HZ - v) or (HZ + v) end
+		function c.B(u, v, w, d, h, color, material, collide)
+			return box(folder, "Prop", def.x1 + u, fy + h / 2, c.Z(v), w, h, d, color, material, collide)
 		end
-		function ctx.Vault(u, v, w, d, h, color, material)
-			local p = ctx.B(u, v, w, d, h, color, material, true)
+		function c.Vault(u, v, w, d, h, color, material)
+			local p = c.B(u, v, w, d, h, color, material, true)
 			p.Name = "VaultProp"
 			p:SetAttribute("Vaultable", true)
 			return p
 		end
-		function ctx.A(u, v, w, d, h, y, color, material)
-			return art(folder, "Detail", Vector3.new(w, h, d), Vector3.new(def.x1 + u, fy + y, ctx.Z(v)), color, material)
+		function c.A(u, v, w, d, h, y, color, material)
+			return art(folder, "Detail", Vector3.new(w, h, d), Vector3.new(def.x1 + u, fy + y, c.Z(v)), color, material)
 		end
-		function ctx.N(u, v, w, d, h, y, color)
-			return neon(folder, "Glow", def.x1 + u, fy + y, ctx.Z(v), w, h, d, color)
+		-- Art box with an X-axis tilt and Y rotation (screens, ramps, lids).
+		function c.R(u, v, y, w, d, h, tilt, color, material, yaw)
+			return art(folder, "Detail", Vector3.new(w, h, d), CFrame.new(def.x1 + u, fy + y, c.Z(v)) * CFrame.Angles(0, yaw or 0, 0) * CFrame.Angles(math.rad(tilt or 0), 0, 0), color, material)
 		end
-		function ctx.Sphere(u, v, y, size, color)
-			return sphere(folder, "Ball", Vector3.new(def.x1 + u, fy + y, ctx.Z(v)), Vector3.new(size, size, size), color)
+		function c.N(u, v, w, d, h, y, color)
+			return neon(folder, "Glow", def.x1 + u, fy + y, c.Z(v), w, h, d, color)
 		end
-		function ctx.Cyl(u, v, y, dia, h, color, material, collide)
-			return cylinder(folder, "Round", Vector3.new(def.x1 + u, fy + y, ctx.Z(v)), dia, h, color, material, collide)
+		function c.Sphere(u, v, y, size, color, material)
+			return sphere(folder, "Ball", Vector3.new(def.x1 + u, fy + y, c.Z(v)), Vector3.new(size, size, size), color, material)
 		end
-		function ctx.Shelf(u, v, sx, sz, h, color, accent, spine)
-			return shelf(folder, def.x1 + u, fy, ctx.Z(v), sx, sz, h, color, accent, spine)
+		function c.Cyl(u, v, y, dia, h, color, material, collide)
+			return cylinder(folder, "Round", Vector3.new(def.x1 + u, fy + y, c.Z(v)), dia, h, color, material, collide)
 		end
-		function ctx.Sign(text, u, v, y, w, h, color, backWall)
-			-- Faces the storefront opening.
-			return sign(folder, text, Vector3.new(def.x1 + u, fy + y, ctx.Z(v)), w, h, color, north and 0 or math.pi)
+		function c.Shelf(u, v, sx, sz, h, color, accent, spine)
+			return shelf(folder, def.x1 + u, fy, c.Z(v), sx, sz, h, color, accent, spine)
 		end
-		return ctx
+		function c.Sign(text, u, v, y, w, h, color)
+			return sign(folder, text, Vector3.new(def.x1 + u, fy + y, c.Z(v)), w, h, color, north and 0 or math.pi)
+		end
+		function c.Ring(u, v, y, radius, tiltX, color, segments)
+			ring(folder, "Ring", CFrame.new(def.x1 + u, fy + y, c.Z(v)) * CFrame.Angles(math.rad(tiltX or 90), 0, 0), radius, 0.18, color, Enum.Material.Neon, segments or 14)
+		end
+		-- Merchandise models: every item is a handful of real shapes, never one block.
+		function c.Sneaker(u, v, y, s, color, accent, yaw)
+			local cf = CFrame.new(def.x1 + u, fy + y, c.Z(v)) * CFrame.Angles(0, yaw or 0, 0)
+			art(folder, "SneakerSole", Vector3.new(0.95 * s, 0.22 * s, 2.7 * s), cf * CFrame.new(0, 0.11 * s, 0), P.white, Enum.Material.SmoothPlastic)
+			art(folder, "SneakerUpper", Vector3.new(0.85 * s, 0.6 * s, 1.5 * s), cf * CFrame.new(0, 0.52 * s, 0.55 * s), color, Enum.Material.SmoothPlastic)
+			sphere(folder, "SneakerToe", (cf * CFrame.new(0, 0.38 * s, -0.8 * s)).Position, Vector3.new(0.95 * s, 0.7 * s, 1.1 * s), color)
+			art(folder, "SneakerStripe", Vector3.new(0.9 * s, 0.14 * s, 1.2 * s), cf * CFrame.new(0, 0.4 * s, 0.35 * s), accent, Enum.Material.Neon)
+			art(folder, "SneakerTongue", Vector3.new(0.5 * s, 0.5 * s, 0.22 * s), cf * CFrame.new(0, 0.9 * s, 0.05 * s) * CFrame.Angles(math.rad(-25), 0, 0), P.white)
+		end
+		function c.Plush(u, v, y, s, color)
+			c.Sphere(u, v, y + 0.9 * s, 1.8 * s, color)
+			c.Sphere(u, v, y + 2.2 * s, 1.3 * s, color)
+			c.Sphere(u - 0.55 * s, v, y + 2.9 * s, 0.5 * s, color)
+			c.Sphere(u + 0.55 * s, v, y + 2.9 * s, 0.5 * s, color)
+			c.Sphere(u, v + (north and 0.5 or -0.5) * s, y + 2.1 * s, 0.5 * s, P.white)
+		end
+		-- Colored book spines in rows on a shelf, running along "u" or "v".
+		function c.Books(u, v, len, along, height, rows)
+			rows = rows or math.floor(height / 2.4)
+			local count = math.max(3, math.floor(len / 1.25))
+			for r = 1, rows do
+				for i = 1, count do
+					local off = -len / 2 + (i - 0.5) * len / count
+					local h = 1.4 + ((i * 7 + r * 3) % 5) * 0.18
+					local color = PAL[(i + r * 3) % #PAL + 1]
+					if along == "u" then
+						art(folder, "Book", Vector3.new(len / count * 0.8, h, 1.0), Vector3.new(def.x1 + u + off, fy + r * 2.3 + h / 2 - 1.0, c.Z(v)), color, Enum.Material.SmoothPlastic)
+					else
+						art(folder, "Book", Vector3.new(1.0, h, len / count * 0.8), Vector3.new(def.x1 + u, fy + r * 2.3 + h / 2 - 1.0, c.Z(v + off)), color, Enum.Material.SmoothPlastic)
+					end
+				end
+			end
+		end
+		function c.TV(u, v, y, w, h, color, yaw)
+			local cf = CFrame.new(def.x1 + u, fy + y, c.Z(v)) * CFrame.Angles(0, yaw or 0, 0)
+			art(folder, "TVFrame", Vector3.new(w + 0.3, h + 0.3, 0.4), cf, P.ink, Enum.Material.Metal)
+			local screen = art(folder, "TVScreen", Vector3.new(w, h, 0.1), cf * CFrame.new(0, 0, 0.22), color, Enum.Material.Neon)
+			screen.Transparency = 0.15
+		end
+		function c.Rack(u, v, len, along, colors)
+			local cf = CFrame.new(def.x1 + u, fy, c.Z(v)) * CFrame.Angles(0, along == "v" and math.pi / 2 or 0, 0)
+			art(folder, "RackBar", Vector3.new(len, 0.25, 0.25), cf * CFrame.new(0, 4.8, 0), P.steel, Enum.Material.Metal)
+			for _, e in ipairs({ -len / 2, len / 2 }) do
+				art(folder, "RackPost", Vector3.new(0.3, 4.8, 0.3), cf * CFrame.new(e, 2.4, 0), P.steel, Enum.Material.Metal)
+				art(folder, "RackFoot", Vector3.new(0.4, 0.2, 1.8), cf * CFrame.new(e, 0.1, 0), P.ink, Enum.Material.Metal)
+			end
+			local n = math.floor(len / 1.1)
+			for i = 1, n do
+				art(folder, "Garment", Vector3.new(0.9, 2.4 + (i % 3) * 0.3, 0.35), cf * CFrame.new(-len / 2 + (i - 0.5) * len / n, 3.4, 0), colors[(i - 1) % #colors + 1], Enum.Material.Fabric)
+			end
+		end
+		return c
 	end
 
 	local themes = {}
-	function themes.toy(c)
-		local rainbow = { P.coral, P.orange, P.yellow, P.green, P.cyan, P.purple }
-		for i = 1, 6 do c.A(c.W / 2, 8 + i * 3.2, 30, 1.2, 0.08, 0.14, rainbow[i], Enum.Material.SmoothPlastic) end
-		-- Ball pit with low walls and spheres.
-		c.B(9, 24, 13, 0.8, 1.6, P.pink); c.B(9, 30.5, 13, 0.8, 1.6, P.pink)
-		c.B(2.6, 27, 0.8, 5.8, 1.6, P.pink)
-		for i = 1, 10 do c.Sphere(4 + (i % 5) * 2.4, 25 + math.floor(i / 5) * 3, 1.3, 1.8, rainbow[(i % 6) + 1]) end
-		-- Big alphabet blocks (vaultable) and a teddy landmark.
-		for i, spec in ipairs({ { 36, 11, P.coral }, { 41, 21, P.cyan }, { 11, 9, P.yellow } }) do
-			local block = c.Vault(spec[1], spec[2], 3.6, 3.6, 3.6, spec[3], Enum.Material.SmoothPlastic)
-			c.N(spec[1], spec[2] - 1.85, 2.4, 0.1, 2.4, 1.8, P.white)
-		end
-		c.Sphere(40, 28, 3.4, 5.6, P.wood); c.Sphere(40, 28, 7, 3.6, P.wood)
-		c.Sphere(38.7, 28, 8.6, 1.3, P.wood); c.Sphere(41.3, 28, 8.6, 1.3, P.wood)
-		for i = 0, 3 do c.Shelf(14 + i * 9.5, 31, 8, 1.4, 6, P.white, rainbow[i + 1], rainbow[i + 3]) end
-		c.Sign("TOYS", c.W / 2, 30.2, 8.5, 12, 3, P.yellow)
-	end
 	function themes.sneaker(c)
-		c.Cyl(c.W / 2, 20, 1.1, 7.5, 2.2, P.white, Enum.Material.Marble)
-		c.N(c.W / 2, 20, 8, 8, 0.1, 2.25, P.cyan)
-		c.A(c.W / 2, 20, 4, 2, 1.3, 3, P.coral, Enum.Material.SmoothPlastic)
-		c.A(c.W / 2 + 1.3, 20, 1.8, 2, 2, 3.4, P.white, Enum.Material.SmoothPlastic)
-		for _, u in ipairs({ 8, 35 }) do c.B(u, 14, 8, 2.4, 1.4, P.navy, Enum.Material.SmoothPlastic); c.A(u, 14, 8, 2.4, 0.4, 1.5, P.cream, Enum.Material.Fabric) end
-		c.Vault(7, 26, 4, 3, 3.2, P.orange, Enum.Material.SmoothPlastic)
-		c.Vault(36, 8.5, 4, 3, 3.2, P.orange, Enum.Material.SmoothPlastic)
-		for i = 0, 3 do c.Shelf(8 + i * 9, 31, 8, 1.4, 8, P.ink, i % 2 == 0 and P.cyan or P.magenta) end
-		for _, v in ipairs({ 14, 21 }) do
-			c.Shelf(0.7, v + 4, 1.2, 8, 7, P.ink, P.cyan)
-			c.Shelf(c.W - 0.7, v + 4, 1.2, 8, 7, P.ink, P.magenta)
+		local W = c.W
+		-- Product wall: four lit bays of sneakers on glowing ledges.
+		for i = 0, 3 do
+			local u = 6 + i * (W - 12) / 3
+			c.Shelf(u, 39, 11, 1.4, 11, P.ink, i % 2 == 0 and P.cyan or P.magenta)
+			for row = 1, 3 do
+				c.A(u, 37.6, 10, 2, 0.2, row * 2.9, P.white, Enum.Material.SmoothPlastic)
+				for k = 0, 2 do
+					c.Sneaker(u - 3.2 + k * 3.2, 37.6, row * 2.9 + 0.1, 0.9, PAL[(i + row + k) % #PAL + 1], PAL[(i + k * 2) % #PAL + 1], math.pi)
+				end
+			end
 		end
-		c.Sign("SNKR", c.W / 2, 30.2, 11, 14, 3.2, P.white)
+		-- Showcase podium with a giant hero sneaker and a halo ring.
+		c.Cyl(W / 2, 22, 1.2, 10, 2.4, P.white, Enum.Material.Marble)
+		c.Cyl(W / 2, 22, 2.45, 10.6, 0.12, P.cyan, Enum.Material.Neon, false)
+		c.Sneaker(W / 2, 22, 2.5, 2.2, P.coral, P.yellow, math.rad(35))
+		c.Ring(W / 2, 22, 7.5, 5.5, 90, P.cyan, 16)
+		-- Benches and shoe-box crates: vault props with clear lanes between them.
+		for _, u in ipairs({ 8, W - 8 }) do
+			c.Vault(u, 20, 9, 2.8, 1.8, P.navy, Enum.Material.SmoothPlastic)
+			c.A(u, 20, 9, 2.8, 0.4, 1.9, P.cream, Enum.Material.Fabric)
+			c.Sneaker(u - 2, 20, 2.1, 0.8, PAL[(u) % #PAL + 1], P.white, math.rad(-20))
+		end
+		for _, spec in ipairs({ { 7, 33 }, { W - 7, 9 } }) do
+			c.Vault(spec[1], spec[2], 4.6, 4.6, 3.2, P.orange, Enum.Material.SmoothPlastic)
+			c.A(spec[1], spec[2], 4.7, 4.7, 0.5, 3.2, P.coral, Enum.Material.SmoothPlastic)
+		end
+		-- Side walls: shoe-box stacks and posters.
+		for _, side in ipairs({ 0.9, W - 0.9 }) do
+			local inward = side < 5 and 1 or -1
+			for _, v in ipairs({ 10, 20, 30 }) do
+				c.Shelf(side, v, 1.2, 7, 7.4, P.ink, P.cyan)
+				for row = 0, 2 do for k = -1, 1 do
+					c.A(side + inward * 1.2, v + k * 2.2, 1.3, 1.9, 0.8, row * 2.3 + 1.6, PAL[(row + k + v) % #PAL + 1], Enum.Material.SmoothPlastic)
+				end end
+			end
+			c.A(side + inward * 0.2, 25, 0.2, 7, 5, 11.5, P.ink, Enum.Material.SmoothPlastic)
+			c.N(side + inward * 0.35, 25, 0.1, 6.4, 4.4, 11.5, inward > 0 and P.magenta or P.cyan)
+		end
+		c.Sign("SNKR", W / 2, 39.2, 13.2, 14, 3, P.white)
 	end
-	function themes.electronics(c)
-		for _, u in ipairs({ 9, 34 }) do for _, v in ipairs({ 11, 23 }) do
-			local t = c.Vault(u, v, 8, 4, 3.2, P.white, Enum.Material.SmoothPlastic)
-			c.A(u, v, 3.2, 0.2, 1.8, 4.1, P.blue, Enum.Material.Neon)
-		end end
-		for i = 0, 4 do c.N(5 + i * 8.2, 31.2, 7, 0.15, 4.4, 7.5, i % 2 == 0 and P.blue or P.cyan) end
-		c.Vault(c.W / 2, 28, 12, 3, 3.4, P.ink, Enum.Material.Metal)
-		c.Shelf(0.7, 20, 1.2, 12, 7, P.ink, P.blue); c.Shelf(c.W - 0.7, 20, 1.2, 12, 7, P.ink, P.blue)
-		c.Sign("TECH+", c.W / 2, 30.2, 11.4, 14, 3, P.cyan)
-	end
+
 	function themes.clothing(c)
-		for i, spec in ipairs({ { 7, 9 }, { 7, 17 }, { 39, 9 }, { 39, 17 } }) do
-			c.A(spec[1], spec[2], 6, 0.3, 0.3, 4.4, P.steel, Enum.Material.Metal)
-			for k = 0, 3 do c.A(spec[1] - 2 + k * 1.3, spec[2], 1, 0.5, 2.6, 3, ({ P.coral, P.cyan, P.white, P.ink })[(k + i) % 4 + 1], Enum.Material.Fabric) end
-			c.A(spec[1] - 2.8, spec[2], 0.2, 0.2, 4.4, 2.2, P.steel, Enum.Material.Metal); c.A(spec[1] + 2.8, spec[2], 0.2, 0.2, 4.4, 2.2, P.steel, Enum.Material.Metal)
+		local W = c.W
+		local colors = { P.coral, P.cyan, P.white, P.ink, P.yellow, P.magenta }
+		for _, v in ipairs({ 10, 22, 34 }) do
+			c.Rack(4, v, 9, "v", colors)
+			c.Rack(W - 4, v, 9, "v", { P.blue, P.white, P.coral, P.green })
 		end
-		for _, u in ipairs({ 14, 24, 34 }) do mannequin(c.folder, c.X(u), c.fy, c.Z(26), u == 24 and P.coral or P.white) end
-		c.Vault(14, 14.5, 10, 4, 3, P.white, Enum.Material.SmoothPlastic)
-		c.Vault(34, 20, 10, 4, 3, P.white, Enum.Material.SmoothPlastic)
-		for i = 0, 2 do c.B(c.W - 1.6, 8 + i * 4.2, 1.2, 4, 8, P.navy, Enum.Material.SmoothPlastic); c.A(c.W - 2.3, 8 + i * 4.2, 0.2, 3.6, 7, 4, P.purple, Enum.Material.Fabric) end
-		c.Sign("NEXUS", c.W / 2, 30.2, 11, 14, 3, P.white)
+		c.Rack(W / 2 - 14, 30, 8, "u", { P.yellow, P.ink, P.cyan })
+		c.Rack(W / 2 + 14, 30, 8, "u", { P.magenta, P.white, P.ink })
+		for i, u in ipairs({ 9, 19, W - 19, W - 9 }) do
+			mannequin(c.folder, c.X(u), c.fy, c.Z(37), colors[i])
+			art(c.folder, "Jacket", Vector3.new(1.9, 1.4, 1.2), Vector3.new(c.X(u), c.fy + 2.7, c.Z(37)), PAL[i + 2], Enum.Material.Fabric)
+		end
+		for _, u in ipairs({ 19, W - 19 }) do
+			c.Vault(u, 16, 10, 4.4, 3, P.white, Enum.Material.SmoothPlastic)
+			for k = 0, 3 do c.A(u - 3.6 + k * 2.4, 16, 2, 2.6, 0.9 + (k % 2) * 0.4, 3.5, colors[(k + 1) % #colors + 1], Enum.Material.Fabric) end
+		end
+		for i = 0, 3 do
+			local u = 8 + i * (W - 16) / 3
+			c.A(u, 39.3, 4.6, 0.3, 8, 6, P.gold, Enum.Material.Metal)
+			c.A(u, 39.0, 4.0, 0.2, 7.2, 6, P.glass, Enum.Material.Glass).Transparency = 0.35
+		end
+		for i = 0, 2 do
+			c.A(1.5, 26 + i * 4.4, 0.3, 3.8, 7.6, 4.4, PAL[i + 3], Enum.Material.Fabric)
+			c.A(1.5, 26 + i * 4.4 + 2.1, 0.5, 0.4, 8.2, 4.4, P.gold, Enum.Material.Metal)
+		end
+		c.Sign("NEXUS", W / 2, 39.3, 11.6, 14, 3, P.white)
 	end
+
+	function themes.electronics(c)
+		local W = c.W
+		for i = 0, 5 do c.TV(5 + i * (W - 10) / 5, 39.4, 8.2, 6.4, 3.8, ({ P.blue, P.cyan, P.magenta, P.green, P.purple, P.coral })[i + 1], c.north and 0 or math.pi) end
+		for _, spec in ipairs({ { 9, 12 }, { W - 9, 12 }, { 9, 27 }, { W - 9, 27 } }) do
+			local u, v = spec[1], spec[2]
+			c.Vault(u, v, 8.4, 4.2, 3.2, P.white, Enum.Material.SmoothPlastic)
+			for k = -1, 1, 2 do
+				c.A(u + k * 2.2, v, 2.4, 1.7, 0.16, 3.3, P.steel, Enum.Material.Metal)
+				c.R(u + k * 2.2, v + (c.north and -0.8 or 0.8), 4.1, 2.4, 0.1, 1.6, c.north and -15 or 15, P.cyan, Enum.Material.Neon)
+			end
+			for k = 0, 3 do
+				c.A(u - 3 + k * 0.8, v + 1.4, 0.55, 1.0, 0.1, 3.3, P.ink, Enum.Material.SmoothPlastic)
+				c.N(u - 3 + k * 0.8, v + 1.4, 0.45, 0.8, 0.05, 3.36, PAL[k + 1])
+			end
+			c.A(u + 2.8, v + 1.4, 1.6, 0.3, 0.25, 3.5, P.ink, Enum.Material.SmoothPlastic)
+			c.Cyl(u + 2.1, v + 1.4, 3.7, 0.9, 0.4, P.magenta, Enum.Material.SmoothPlastic, false)
+			c.Cyl(u + 3.5, v + 1.4, 3.7, 0.9, 0.4, P.magenta, Enum.Material.SmoothPlastic, false)
+		end
+		for _, u in ipairs({ 7, W - 7 }) do
+			local inward = u < 20 and 1 or -1
+			c.Vault(u, 35, 8, 3.6, 3, P.ink, Enum.Material.Metal)
+			c.A(u, 35.8, 6, 0.4, 2.6, 5, P.ink, Enum.Material.Metal)
+			c.A(u, 35.55, 5.6, 0.1, 2.2, 5, PAL[(u) % #PAL + 1], Enum.Material.Neon).Transparency = 0.1
+			c.N(u, 33.9, 3.4, 0.9, 0.08, 3.1, P.magenta)
+			c.A(u + inward * 3.4, 35.4, 1.3, 1.9, 2.6, 4.4, P.ink, Enum.Material.Metal)
+			c.N(u + inward * 4.05, 35.4, 0.08, 1.4, 2.2, 4.4, P.cyan)
+			c.A(u, 31, 2.2, 2.2, 0.4, 1.7, P.coral, Enum.Material.Fabric)
+			c.A(u, 30.2, 2.2, 0.3, 2.4, 2.9, P.coral, Enum.Material.Fabric)
+		end
+		c.Cyl(W / 2, 21, 2.2, 5, 4.4, P.ink, Enum.Material.Metal)
+		c.N(W / 2, 21, 5.2, 5.2, 0.1, 4.45, P.cyan)
+		c.Ring(W / 2, 21, 7.5, 2.6, 80, P.cyan, 14)
+		c.Sign("TECH+", W / 2, 39.3, 12.4, 14, 3, P.cyan)
+	end
+
+	function themes.toy(c)
+		local W = c.W
+		for i = 1, 7 do c.A(W / 2, 4 + i * 4.8, W - 4, 1.4, 0.08, 0.14, PAL[i], Enum.Material.SmoothPlastic) end
+		-- Ball pit with a gap in its front wall.
+		c.B(10, 24, 8, 0.8, 1.6, P.pink); c.B(10, 38, 14, 0.8, 1.6, P.pink)
+		c.B(3.4, 31, 0.8, 14, 1.6, P.pink); c.B(16.6, 31, 0.8, 14, 1.6, P.pink)
+		for i = 1, 16 do c.Sphere(5 + (i % 5) * 2.4, 26.5 + math.floor(i / 5) * 3, 1.3, 1.9, PAL[(i % #PAL) + 1]) end
+		-- Alphabet blocks (vaultable) with real lettering.
+		for i, spec in ipairs({ { 30, 12, "A" }, { 40, 22, "B" }, { 22, 10, "C" } }) do
+			local block = c.Vault(spec[1], spec[2], 4, 4, 4, PAL[i * 2], Enum.Material.SmoothPlastic)
+			surfaceText(block, Enum.NormalId.Front, spec[3], P.white, 40, 0.8, 0.8)
+			surfaceText(block, Enum.NormalId.Back, spec[3], P.white, 40, 0.8, 0.8)
+		end
+		-- Plush shelves.
+		for i = 0, 4 do
+			local u = 6 + i * (W - 12) / 4
+			c.Shelf(u, 39, 9, 1.4, 9.5, P.white, PAL[i + 1])
+			for row = 1, 3 do c.A(u, 37.6, 8.6, 2, 0.2, row * 2.9, P.cream, Enum.Material.SmoothPlastic) for k = -1, 1 do c.Plush(u + k * 2.8, 37.6, row * 2.9 + 0.1, 0.55, PAL[(i + row + k) % #PAL + 1]) end end
+		end
+		-- Giant teddy bear landmark.
+		c.Sphere(W - 9, 30, 3.4, 6.4, P.wood); c.Sphere(W - 9, 30, 7.4, 4.2, P.wood)
+		c.Sphere(W - 10.9, 30, 9.5, 1.5, P.wood); c.Sphere(W - 7.1, 30, 9.5, 1.5, P.wood)
+		c.Sphere(W - 9, 28.2, 7.1, 1.6, P.cream); c.Sphere(W - 9, 27.7, 7.3, 0.6, P.ink)
+		c.Sphere(W - 12.5, 28.5, 4.4, 2.2, P.wood); c.Sphere(W - 5.5, 28.5, 4.4, 2.2, P.wood)
+		-- Train set looping around a toy town.
+		c.Ring(W - 14, 12, 0.5, 6, 90, P.wood, 16)
+		for i = 0, 3 do c.A(W - 14 + 6, 12 - i * 2.2, 1.6, 2, 1.6, 1.3, PAL[i + 2], Enum.Material.SmoothPlastic) end
+		-- Lollipop sculptures.
+		for i, u in ipairs({ 21, 34, 46 }) do
+			c.Cyl(u, 35, 3, 0.4, 6, P.white, Enum.Material.SmoothPlastic, false)
+			local candy = c.Cyl(u, 35, 6.8, 3.4, 0.5, PAL[i + 3], Enum.Material.SmoothPlastic, false)
+			c.Cyl(u, 35, 7.1, 2.2, 0.3, P.white, Enum.Material.SmoothPlastic, false)
+			candy.Name = "Candy"
+		end
+		c.Sign("TOYS", W / 2, 39.3, 12.6, 15, 3, P.yellow)
+	end
+
 	function themes.book(c)
-		-- Tall shelving forms lanes at least six studs wide.
-		for _, u in ipairs({ 7, 36 }) do c.Shelf(u, 17, 1.6, 20, 9.5, P.wood, P.gold, P.coral) end
-		for _, u in ipairs({ 11, 32 }) do c.Shelf(u, 24, 6, 1.6, 8, P.wood, P.gold, P.teal) end
-		for i = 0, 3 do c.Shelf(7 + i * 9.8, 31, 8, 1.4, 11, P.wood, P.gold, P.purple) end
-		c.Vault(c.W / 2, 20, 6, 6, 3, P.cream, Enum.Material.Wood)
-		for _, d in ipairs({ { 17.5, 17 }, { 25.5, 23 } }) do c.A(d[1], d[2], 2.5, 2.5, 1.4, 1, P.coral, Enum.Material.Fabric) end
-		c.Sign("PAGES", c.W / 2, 30.2, 12.2, 12, 2.8, P.gold)
+		local W = c.W
+		for _, u in ipairs({ 9, W - 9 }) do
+			c.Shelf(u, 19, 1.8, 24, 10, P.wood, P.gold)
+			c.Books(u - 1.1, 19, 24, "v", 10, 4)
+			c.Books(u + 1.1, 19, 24, "v", 10, 4)
+		end
+		for i = 0, 2 do
+			local u = 8 + i * (W - 16) / 2
+			c.Shelf(u, 39, 12, 1.6, 11.5, P.wood, P.gold)
+			c.Books(u, 38.1, 11, "u", 11.5, 4)
+		end
+		-- Reading nook: round table (vaultable) with a lamp and two armchairs.
+		c.Vault(W / 2, 28, 6, 6, 3.2, P.cream, Enum.Material.Wood)
+		c.A(W / 2, 28, 5.6, 4, 0.2, 3.3, P.white, Enum.Material.SmoothPlastic)
+		c.Cyl(W / 2 + 1.6, 28, 5.2, 0.3, 3.4, P.gold, Enum.Material.Metal, false)
+		c.Cyl(W / 2 + 1.6, 28, 7.2, 1.8, 1.2, P.cream, Enum.Material.Fabric, false)
+		for _, d in ipairs({ { -5.5, 28 }, { 5.5, 28 } }) do
+			c.A(W / 2 + d[1], d[2], 3.2, 3.2, 1.2, 1.2, P.coral, Enum.Material.Fabric)
+			c.A(W / 2 + d[1] + (d[1] < 0 and -1.4 or 1.4), d[2], 0.6, 3.2, 2.6, 2.3, P.coral, Enum.Material.Fabric)
+		end
+		-- Display island with face-out new releases.
+		c.Vault(W / 2, 12, 9, 4, 3, P.wood, Enum.Material.Wood)
+		for k = -2, 2 do c.R(W / 2 + k * 1.7, 12, 3.9, 1.4, 0.15, 2, 70, PAL[(k + 3) % #PAL + 1], Enum.Material.SmoothPlastic) end
+		c.A(W - 8, 7, 2.4, 3, 9, 4.5, P.wood, Enum.Material.Wood)
+		c.Sign("PAGES", W / 2, 39.3, 13.2, 12, 2.8, P.gold)
 	end
+
 	function themes.convenience(c)
+		local W = c.W
+		-- Glass-door refrigerators along the back wall, stocked with drinks.
 		for i = 0, 3 do
-			c.B(6 + i * 9.4, 31, 8, 1.6, 7.6, P.white, Enum.Material.Metal)
-			c.N(6 + i * 9.4, 30.1, 7.2, 0.1, 6.8, 4, P.cyan)
+			local u = 6 + i * (W - 12) / 3
+			c.B(u, 39, 10, 2, 9, P.ink, Enum.Material.Metal)
+			c.A(u, 37.9, 9, 0.2, 7.8, 4.6, P.glass, Enum.Material.Glass).Transparency = 0.55
+			for row = 1, 3 do
+				c.A(u, 38, 8.6, 1.2, 1.4, row * 2.2 + 0.4, ({ P.red, P.cyan, P.yellow, P.green })[(i + row) % 4 + 1], Enum.Material.SmoothPlastic)
+				c.N(u, 37.6, 8.8, 0.1, 0.1, row * 2.2 - 0.5, P.white)
+			end
 		end
-		c.Vault(12, 15, 12, 2, 4.2, P.coral, Enum.Material.SmoothPlastic)
-		c.Vault(32, 21, 12, 2, 4.2, P.yellow, Enum.Material.SmoothPlastic)
-		c.Vault(c.W - 6, 6, 8, 3, 3.4, P.white, Enum.Material.SmoothPlastic)
-		c.A(c.W - 6, 6, 1.4, 1.2, 1, 3.8, P.cyan, Enum.Material.Neon)
-		c.Sign("QUIK", c.W / 2, 30.2, 11, 12, 3, P.yellow)
+		-- Low snack aisles (vaultable) with product stripes and price tags.
+		for _, spec in ipairs({ { 12, 16 }, { W - 12, 24 } }) do
+			c.Vault(spec[1], spec[2], 13, 2.2, 4.2, P.white, Enum.Material.SmoothPlastic)
+			for k = 0, 3 do c.A(spec[1] - 5 + k * 3.3, spec[2] + (c.north and 1.15 or -1.15), 2.8, 0.2, 1.1, 3.0, PAL[(k + spec[1]) % #PAL + 1], Enum.Material.SmoothPlastic) end
+			c.N(spec[1], spec[2], 12.6, 2.4, 0.12, 4.25, P.yellow)
+		end
+		-- Checkout with register, candy rack and a basket stack.
+		c.B(W - 7, 7, 9, 3, 3.4, P.white, Enum.Material.SmoothPlastic)
+		c.A(W - 7, 7, 8.6, 2.6, 0.3, 3.5, P.ink, Enum.Material.SmoothPlastic)
+		c.A(W - 9, 7, 1.8, 1.4, 1.2, 4.2, P.ink, Enum.Material.Metal)
+		c.N(W - 9, 7 + (c.north and 0.7 or -0.7), 1.4, 0.05, 0.6, 4.4, P.green)
+		for k = 0, 2 do c.A(W - 4.5, 7, 1.2, 1.2, 1.1, 4.0 + k * 0.5, PAL[k + 2], Enum.Material.SmoothPlastic) end
+		-- Freezer chest and a slushie machine.
+		c.Vault(6, 8, 6, 3.4, 2.4, P.cyan, Enum.Material.SmoothPlastic)
+		c.A(6, 8, 5.6, 3, 0.2, 2.5, P.glass, Enum.Material.Glass).Transparency = 0.4
+		c.B(6, 22, 3.2, 3.2, 6, P.ink, Enum.Material.Metal)
+		for k = 0, 2 do c.A(6, 22, 2.6, 2.6, 1.3, 2 + k * 1.5, PAL[k * 2 + 1], Enum.Material.Neon).Transparency = 0.3 end
+		c.N(W / 2, 39.1, 16, 0.1, 0.5, 11.4, P.red)
+		c.Sign("QUIK", W / 2, 39.3, 13.2, 12, 3, P.yellow)
 	end
+
 	function themes.sports(c)
-		for i, h in ipairs({ 2.2, 3.4, 4.4 }) do c.Vault(8 + i * 8, 14 + (i % 2) * 5, 6, 5, h, i == 2 and P.orange or P.blue, Enum.Material.SmoothPlastic) end
-		c.B(c.W - 3, 24, 1, 8, 7, P.ink, Enum.Material.SmoothPlastic)
-		for i = 1, 6 do c.A(c.W - 3.7, 21 + i * 1.1, 0.3, 1.1, 1.1, 2 + i * 0.9, ({ P.coral, P.yellow, P.cyan })[i % 3 + 1], Enum.Material.SmoothPlastic) end
-		-- Basketball hoop on the back wall.
-		c.A(c.W / 2, 31.4, 5, 0.3, 3.4, 11, P.white, Enum.Material.SmoothPlastic)
-		c.Cyl(c.W / 2, 29.8, 10, 2.2, 0.15, P.orange, Enum.Material.Neon, false)
-		for _, v in ipairs({ 14, 22 }) do c.Shelf(0.9, v, 1.2, 6, 6, P.ink, P.orange) end
-		c.Sign("APEX", c.W / 2, 31.4, 13.5, 12, 2.8, P.orange)
+		local W = c.W
+		-- Half basketball court with a hoop and a ball rack.
+		c.A(W - 14, 24, 18, 15, 0.1, 0.12, P.orange, Enum.Material.SmoothPlastic)
+		c.A(W - 14, 24, 17, 0.25, 0.12, 0.2, P.white, Enum.Material.SmoothPlastic)
+		c.Ring(W - 14, 24, 0.25, 4, 90, P.white, 12)
+		c.B(W - 3, 24, 0.8, 0.8, 10.4, P.steel, Enum.Material.Metal)
+		c.A(W - 3.6, 24, 0.3, 6.4, 4, 11.2, P.white, Enum.Material.Glass).Transparency = 0.3
+		c.Ring(W - 5.2, 24, 9.6, 1.1, 90, P.orange, 10)
+		for i = 0, 5 do c.Sphere(7 + i * 1.9, 5, 0.9 + (i % 2) * 1.7, 1.8, P.orange) end
+		c.Sphere(8, 5, 3.8, 1.8, P.orange)
+		-- Jersey wall.
+		for i = 0, 5 do
+			local u = 6 + i * (W - 12) / 5
+			c.A(u, 39.3, 4, 0.3, 5, 7, P.ink, Enum.Material.SmoothPlastic)
+			c.A(u, 39.0, 3.2, 0.2, 4, 7, PAL[i + 1], Enum.Material.Fabric)
+			c.A(u, 38.9, 1.2, 0.2, 4, 7, P.white, Enum.Material.Fabric)
+		end
+		-- Treadmills and parkour boxes (all vaultable).
+		for _, v in ipairs({ 12, 26 }) do
+			c.Vault(8, v, 4, 8, 3.2, P.ink, Enum.Material.Metal)
+			c.N(8, v, 3.4, 7.4, 0.1, 3.25, P.cyan)
+			c.A(8, v - 3.6, 3.6, 0.6, 2.2, 4.4, P.ink, Enum.Material.Metal)
+		end
+		for i, h in ipairs({ 2.2, 3.4, 4.4 }) do c.Vault(18 + i * 8, 10 + i * 5, 6.6, 5.4, h, i == 2 and P.orange or P.blue, Enum.Material.SmoothPlastic) end
+		-- Climbing wall with colored holds, boxing bag, mannequins in team kit.
+		c.A(20, 39.4, 22, 0.4, 10, 6.4, P.ink, Enum.Material.SmoothPlastic)
+		for i = 1, 14 do c.Sphere(11 + (i * 7) % 20, 39.0, 2 + (i * 5) % 9, 0.9, PAL[i % #PAL + 1]) end
+		c.Cyl(W - 8, 36, 7.4, 1.6, 4, P.red, Enum.Material.Fabric, false)
+		artBeam(c.folder, "BagChain", Vector3.new(c.X(W - 8), c.fy + 14, c.Z(36)), Vector3.new(c.X(W - 8), c.fy + 9.4, c.Z(36)), 0.12, P.steel, Enum.Material.Metal)
+		for i, u in ipairs({ 36, 44 }) do mannequin(c.folder, c.X(u), c.fy, c.Z(34), PAL[i + 4]) end
+		c.Sign("APEX", W / 2, 39.4, 13.6, 14, 2.8, P.orange)
 	end
+
 	function themes.jewelry(c)
-		for _, spec in ipairs({ { 8, 10, 3, 10 }, { c.W - 8, 10, 3, 10 }, { c.W / 2, 25, 14, 3 } }) do
-			local case = c.Vault(spec[1], spec[2], spec[3], spec[4], 3.4, P.white, Enum.Material.SmoothPlastic)
-			c.A(spec[1], spec[2], spec[3] - 0.4, spec[4] - 0.4, 0.2, 3.6, P.glass, Enum.Material.Glass).Transparency = 0.5
-			c.N(spec[1], spec[2], 0.8, 0.8, 0.12, 3.8, P.gold)
+		local W = c.W
+		-- Glass display cases with rings and necklaces (vaultable), arranged as a U.
+		for i, spec in ipairs({ { 8, 10, 3, 10 }, { W - 8, 10, 3, 10 }, { W / 2 - 9, 30, 10, 3 }, { W / 2 + 9, 30, 10, 3 }, { 8, 28, 3, 8 }, { W - 8, 28, 3, 8 } }) do
+			c.Vault(spec[1], spec[2], spec[3], spec[4], 3.4, P.white, Enum.Material.SmoothPlastic)
+			c.A(spec[1], spec[2], spec[3] - 0.4, spec[4] - 0.4, 0.3, 3.7, P.glass, Enum.Material.Glass).Transparency = 0.45
+			for k = 0, 2 do
+				c.Sphere(spec[1] + (spec[3] > spec[4] and (k - 1) * 2.4 or 0), spec[2] + (spec[3] > spec[4] and 0 or (k - 1) * 2.4), 3.7, 0.7, i % 2 == 0 and P.cyan or P.pink, Enum.Material.Glass)
+				c.Cyl(spec[1] + (spec[3] > spec[4] and (k - 1) * 2.4 or 0), spec[2] + (spec[3] > spec[4] and 0 or (k - 1) * 2.4), 3.55, 0.8, 0.2, P.gold, Enum.Material.Metal, false)
+			end
+			c.N(spec[1], spec[2], 0.8, 0.8, 0.12, 3.5, P.gold)
 		end
-		c.Cyl(c.W / 2, 17, 11.6, 9, 0.3, P.gold, Enum.Material.Neon, false)
-		c.Cyl(c.W / 2, 17, 11.2, 5.5, 0.3, P.cyan, Enum.Material.Neon, false)
-		c.Sphere(c.W / 2, 17, 10.2, 2, P.glass)
-		c.A(c.W / 2, 31.4, 20, 0.3, 8, 7, P.purple, Enum.Material.Fabric)
-		c.Sign("LUXE", c.W / 2, 30.9, 12.2, 12, 2.8, P.gold)
+		-- Chandelier: three neon rings with hanging crystals.
+		for i, r in ipairs({ 6, 4, 2 }) do c.Ring(W / 2, 20, 11.6 - i * 0.7, r, 90, i == 2 and P.cyan or P.gold, 16) end
+		for i = 1, 10 do
+			local a = i * math.pi / 5
+			c.A(W / 2 + math.cos(a) * 6, 20 + math.sin(a) * 6, 0.5, 0.5, 1.4, 10.4, P.glass, Enum.Material.Glass)
+		end
+		artBeam(c.folder, "ChandelierRod", Vector3.new(c.X(W / 2), c.fy + 14.6, c.Z(20)), Vector3.new(c.X(W / 2), c.fy + 11.2, c.Z(20)), 0.2, P.gold, Enum.Material.Metal)
+		-- Display busts on pedestals along the back wall, velvet drapes and a mirror.
+		for i, u in ipairs({ 7, 17, W - 17, W - 7 }) do
+			c.Cyl(u, 38, 1.4, 2.6, 2.8, P.white, Enum.Material.Marble)
+			c.Sphere(u, 38, 4, 1.8, P.cream)
+			c.A(u, 38, 2.2, 0.4, 0.5, 3.2, P.gold, Enum.Material.Metal)
+			c.Sphere(u, 38, 3.0, 0.7, i % 2 == 0 and P.cyan or P.pink, Enum.Material.Glass)
+		end
+		c.A(W / 2, 39.4, 12, 0.3, 10, 6.5, P.gold, Enum.Material.Metal)
+		c.A(W / 2, 39.1, 11, 0.2, 9, 6.5, P.glass, Enum.Material.Glass).Transparency = 0.35
+		for _, u in ipairs({ 2, W - 2 }) do c.A(u, 38, 2.6, 2, 11, 6.5, P.purple, Enum.Material.Fabric) end
+		c.Sign("LUXE", W / 2, 39.4, 13.2, 12, 2.8, P.gold)
 	end
+
 	function themes.beauty(c)
-		for _, spec in ipairs({ { 9, 11 }, { c.W - 9, 11 }, { c.W / 2, 23 } }) do
-			c.Vault(spec[1], spec[2], 5, 5, 3.2, P.pink, Enum.Material.SmoothPlastic)
-			c.Cyl(spec[1], spec[2], 3.4, 4.2, 0.2, P.white, Enum.Material.Metal, false)
-			c.N(spec[1], spec[2], 0.7, 0.7, 0.4, 3.8, P.magenta)
+		local W = c.W
+		-- Vanity stations: counter, round lit mirror, stool.
+		for _, u in ipairs({ 9, W / 2, W - 9 }) do
+			c.Vault(u, 14, 7, 3.2, 3.2, P.pink, Enum.Material.SmoothPlastic)
+			c.A(u, 14, 6.6, 2.8, 0.2, 3.3, P.white, Enum.Material.SmoothPlastic)
+			c.Ring(u, 15.8, 6.4, 2.2, 0, P.magenta, 14)
+			c.A(u, 15.9, 3.6, 0.2, 3.6, 6.4, P.glass, Enum.Material.Glass).Transparency = 0.3
+			c.Cyl(u, 11, 1.2, 1.8, 2.4, P.coral, Enum.Material.Fabric, false)
+			for k = -1, 1 do c.Cyl(u + k * 1.6, 14, 4.0, 0.6, 1.2, PAL[(k + u) % #PAL + 1], Enum.Material.Glass, false) end
 		end
+		-- Perfume wall: bottles in three rows.
 		for i = 0, 3 do
-			local mirror = disc(c.folder, "Mirror", CFrame.new(c.X(7 + i * 9.4), c.fy + 8, c.Z(31.3)) * CFrame.Angles(0, c.north and 0 or math.pi, 0), 4.6, 0.3, P.white, Enum.Material.Glass)
-			neon(c.folder, "MirrorGlow", c.X(7 + i * 9.4), c.fy + 8, c.Z(31.0), 5, 5, 0.1, P.pink)
+			local u = 6 + i * (W - 12) / 3
+			c.Shelf(u, 39, 10, 1.4, 10, P.white, P.magenta)
+			for row = 1, 3 do
+				c.A(u, 37.8, 9, 1.8, 0.2, row * 2.9, P.pink, Enum.Material.SmoothPlastic)
+				for k = -1, 1 do
+					local col = PAL[(i + row + k + 8) % #PAL + 1]
+					c.Cyl(u + k * 2.8, 37.8, row * 2.9 + 1.0, 1.5, 1.8, col, Enum.Material.Glass, false)
+					c.Cyl(u + k * 2.8, 37.8, row * 2.9 + 2.1, 0.7, 0.5, P.gold, Enum.Material.Metal, false)
+				end
+			end
 		end
-		c.Cyl(c.W - 4, 27, 3.6, 1.8, 7.2, P.magenta, Enum.Material.SmoothPlastic, true)
-		c.Cyl(c.W - 4, 27, 8.2, 1.6, 2.6, P.red, Enum.Material.SmoothPlastic, false)
-		c.Sign("GLOW", c.W / 2, 30.2, 12.2, 12, 2.8, P.pink)
+		-- Giant lipstick sculptures and pastel balloons.
+		for i, u in ipairs({ 5, W - 5 }) do
+			c.Cyl(u, 28, 3.4, 2.2, 6.8, P.magenta, Enum.Material.SmoothPlastic, true)
+			c.Cyl(u, 28, 7.8, 1.8, 2.4, i == 1 and P.red or P.coral, Enum.Material.SmoothPlastic, false)
+			c.Cyl(u, 28, 9.2, 1.8, 0.8, P.gold, Enum.Material.Metal, false)
+		end
+		for i = 1, 8 do c.Sphere(W / 2 - 14 + i * 3.4, 24 + (i % 3) * 3, 12.2 + (i % 2) * 0.8, 1.8, PAL[(i * 3) % #PAL + 1]) end
+		c.Sign("GLOW", W / 2, 39.4, 13.2, 12, 2.8, P.pink)
 	end
 
 	local function buildStore(def)
@@ -846,34 +1074,36 @@ function MapBuilder.Build(options)
 		local north = def.row == "N"
 		local fy = def.floor
 		local ceil = fy == 0 and F2 - 1.2 or 30
-		local frontZ = north and -48 or 48
+		local frontZ = north and -HZ or HZ
 		local dir = north and -1 or 1
 		local W = def.x2 - def.x1
 		local cx = (def.x1 + def.x2) / 2
 		local faceRot = north and 0 or math.pi
 		if not def.enter then
 			-- Dressed storefront: a solid block with glazing, display lighting, and a bold sign.
-			box(folder, "ShopBlock", cx, fy + (ceil - fy) / 2, frontZ + dir * 16, W - 1, ceil - fy, 32, P.white, Enum.Material.Concrete)
+			box(folder, "ShopBlock", cx, fy + (ceil - fy) / 2, frontZ + dir * D / 2, W - 1, ceil - fy, D, P.white, Enum.Material.Concrete)
 			box(folder, "ShopPlinth", cx, fy + 0.6, frontZ - dir * 0.5, W - 1, 1.2, 1.2, def.color, Enum.Material.Marble, false):SetAttribute("VisualPolish", true)
-			for i = 0, 2 do
-				local gx = def.x1 + 5 + i * (W - 10) / 3 + (W - 10) / 6
-				glassBox(folder, "DisplayGlass", gx, fy + 6.4, frontZ - dir * 0.2, (W - 12) / 3, 9, 0.3, 0.35, false, P.glass)
-				neon(folder, "DisplayGlow", gx, fy + 11.2, frontZ - dir * 0.55, (W - 12) / 3, 0.2, 0.2, i % 2 == 0 and def.accent or P.gold)
+			local panes = W > 50 and 4 or 3
+			for i = 0, panes - 1 do
+				local gx = def.x1 + 4 + (i + 0.5) * (W - 8) / panes
+				local pw = (W - 8) / panes - 2
+				glassBox(folder, "DisplayGlass", gx, fy + 6.4, frontZ - dir * 0.2, pw, 9, 0.3, 0.35, false, P.glass)
+				neon(folder, "DisplayGlow", gx, fy + 11.2, frontZ - dir * 0.55, pw, 0.2, 0.2, i % 2 == 0 and def.accent or P.gold)
 				art(folder, "DisplayBox", Vector3.new(3, 3, 1), Vector3.new(gx, fy + 2.8, frontZ - dir * 1.4), def.color, Enum.Material.SmoothPlastic)
+				mannequin(folder, gx, fy + 1.2, frontZ - dir * 2.2, i % 2 == 0 and def.accent or P.white)
 			end
 			sign(folder, def.sign, Vector3.new(cx, fy + 13, frontZ - dir * 0.6), math.min(W - 8, 24), 3.2, def.accent, faceRot)
 			return folder
 		end
-		local ctx = storeCtx(def, folder)
-		-- Carpet and ceiling lights.
-		art(folder, "Carpet", Vector3.new(W - 1.2, 0.1, 31), Vector3.new(cx, fy + 0.1, frontZ + dir * 16.2), def.color:Lerp(P.white, 0.4), Enum.Material.Fabric)
+		local c = storeCtx(def, folder)
+		art(folder, "Carpet", Vector3.new(W - 1.2, 0.1, D - 1), Vector3.new(cx, fy + 0.1, frontZ + dir * D / 2), def.color:Lerp(P.white, 0.4), Enum.Material.Fabric)
 		art(folder, "CarpetBorder", Vector3.new(W - 1.2, 0.12, 1), Vector3.new(cx, fy + 0.11, frontZ + dir * 3), def.accent, Enum.Material.SmoothPlastic)
-		for i = 1, 3 do ceilingStrip(folder, cx, ceil - 0.2, frontZ + dir * (6 + i * 7.5), W - 8, 0.8, i % 2 == 0 and def.accent or P.white) end
-		-- Front: kick wall, glazing either side of a 16 stud opening, and a header band.
-		local open = 16
+		for i = 1, 4 do ceilingStrip(folder, cx, ceil - 0.2, frontZ + dir * (6 + i * 7.5), W - 8, 0.8, i % 2 == 0 and def.accent or nil) end
+		-- Front: kick wall, glazing either side of the opening, and a header band.
+		local open = 20
 		for _, side in ipairs({ -1, 1 }) do
-			local mid = cx + side * (open / 2 + (W / 2 - open / 2) / 2)
 			local span = W / 2 - open / 2
+			local mid = cx + side * (open / 2 + span / 2)
 			box(folder, "KickWall", mid, fy + 0.6, frontZ, span, 1.2, 0.8, def.color, Enum.Material.Marble)
 			glassBox(folder, "ShopWindow", mid, fy + 6.6, frontZ, span - 0.6, 10, 0.3, 0.45, true, P.glass)
 			artBeam(folder, "Mullion", Vector3.new(mid, fy + 1.2, frontZ), Vector3.new(mid, fy + 11.6, frontZ), 0.3, def.accent, Enum.Material.Metal)
@@ -882,18 +1112,16 @@ function MapBuilder.Build(options)
 		neon(folder, "OpeningTopGlow", cx, fy + 11.4, frontZ, open + 0.6, 0.25, 0.5, def.accent)
 		box(folder, "HeaderBand", cx, (fy + 11.6 + ceil) / 2, frontZ, W, ceil - fy - 11.6, 0.8, P.white, Enum.Material.Concrete)
 		sign(folder, def.sign, Vector3.new(cx, fy + 13, frontZ - dir * 0.6), 18, 3.2, def.accent, faceRot)
-		-- Projecting blade sign for sightlines along the corridor.
 		local blade = box(folder, "BladeSign", def.x1 + 1.5, fy + 8, frontZ - dir * 1.8, 0.4, 5, 3, P.ink, Enum.Material.SmoothPlastic, false)
 		blade:SetAttribute("VisualPolish", true)
 		surfaceText(blade, Enum.NormalId.Right, string.sub(def.sign, 1, 1), def.accent, 40, 0.9, 0.9)
 		surfaceText(blade, Enum.NormalId.Left, string.sub(def.sign, 1, 1), def.accent, 40, 0.9, 0.9)
-		light(folder, Vector3.new(cx, ceil - 0.4, frontZ + dir * 14), def.accent, 0.7, 30)
+		light(folder, Vector3.new(cx, ceil - 0.4, frontZ + dir * 18), def.accent, 0.8, 44)
 		local theme = themes[def.theme]
-		if theme then theme(ctx) end
+		if theme then theme(c) end
 		return folder
 	end
 
-	-- Row layouts: slot index -> store definition.
 	local slotX = {}
 	for i = 1, 5 do slotX[i] = { boundariesX[i], boundariesX[i + 1] } end
 	local layout = {
@@ -914,43 +1142,33 @@ function MapBuilder.Build(options)
 			{ "ECHO", "ECHO", nil, P.navy, P.cyan, false }, { "HALO", "HALO", nil, P.gold, P.white, false },
 			{ "AXIS", "AXIS", nil, P.green, P.cyan, false } } },
 	}
-	local storeCount = 0
 	for _, rowDef in ipairs(layout) do
 		local fy, north = rowDef.floor, rowDef.row == "N"
 		local ceil = fy == 0 and F2 - 1.2 or 30
-		local z1, z2 = north and -80 or 48, north and -48 or 80
+		local z1, z2 = north and -OZ or HZ, north and -HZ or OZ
 		local stores = {}
 		for i, entry in ipairs(rowDef.list) do
 			local def = { name = rowDef.row .. fy .. "_" .. entry[1], sign = entry[2], theme = entry[3], color = entry[4], accent = entry[5], enter = entry[6],
 				x1 = slotX[i][1], x2 = slotX[i][2], floor = fy, row = rowDef.row }
 			stores[i] = def
-			if def.enter then
-				buildStore(def)
-				storeCount += 1
-			else
-				buildStore(def)
-			end
+			buildStore(def)
 		end
-		-- Dividing walls: enterable neighbours connect with an offset side door, so stores chain into loops.
+		-- Dividing walls: enterable neighbours connect with an offset door (alternating depth).
 		for i = 2, 5 do
 			local x = boundariesX[i]
 			local gaps = {}
 			if stores[i - 1].enter and stores[i].enter then
-				local v = (i % 2 == 0) and 8 or 24
-				local zc = north and (-48 - v) or (48 + v)
-				table.insert(gaps, { c = zc, w = 8, h = 10 })
-				neon(storesF, "DoorGlow", x, fy + 10.2, zc, 0.3, 0.2, 8.4, stores[i].accent)
-				if i == 3 or i == 4 then
-					-- Timing shutter on the chain's inner door: a low barrier that lifts periodically.
-				end
+				local v = (i % 2 == 0) and 10 or 30
+				local zc = north and (-HZ - v) or (HZ + v)
+				table.insert(gaps, { c = zc, w = 10, h = 11 })
+				neon(storesF, "DoorGlow", x, fy + 11.2, zc, 0.3, 0.2, 10.4, stores[i].accent)
 			end
 			wall(storesF, "DividerWall", "z", x, z1, z2, fy, ceil, 0.8, P.white, Enum.Material.Concrete, gaps)
 		end
 	end
-	-- The two shutters sit in the Sneaker/Electronics and Bookstore/Convenience connecting doors.
-	for index, spec in ipairs({ { -21, -48 - 24, P.cyan }, { -21, 48 + 24, P.magenta } }) do
+	for index, spec in ipairs({ { -24, -HZ - 30, P.cyan }, { -24, HZ + 30, P.magenta } }) do
 		local x, z, accent = spec[1], spec[2], spec[3]
-		local gate = box(routes, "MovingShortcutGate", x, 2.25, z, 0.7, 4.5, 7.6, accent, Enum.Material.Metal)
+		local gate = box(routes, "MovingShortcutGate", x, 2.25, z, 0.7, 4.5, 9.6, accent, Enum.Material.Metal)
 		gate:SetAttribute("DynamicObstacle", true)
 		gate:SetAttribute("MovementTolerance", 8)
 		gate:SetAttribute("GateClosedCFrame", gate.CFrame)
@@ -959,58 +1177,78 @@ function MapBuilder.Build(options)
 	end
 
 	-- =====================================================================================
-	-- FOOD COURT (west wing, ground floor): stalls, dining sets, three open sides
+	-- FOOD COURT (west wing, ground floor): stalls, dining sets, open on three sides
 	-- =====================================================================================
-	local ceil1 = F2 - 1.2
-	for _, z in ipairs({ -40, -24, -8, 8, 24, 40 }) do
-		cylinder(court, "CourtPillar", Vector3.new(-64, ceil1 / 2, z), 2.4, ceil1, P.white, Enum.Material.Marble)
-		cylinder(court, "PillarRing", Vector3.new(-64, 0.5, z), 3.4, 1, P.gold, Enum.Material.Metal, false)
-		neon(court, "PillarGlow", -64, 10, z, 0.2, 8, 0.2, P.orange)
+	for _, z in ipairs({ -48, -32, -16, 0, 16, 32, 48 }) do
+		cylinder(court, "CourtPillar", Vector3.new(-HX, ceil1 / 2, z), 2.4, ceil1, P.white, Enum.Material.Marble)
+		cylinder(court, "PillarRing", Vector3.new(-HX, 0.5, z), 3.4, 1, P.gold, Enum.Material.Metal, false)
+		neon(court, "PillarGlow", -HX, 10, z, 0.2, 8, 0.2, P.orange)
 	end
-	local stalls = { { -36, "RAMEN", P.red }, { -18, "PIZZA", P.orange }, { 0, "SUSHI", P.teal }, { 18, "BURGER", P.yellow }, { 36, "TACO", P.green } }
-	for _, s in ipairs(stalls) do
+	local stalls = { { -44, "RAMEN", P.red }, { -22, "PIZZA", P.orange }, { 0, "SUSHI", P.teal }, { 22, "BURGER", P.yellow }, { 44, "TACO", P.green } }
+	for si, s in ipairs(stalls) do
 		local z, name, color = s[1], s[2], s[3]
-		box(court, "StallBlock", -108, 1.9, z, 8, 3.8, 14.4, P.white, Enum.Material.Concrete)
-		art(court, "StallCounterTop", Vector3.new(8.4, 0.3, 14.8), Vector3.new(-108, 3.95, z), color, Enum.Material.SmoothPlastic)
-		box(court, "StallBack", -111.2, 7.4, z, 1.6, 14.8, 15, color, Enum.Material.Concrete)
-		art(court, "StallCanopy", Vector3.new(7, 0.4, 14.8), CFrame.new(-107.6, 10.2, z) * CFrame.Angles(0, 0, math.rad(-6)), color, Enum.Material.Fabric)
-		sign(court, name, Vector3.new(-110.2, 11.4, z), 12, 3.2, color, math.pi / 2)
-		neon(court, "StallMenuGlow", -110.3, 7.2, z, 0.15, 3.4, 11, P.white)
-		for i = -1, 1 do art(court, "StallLamp", Vector3.new(0.5, 0.5, 0.5), Vector3.new(-103.6, 5.4, z + i * 4.5), P.gold, Enum.Material.Neon) end
+		-- Solid stall frontage: counter block, glowing menu board, canopy and food models.
+		box(court, "StallBlock", -128, 1.9, z, 8, 3.8, 17, P.white, Enum.Material.Concrete)
+		art(court, "StallCounterTop", Vector3.new(8.4, 0.3, 17.4), Vector3.new(-128, 3.95, z), color, Enum.Material.SmoothPlastic)
+		box(court, "StallBack", -131.2, 7.4, z, 1.6, 14.8, 17.6, color, Enum.Material.Concrete)
+		art(court, "StallCanopy", Vector3.new(7, 0.4, 17.4), CFrame.new(-127.6, 10.2, z) * CFrame.Angles(0, 0, math.rad(-6)), color, Enum.Material.Fabric)
+		sign(court, name, Vector3.new(-130.2, 11.6, z), 13, 3.2, color, math.pi / 2)
+		art(court, "MenuBoard", Vector3.new(0.2, 3.6, 12), Vector3.new(-130.3, 7.4, z), P.ink, Enum.Material.SmoothPlastic)
+		for row = 0, 2 do neon(court, "MenuLine", -130.1, 8.6 - row * 1.1, z, 0.1, 0.22, 8 - row * 1.5, P.white) end
+		for i = -1, 1 do art(court, "StallLamp", Vector3.new(0.5, 0.5, 0.5), Vector3.new(-123.6, 5.6, z + i * 5), P.gold, Enum.Material.Neon) end
+		-- Food on the counter: stacked burgers, pizza discs, sushi trays, sauce bottles.
+		for k = -1, 1 do
+			local fz = z + k * 4.4
+			if name == "BURGER" then
+				cylinder(court, "BunBottom", Vector3.new(-126.2, 4.3, fz), 1.8, 0.4, P.orange, Enum.Material.SmoothPlastic, false)
+				cylinder(court, "Patty", Vector3.new(-126.2, 4.65, fz), 1.7, 0.3, P.wood, Enum.Material.SmoothPlastic, false)
+				cylinder(court, "BunTop", Vector3.new(-126.2, 5.0, fz), 1.8, 0.5, P.orange, Enum.Material.SmoothPlastic, false)
+			elseif name == "PIZZA" then
+				cylinder(court, "Pizza", Vector3.new(-126.2, 4.2, fz), 2.8, 0.2, P.yellow, Enum.Material.SmoothPlastic, false)
+				cylinder(court, "Pepperoni", Vector3.new(-126.2, 4.35, fz), 0.8, 0.1, P.red, Enum.Material.SmoothPlastic, false)
+			elseif name == "SUSHI" then
+				art(court, "SushiTray", Vector3.new(2.4, 0.2, 1.4), Vector3.new(-126.2, 4.2, fz), P.ink, Enum.Material.SmoothPlastic)
+				art(court, "SushiRice", Vector3.new(0.7, 0.5, 0.7), Vector3.new(-126.6, 4.5, fz), P.white, Enum.Material.SmoothPlastic)
+				art(court, "SushiFish", Vector3.new(0.7, 0.3, 0.8), Vector3.new(-125.6, 4.45, fz), P.coral, Enum.Material.SmoothPlastic)
+			else
+				cylinder(court, "FoodBowl", Vector3.new(-126.2, 4.4, fz), 1.9, 0.7, color, Enum.Material.SmoothPlastic, false)
+				sphere(court, "FoodScoop", Vector3.new(-126.2, 4.9, fz), Vector3.new(1.4, 0.8, 1.4), P.cream)
+			end
+		end
 	end
-	for _, col in ipairs({ -94, -76 }) do
-		for _, z in ipairs({ -32, -11, 11, 32 }) do
-			local color = ({ P.coral, P.teal, P.gold, P.purple })[(z > 0 and 1 or 0) + (col == -94 and 1 or 3)]
+	for _, col in ipairs({ -112, -92 }) do
+		for _, z in ipairs({ -42, -14, 14, 42 }) do
+			local color = ({ P.coral, P.teal, P.gold, P.purple })[(z > 0 and 1 or 0) + (col == -112 and 1 or 3)]
 			vaultTable(court, col, 0, z, 6, 4, P.wood, 0, color)
+			cylinder(court, "TableNumber", Vector3.new(col, 3.7, z), 0.8, 0.3, color, Enum.Material.Neon, false)
 			for _, c in ipairs({ { -4.4, 0 }, { 4.4, 0 } }) do chair(court, col + c[1], 0, z + c[2], color, c[1] < 0 and -math.pi / 2 or math.pi / 2) end
 			for _, c in ipairs({ { 0, -3.6 }, { 0, 3.6 } }) do chair(court, col + c[1], 0, z + c[2], color, c[2] < 0 and math.pi or 0) end
 		end
 	end
-	for _, z in ipairs({ -24, 0, 24 }) do
+	for _, z in ipairs({ -30, 0, 30 }) do
 		for _, ring in ipairs({ { 9, 0.3 }, { 6, 0.5 } }) do
-			art(court, "PendantRing", Vector3.new(0.3, ring[1], ring[1]), CFrame.new(-86, 12.4 - ring[2], z) * CFrame.Angles(0, 0, math.pi / 2), ring[2] < 0.4 and P.orange or P.yellow, Enum.Material.Neon).Shape = Enum.PartType.Cylinder
+			art(court, "PendantRing", Vector3.new(0.3, ring[1], ring[1]), CFrame.new(-100, 12.4 - ring[2], z) * CFrame.Angles(0, 0, math.pi / 2), ring[2] < 0.4 and P.orange or P.yellow, Enum.Material.Neon).Shape = Enum.PartType.Cylinder
 		end
-		artBeam(court, "PendantWire", Vector3.new(-86, 12.4, z), Vector3.new(-86, ceil1, z), 0.1, P.ink)
+		artBeam(court, "PendantWire", Vector3.new(-100, 12.4, z), Vector3.new(-100, ceil1, z), 0.1, P.ink)
 	end
-	sign(court, "FOOD COURT", Vector3.new(-66.2, 12.6, 0), 22, 3.6, P.orange, math.pi / 2)
-	for _, z in ipairs({ -26, 26 }) do light(court, Vector3.new(-86, ceil1 - 0.4, z), P.orange, 0.7, 32) end
-	for _, z in ipairs({ -46, 46 }) do
-		planter(court, -84, 0, z, 16, 0, true)
-		palm(court, -88, 1.4, z, 1.1, 0.1)
+	sign(court, "FOOD COURT", Vector3.new(-HX + 0.2, 12.6, 0), 24, 3.6, P.orange, math.pi / 2)
+	for _, z in ipairs({ -30, 30 }) do light(court, Vector3.new(-100, ceil1 - 0.4, z), P.orange, 0.7, 36) end
+	for _, z in ipairs({ -52, 52 }) do
+		planter(court, -98, 0, z, 16, 0, true)
+		palm(court, -102, 1.4, z, 1.2, 0.1)
 	end
-	for _, c in ipairs({ { -104, -44 }, { -104, 44 } }) do palm(court, c[1], 0, c[2], 1.0, 0.1) end
 
 	-- =====================================================================================
-	-- ARCADE (east wing, ground floor): neon cabinets, three entrances
+	-- ARCADE (east wing, ground floor): cabinets, racing sims, prize counter, 3 entrances
 	-- =====================================================================================
 	wall(arcade, "ArcadeWall", "z", HX, -HZ, HZ, 0, ceil1, 0.8, P.navy, Enum.Material.Concrete,
-		{ { c = -30, w = 14, h = 11 }, { c = 0, w = 14, h = 11 }, { c = 30, w = 14, h = 11 } })
-	for _, z in ipairs({ -30, 0, 30 }) do
-		neon(arcade, "EntranceGlow", HX, 11.4, z, 0.4, 0.25, 14.6, P.magenta)
-		for _, side in ipairs({ -1, 1 }) do neon(arcade, "EntranceGlow", HX, 5.5, z + side * 7.3, 0.4, 11, 0.25, P.cyan) end
+		{ { c = -36, w = 16, h = 11 }, { c = 0, w = 16, h = 11 }, { c = 36, w = 16, h = 11 } })
+	for _, z in ipairs({ -36, 0, 36 }) do
+		neon(arcade, "EntranceGlow", HX, 11.4, z, 0.4, 0.25, 16.6, P.magenta)
+		for _, side in ipairs({ -1, 1 }) do neon(arcade, "EntranceGlow", HX, 5.5, z + side * 8.3, 0.4, 11, 0.25, P.cyan) end
 	end
-	sign(arcade, "ARCADE", Vector3.new(HX - 0.6, 13, -15), 14, 2.4, P.magenta, -math.pi / 2)
-	sign(arcade, "PLAY", Vector3.new(HX - 0.6, 13, 15), 14, 2.4, P.cyan, -math.pi / 2)
+	sign(arcade, "ARCADE", Vector3.new(HX - 0.6, 13, -18), 14, 2.4, P.magenta, -math.pi / 2)
+	sign(arcade, "PLAY", Vector3.new(HX - 0.6, 13, 18), 14, 2.4, P.cyan, -math.pi / 2)
 	local cabColors = { P.magenta, P.cyan, P.yellow, P.green, P.coral, P.purple }
 	local function cabinet(x, z, facing, i)
 		local cf = CFrame.new(x, 0, z) * CFrame.Angles(0, facing, 0)
@@ -1019,61 +1257,86 @@ function MapBuilder.Build(options)
 		neon(arcade, "CabScreen", 0, 0, 0, 2.4, 2.2, 0.1, color).CFrame = cf * CFrame.new(0, 4.4, -1.35)
 		neon(arcade, "CabMarquee", 0, 0, 0, 3.2, 0.8, 0.1, color).CFrame = cf * CFrame.new(0, 6.2, -1.35)
 		art(arcade, "CabPanel", Vector3.new(3, 0.6, 1.2), cf * CFrame.new(0, 2.8, -1.5) * CFrame.Angles(math.rad(-20), 0, 0), color, Enum.Material.SmoothPlastic)
+		art(arcade, "CabStick", Vector3.new(0.3, 0.6, 0.3), cf * CFrame.new(-0.5, 3.3, -1.7), P.white, Enum.Material.Metal)
 	end
-	for i = 0, 7 do cabinet(110.2, -42 + i * 12, math.pi / 2, i) end
+	for i = 0, 8 do cabinet(130.2, -50 + i * 12.5, math.pi / 2, i) end
 	local idx = 0
-	for _, z0 in ipairs({ -36, 16 }) do
+	for _, z0 in ipairs({ -46, 22 }) do
 		for k = 0, 3 do
 			idx += 1
-			cabinet(98, z0 + k * 6.4, -math.pi / 2, idx)
-			cabinet(101.4, z0 + k * 6.4, math.pi / 2, idx + 2)
+			cabinet(112, z0 + k * 6.4, -math.pi / 2, idx)
+			cabinet(115.4, z0 + k * 6.4, math.pi / 2, idx + 2)
 		end
 	end
-	for _, z in ipairs({ -42, 42 }) do
-		vaultTable(arcade, 80, 0, z, 9, 5, P.ink, 0, P.cyan)
-		neon(arcade, "HockeyLine", 80, 3.5, z, 0.2, 0.1, 5, P.magenta)
+	-- Racing sims: a low cockpit (vaultable) with a seat, wheel and wide screen.
+	for _, z in ipairs({ -14, 14 }) do
+		local cockpit = box(arcade, "VaultSim", 94, 1.7, z, 6, 3.4, 8, P.ink, Enum.Material.SmoothPlastic)
+		cockpit:SetAttribute("Vaultable", true)
+		art(arcade, "SimSeat", Vector3.new(2.4, 0.5, 2.4), Vector3.new(95.4, 3.7, z), P.red, Enum.Material.Fabric)
+		art(arcade, "SimSeatBack", Vector3.new(2.4, 2.4, 0.5), Vector3.new(96.8, 4.7, z), P.red, Enum.Material.Fabric)
+		art(arcade, "SimWheel", Vector3.new(0.3, 1.5, 1.5), CFrame.new(92.8, 4.2, z) * CFrame.Angles(0, 0, math.rad(25)), P.steel, Enum.Material.Metal)
+		neon(arcade, "SimScreen", 91.2, 6.0, z, 0.2, 2.6, 6, z < 0 and P.cyan or P.magenta)
+		art(arcade, "SimScreenFrame", Vector3.new(0.4, 3, 6.6), Vector3.new(91.0, 6.0, z), P.ink, Enum.Material.Metal)
 	end
-	-- Rhythm stage: a low neon platform with a step all round.
-	box(arcade, "DanceStage", 82, 0.4, 0, 14, 0.8, 14, P.ink, Enum.Material.SmoothPlastic)
-	for i = -1, 1 do for j = -1, 1 do neon(arcade, "DanceTile", 82 + i * 4.4, 0.85, j * 4.4, 3.6, 0.08, 3.6, (i + j) % 2 == 0 and P.magenta or P.cyan) end end
-	for z = -44, 44, 11 do for x = 72, 108, 12 do
+	for _, z in ipairs({ -48, 48 }) do
+		vaultTable(arcade, 86, 0, z, 9, 5, P.ink, 0, P.cyan)
+		neon(arcade, "HockeyLine", 86, 3.5, z, 0.2, 0.1, 5, P.magenta)
+		cylinder(arcade, "HockeyPuck", Vector3.new(86, 3.5, z), 0.6, 0.2, P.yellow, Enum.Material.Neon, false)
+	end
+	-- Prize counter with plush wall and claw machines against the south wall.
+	box(arcade, "PrizeCounter", 120, 1.9, 52, 20, 3.8, 3, P.purple, Enum.Material.SmoothPlastic)
+	art(arcade, "PrizeTop", Vector3.new(20.4, 0.3, 3.4), Vector3.new(120, 3.95, 52), P.gold, Enum.Material.Metal)
+	for k = 0, 5 do
+		sphere(arcade, "PrizeBall", Vector3.new(112 + k * 3.2, 5.0, 52), Vector3.new(2, 2, 2), cabColors[k % 6 + 1])
+		sphere(arcade, "PrizeBallTop", Vector3.new(112 + k * 3.2, 6.6, 52), Vector3.new(1.4, 1.4, 1.4), cabColors[(k + 2) % 6 + 1])
+	end
+	sign(arcade, "PRIZES", Vector3.new(120, 10, 53.4), 14, 2.6, P.yellow, math.pi)
+	for _, x in ipairs({ 92, 98 }) do
+		part(arcade, "ClawMachine", Vector3.new(4.6, 7, 4.6), Vector3.new(x, 3.5, 52), P.ink, Enum.Material.SmoothPlastic)
+		glassBox(arcade, "ClawGlass", x, 4.2, 49.6, 4, 4.4, 0.2, 0.55, false)
+		sphere(arcade, "ClawPrize", Vector3.new(x, 2.4, 52), Vector3.new(1.6, 1.6, 1.6), cabColors[x % 6 + 1])
+		neon(arcade, "ClawLight", x, 7.2, 52, 4.4, 0.2, 4.4, P.magenta)
+	end
+	-- Rhythm stage with a step all round.
+	box(arcade, "DanceStage", 100, 0.4, 0, 16, 0.8, 16, P.ink, Enum.Material.SmoothPlastic)
+	for i = -1, 1 do for j = -1, 1 do neon(arcade, "DanceTile", 100 + i * 5, 0.85, j * 5, 4.2, 0.08, 4.2, (i + j) % 2 == 0 and P.magenta or P.cyan) end end
+	for z = -52, 52, 13 do for x = 80, 124, 14 do
 		art(arcade, "CarpetZig", Vector3.new(7, 0.06, 0.6), CFrame.new(x, 0.1, z) * CFrame.Angles(0, math.rad(35), 0), (x + z) % 2 == 0 and P.magenta or P.cyan, Enum.Material.Neon)
 	end end
-	for x = 72, 108, 12 do ceilingStrip(arcade, x, ceil1 - 0.2, 0, 0.6, 90, x % 24 == 0 and P.magenta or P.cyan) end
-	sign(arcade, "INSERT COIN", Vector3.new(110.4, 10, 0), 22, 3, P.yellow, -math.pi / 2)
-	light(arcade, Vector3.new(88, ceil1 - 0.4, -26), P.magenta, 0.8, 34)
-	light(arcade, Vector3.new(88, ceil1 - 0.4, 26), P.cyan, 0.8, 34)
+	for x = 80, 124, 11 do ceilingStrip(arcade, x, ceil1 - 0.2, 0, 0.6, 104, x % 22 == 0 and P.magenta or P.cyan) end
+	sign(arcade, "INSERT COIN", Vector3.new(131.4, 10, 0), 24, 3, P.yellow, -math.pi / 2)
+	light(arcade, Vector3.new(102, ceil1 - 0.4, -30), P.magenta, 0.8, 38)
+	light(arcade, Vector3.new(102, ceil1 - 0.4, 30), P.cyan, 0.8, 38)
 
 	-- =====================================================================================
 	-- SECOND FLOOR WINGS: Department store (east) and Sky Lounge (west)
 	-- =====================================================================================
 	wall(storesF, "DeptWall", "z", HX, -HZ, HZ, F2, 30, 0.8, P.white, Enum.Material.Concrete,
-		{ { c = -30, w = 14, h = 12 }, { c = 0, w = 14, h = 12 }, { c = 30, w = 14, h = 12 } })
-	for _, z in ipairs({ -30, 0, 30 }) do
-		neon(storesF, "DeptDoorGlow", HX, F2 + 12.2, z, 0.4, 0.25, 14.6, P.gold)
-	end
-	sign(storesF, "ZENITH", Vector3.new(HX - 0.6, F2 + 14.6, 0), 26, 3.6, P.gold, -math.pi / 2)
-	art(storesF, "DeptCarpet", Vector3.new(46, 0.1, 94), Vector3.new(88, F2 + 0.1, 0), P.cream, Enum.Material.Fabric)
-	cylinder(storesF, "MannequinStage", Vector3.new(88, F2 + 0.5, 0), 15, 1, P.white, Enum.Material.Marble)
+		{ { c = -36, w = 16, h = 12 }, { c = 0, w = 16, h = 12 }, { c = 36, w = 16, h = 12 } })
+	for _, z in ipairs({ -36, 0, 36 }) do neon(storesF, "DeptDoorGlow", HX, F2 + 12.2, z, 0.4, 0.25, 16.6, P.gold) end
+	sign(storesF, "ZENITH", Vector3.new(HX - 0.6, F2 + 14.6, 0), 28, 3.6, P.gold, -math.pi / 2)
+	art(storesF, "DeptCarpet", Vector3.new(58, 0.1, 108), Vector3.new(102, F2 + 0.1, 0), P.cream:Lerp(P.coral, 0.2), Enum.Material.Fabric)
+	cylinder(storesF, "MannequinStage", Vector3.new(102, F2 + 0.5, 0), 18, 1, P.white, Enum.Material.Marble)
 	for i = 1, 6 do
 		local a = i * math.pi / 3
-		mannequin(storesF, 88 + math.cos(a) * 5, F2 + 1, math.sin(a) * 5, i % 2 == 0 and P.coral or P.blue)
+		mannequin(storesF, 102 + math.cos(a) * 6, F2 + 1, math.sin(a) * 6, PAL[i])
+		art(storesF, "StageJacket", Vector3.new(1.9, 1.4, 1.2), Vector3.new(102 + math.cos(a) * 6, F2 + 3.7, math.sin(a) * 6), PAL[i + 2 > #PAL and 1 or i + 2], Enum.Material.Fabric)
 	end
-	cylinder(storesF, "StageGlow", Vector3.new(88, F2 + 1.05, 0), 15.4, 0.08, P.gold, Enum.Material.Neon, false)
-	for _, spec in ipairs({ { 76, -30 }, { 100, -30 }, { 76, 30 }, { 100, 30 }, { 76, -12 }, { 100, 12 } }) do
-		vaultTable(storesF, spec[1], F2, spec[2], 10, 4, P.white, 0, P.pink)
-		art(storesF, "FoldedStack", Vector3.new(7, 0.8, 2.6), Vector3.new(spec[1], F2 + 3.8, spec[2]), ({ P.coral, P.cyan, P.gold })[(spec[2] > 0 and 1 or 2) + (spec[1] > 80 and 1 or 0)], Enum.Material.Fabric)
+	cylinder(storesF, "StageGlow", Vector3.new(102, F2 + 1.05, 0), 18.4, 0.08, P.gold, Enum.Material.Neon, false)
+	for _, spec in ipairs({ { 86, -40 }, { 118, -40 }, { 86, 40 }, { 118, 40 }, { 86, -18 }, { 118, 18 } }) do
+		vaultTable(storesF, spec[1], F2, spec[2], 10, 4.4, P.white, 0, P.pink)
+		for k = 0, 2 do art(storesF, "FoldedStack", Vector3.new(2.6, 0.8 + (k % 2) * 0.5, 2.6), Vector3.new(spec[1] - 3 + k * 3, F2 + 3.9, spec[2]), PAL[(k + spec[1]) % #PAL + 1], Enum.Material.Fabric) end
 	end
-	for _, z in ipairs({ -42, 42 }) do for _, x in ipairs({ 74, 88, 102 }) do
+	for _, z in ipairs({ -52, 52 }) do for _, x in ipairs({ 84, 102, 120 }) do
 		box(storesF, "RackSection", x, F2 + 3.5, z, 8, 7, 1.4, P.ink, Enum.Material.SmoothPlastic)
 		neon(storesF, "RackGlow", x, F2 + 5, z + (z < 0 and 0.75 or -0.75), 7, 0.15, 0.1, P.gold)
+		for k = -2, 2 do art(storesF, "HangingTop", Vector3.new(1.1, 2, 0.3), Vector3.new(x + k * 1.5, F2 + 4, z + (z < 0 and 0.95 or -0.95)), PAL[(k + x) % #PAL + 1], Enum.Material.Fabric) end
 	end end
-	for _, z in ipairs({ -42, 42 }) do for x = -1, 1 do mannequin(storesF, 88 + x * 8, F2, z + (z < 0 and 1.6 or -1.6), P.white) end end
-	sign(storesF, "ZENITH", Vector3.new(111, F2 + 12, 0), 28, 4, P.gold, -math.pi / 2)
+	sign(storesF, "ZENITH", Vector3.new(OX - 1.4, F2 + 12, 0), 30, 4, P.gold, -math.pi / 2)
 	-- Sky Lounge window onto the food court: railing around the cutaway.
 	local lx1, lx2, lz1, lz2 = loungeHole[1], loungeHole[2], loungeHole[3], loungeHole[4]
 	local function loungeRail(axis, fixed, a1, a2)
-		local g = wall(atrium, "LoungeGlass", axis, fixed, a1, a2, F2, F2 + RAIL, 0.35, P.glass, Enum.Material.Glass)
+		wall(atrium, "LoungeGlass", axis, fixed, a1, a2, F2, F2 + RAIL, 0.35, P.glass, Enum.Material.Glass)
 		if axis == "x" then art(atrium, "Handrail", Vector3.new(a2 - a1, 0.3, 0.6), Vector3.new((a1 + a2) / 2, F2 + RAIL, fixed), P.gold, Enum.Material.Metal)
 		else art(atrium, "Handrail", Vector3.new(0.6, 0.3, a2 - a1), Vector3.new(fixed, F2 + RAIL, (a1 + a2) / 2), P.gold, Enum.Material.Metal) end
 	end
@@ -1082,23 +1345,20 @@ function MapBuilder.Build(options)
 	for _, child in ipairs(atrium:GetChildren()) do
 		if child.Name == "LoungeGlass" then child.Transparency = 0.6; child.CastShadow = false end
 	end
-	sign(storesF, "SKY LOUNGE", Vector3.new(-111.4, F2 + 14, 0), 22, 3.4, P.cyan, math.pi / 2)
-	for _, spec in ipairs({ { -106, -38 }, { -106, 38 }, { -70, -38 }, { -70, 38 } }) do
-		planter(decor, spec[1], F2, spec[2], 8, spec[1] < -90 and math.pi / 2 or math.pi / 2, true)
-		palm(decor, spec[1], F2 + 1.4, spec[2], 1.0, 0.1)
+	sign(storesF, "SKY LOUNGE", Vector3.new(-(OX - 1.4), F2 + 14, 0), 24, 3.4, P.cyan, math.pi / 2)
+	for _, spec in ipairs({ { -128, -46 }, { -128, 46 }, { -76, -46 }, { -76, 46 }, { -102, -50 }, { -102, 50 } }) do
+		planter(decor, spec[1], F2, spec[2], 8, math.pi / 2, true)
+		palm(decor, spec[1], F2 + 1.4, spec[2], 1.1, 0.1)
 	end
-	for _, spec in ipairs({ { -106, 0 }, { -70, 0 } }) do bench(decor, spec[1], F2, spec[2], spec[1] < -90 and math.pi / 2 or -math.pi / 2) end
-	for _, x in ipairs({ -64 }) do
-		for _, z in ipairs({ -40, -24, -8, 8, 24, 40 }) do
-			cylinder(court, "UpperPillar", Vector3.new(x, F2 + 7.4, z), 2.2, 14.8, P.white, Enum.Material.Marble)
-		end
+	for _, spec in ipairs({ { -128, 0 }, { -76, 0 }, { -128, -22 }, { -128, 22 } }) do bench(decor, spec[1], F2, spec[2], spec[1] < -100 and math.pi / 2 or -math.pi / 2) end
+	for _, z in ipairs({ -48, -32, -16, 0, 16, 32, 48 }) do
+		cylinder(court, "UpperPillar", Vector3.new(-HX, F2 + 7.4, z), 2.2, 14.8, P.white, Enum.Material.Marble)
 	end
-	-- Upper hall furniture: benches and planters on the balcony ring.
-	for _, spec in ipairs({ { -50, 40 }, { 50, -40 }, { -50, -40 }, { 50, 40 } }) do
+	for _, spec in ipairs({ { -58, 46 }, { 58, -46 }, { -58, -46 }, { 58, 46 } }) do
 		planter(decor, spec[1], F2, spec[2], 10, 0, true)
-		bench(decor, spec[1] + (spec[1] < 0 and 12 or -12), F2, spec[2], spec[2] < 0 and 0 or math.pi)
+		bench(decor, spec[1] + (spec[1] < 0 and 14 or -14), F2, spec[2], spec[2] < 0 and 0 or math.pi)
 	end
-	for _, spec in ipairs({ { -58, 20 }, { 58, -20 } }) do palm(decor, spec[1], F2 + 0, spec[2], 1.2, 0.1) end
+	for _, spec in ipairs({ { -66, 24 }, { 66, -24 } }) do palm(decor, spec[1], F2, spec[2], 1.3, 0.1) end
 
 	-- =====================================================================================
 	-- SPAWNS (runners spread over both floors; hunters start on the ground floor)
@@ -1107,11 +1367,11 @@ function MapBuilder.Build(options)
 		return CFrame.lookAt(Vector3.new(x, y + 3.3, z), Vector3.new(0, y + 3.3, 0))
 	end
 	local runnerSpawns = {
-		spawnFacing(-88, F2, -55), spawnFacing(-42, F2, -55), spawnFacing(0, F2, -55), spawnFacing(-88, F2, -34),
-		spawnFacing(88, F2, -22), spawnFacing(88, F2, 30), spawnFacing(0, F2, 38), spawnFacing(-58, F2, 28),
-		spawnFacing(88, 0, -24), spawnFacing(-88, 0, 26), spawnFacing(-88, 0, 66), spawnFacing(0, 0, 66),
+		spawnFacing(-102, F2, -66), spawnFacing(-48, F2, -66), spawnFacing(0, F2, -66), spawnFacing(-102, F2, -42),
+		spawnFacing(108, F2, -26), spawnFacing(108, F2, 30), spawnFacing(0, F2, 46), spawnFacing(-58, F2, 34),
+		spawnFacing(104, 0, -30), spawnFacing(-104, 0, 28), spawnFacing(-102, 0, 68), spawnFacing(0, 0, 68),
 	}
-	local hunterSpawns = { spawnFacing(-8, 0, -38), spawnFacing(8, 0, 38) }
+	local hunterSpawns = { spawnFacing(-8, 0, -46), spawnFacing(8, 0, 46) }
 
 	-- =====================================================================================
 	-- PLAZA HUB: a separate, safe social area. Nobody is chased here.
@@ -1534,7 +1794,7 @@ function MapBuilder.Build(options)
 		RunnerSpawns = runnerSpawns,
 		HunterSpawns = hunterSpawns,
 		Podiums = podiums,
-		Bounds = { min = Vector3.new(-122, -25, -92), max = Vector3.new(122, 70, 92) },
+		Bounds = { min = Vector3.new(-140, -25, -104), max = Vector3.new(140, 70, 104) },
 	}
 	model:SetAttribute("CatchMapVersion", MAP_VERSION)
 	model:SetAttribute("LobbySpawn", built.LobbySpawn)
