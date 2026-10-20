@@ -36,10 +36,49 @@ local SLIDE_POSE = {
 	["Right Shoulder"] = CFrame.Angles(-0.15, 0, 0.25),
 }
 
+-- Extra authored poses blend on top of the slide pose: a tucked vault, a tag lunge, and a landing squash.
+local VAULT_POSE = {
+	Waist = CFrame.Angles(-0.38, 0, 0),
+	LeftHip = CFrame.Angles(1.15, 0, 0), RightHip = CFrame.Angles(1.45, 0, 0),
+	LeftKnee = CFrame.Angles(-1.5, 0, 0), RightKnee = CFrame.Angles(-1.2, 0, 0),
+	LeftShoulder = CFrame.Angles(-2.5, 0, -0.18), RightShoulder = CFrame.Angles(-2.5, 0, 0.18),
+	["Left Hip"] = CFrame.Angles(1.0, 0, 0), ["Right Hip"] = CFrame.Angles(1.3, 0, 0),
+	["Left Shoulder"] = CFrame.Angles(-2.4, 0, -0.18), ["Right Shoulder"] = CFrame.Angles(-2.4, 0, 0.18),
+}
+local TAG_POSE = {
+	Waist = CFrame.Angles(-0.45, -0.25, 0),
+	RightShoulder = CFrame.Angles(-2.2, 0, 0.12), LeftShoulder = CFrame.Angles(0.7, 0, -0.12),
+	LeftHip = CFrame.Angles(-0.45, 0, 0), RightHip = CFrame.Angles(0.8, 0, 0),
+	RightKnee = CFrame.Angles(-0.5, 0, 0),
+	["Right Shoulder"] = CFrame.Angles(-2.0, 0, 0.12), ["Left Shoulder"] = CFrame.Angles(0.6, 0, -0.12),
+	["Left Hip"] = CFrame.Angles(-0.4, 0, 0), ["Right Hip"] = CFrame.Angles(0.7, 0, 0),
+}
+local LAND_POSE = {
+	RootJoint = CFrame.new(0, -0.35, 0), Root = CFrame.new(0, -0.35, 0),
+	Waist = CFrame.Angles(-0.2, 0, 0),
+	LeftHip = CFrame.Angles(0.55, 0, 0), RightHip = CFrame.Angles(0.55, 0, 0),
+	LeftKnee = CFrame.Angles(-0.9, 0, 0), RightKnee = CFrame.Angles(-0.9, 0, 0),
+	LeftShoulder = CFrame.Angles(-0.35, 0, 0), RightShoulder = CFrame.Angles(-0.35, 0, 0),
+}
+local POSES = { slide = SLIDE_POSE, vault = VAULT_POSE, tag = TAG_POSE, land = LAND_POSE }
+local POSE_ORDER = { "slide", "vault", "tag", "land" }
+local TRACKED = {}
+for _, set in pairs(POSES) do for name in pairs(set) do TRACKED[name] = true end end
+
+local function poseOffset(name, blends)
+	local offset = CFrame.new()
+	for _, key in ipairs(POSE_ORDER) do
+		local amount = blends[key]
+		local target = amount and amount > 0.001 and POSES[key][name]
+		if target then offset *= CFrame.new():Lerp(target, amount) end
+	end
+	return offset
+end
+
 local function collectPose(character)
 	local pose = {}
 	for _, descendant in ipairs(character:GetDescendants()) do
-		if descendant:IsA("Motor6D") and SLIDE_POSE[descendant.Name] then
+		if descendant:IsA("Motor6D") and TRACKED[descendant.Name] then
 			table.insert(pose, { joint = descendant, base = descendant.C0 })
 		end
 	end
@@ -55,12 +94,13 @@ local function resetPose(pose)
 	end
 end
 
-local function applyPose(pose, blend, lean)
+local function applyPose(pose, blends, lean)
+	if type(blends) == "number" then blends = { slide = blends } end
 	for _, record in ipairs(pose) do
 		local joint = record.joint
 		if joint.Parent then
 			if joint.C0 ~= record.last then record.base = joint.C0 end
-			local offset = CFrame.new():Lerp(SLIDE_POSE[joint.Name], blend)
+			local offset = poseOffset(joint.Name, blends)
 			if joint.Name == "Waist" or joint.Name == "RootJoint" then
 				offset *= CFrame.Angles(lean.X, lean.Y, lean.Z)
 			end
@@ -87,6 +127,7 @@ function MovementController.new(ctx)
 		pose = {},
 		remotePoses = {},
 		slideBlend = 0,
+		blends = { slide = 0, vault = 0, tag = 0, land = 0 },
 		sprintRequested = false,
 		lastVaultIntent = 0,
 		lastSlideIntent = 0,
@@ -134,6 +175,7 @@ function MovementController:_intent(action)
 		return
 	end
 	self[field] = now
+	if action == "Tag" then self.localTagAt = now end
 	self.ctx.Remotes.Action:FireServer(action, {})
 end
 
@@ -147,6 +189,7 @@ function MovementController:_resetPose()
 	resetPose(self.pose)
 	self.lean = Vector3.zero
 	self.slideBlend = 0
+	self.blends = { slide = 0, vault = 0, tag = 0, land = 0 }
 end
 
 -- Sliding is replicated by the server as an attribute. Each client renders the
@@ -164,19 +207,29 @@ function MovementController:_remoteFeedback(dt)
 				self.remotePoses[player], record = nil, nil
 			end
 			local humanoid = character and character:FindFirstChildOfClass("Humanoid")
-			local sliding = humanoid and humanoid.Health > 0 and character:GetAttribute("Sliding") == true
-				and not character:GetAttribute("CatchEmoting") and not self:_settings().reducedMotion
-			if sliding and not record then
-				record = { character = character, pose = collectPose(character), blend = 0 }
+			local alive = humanoid and humanoid.Health > 0 and not character:GetAttribute("CatchEmoting") and not self:_settings().reducedMotion
+			local tagAt = character and character:GetAttribute("CatchTagAt")
+			local targets = {
+				slide = alive and character:GetAttribute("Sliding") == true and 1 or 0,
+				vault = alive and character:GetAttribute("Vaulting") == true and 1 or 0,
+				tag = alive and type(tagAt) == "number" and workspace:GetServerTimeNow() - tagAt < 0.4 and 1 or 0,
+			}
+			local wanted = targets.slide + targets.vault + targets.tag > 0
+			if wanted and not record then
+				record = { character = character, pose = collectPose(character), blends = { slide = 0, vault = 0, tag = 0 } }
 				self.remotePoses[player] = record
 			end
 			if record then
-				record.blend += ((sliding and 1 or 0) - record.blend) * smoothing
-				if not sliding and record.blend < 0.001 then
+				local total = 0
+				for key, target in pairs(targets) do
+					record.blends[key] += (target - record.blends[key]) * smoothing
+					total += record.blends[key]
+				end
+				if not wanted and total < 0.001 then
 					resetPose(record.pose)
 					self.remotePoses[player] = nil
 				else
-					applyPose(record.pose, record.blend, Vector3.zero)
+					applyPose(record.pose, record.blends, Vector3.zero)
 				end
 			end
 		end
@@ -294,9 +347,25 @@ function MovementController:_feedback(dt)
 	local targetLean = Vector3.new(sliding and 0 or direction.Z * 0.065,
 		0, -direction.X * (sprinting and 0.075 or 0.045))
 	self.lean = self.lean:Lerp(targetLean, smoothing)
-	self.slideBlend += ((sliding and 1 or 0) - self.slideBlend) * (1 - math.exp(-18 * dt))
-	if moving or sliding or self.slideBlend > 0.001 or self.lean.Magnitude > 0.001 then
-		applyPose(self.pose, self.slideBlend, self.lean)
+	local fast = 1 - math.exp(-18 * dt)
+	self.slideBlend += ((sliding and 1 or 0) - self.slideBlend) * fast
+	self.blends.slide = self.slideBlend
+	self.blends.vault += ((vaulting and not sliding and 1 or 0) - self.blends.vault) * fast
+	-- A tag lunge plays immediately on the local press and, for hits, from the replicated timestamp.
+	local tagAt = character:GetAttribute("CatchTagAt")
+	local lunging = (type(tagAt) == "number" and workspace:GetServerTimeNow() - tagAt < 0.4)
+		or (self.localTagAt and os.clock() - self.localTagAt < 0.35)
+	self.blends.tag += ((lunging and 1 or 0) - self.blends.tag) * fast
+	-- Landing squash after a real fall (not after a hop).
+	if not grounded then self.airTime = (self.airTime or 0) + dt
+	else
+		if (self.airTime or 0) > 0.45 then self.blends.land = 1 end
+		self.airTime = 0
+	end
+	self.blends.land += (0 - self.blends.land) * (1 - math.exp(-9 * dt))
+	local active = self.slideBlend > 0.001 or self.blends.vault > 0.001 or self.blends.tag > 0.001 or self.blends.land > 0.001
+	if moving or sliding or active or self.lean.Magnitude > 0.001 then
+		applyPose(self.pose, self.blends, self.lean)
 	else
 		self:_resetPose()
 	end

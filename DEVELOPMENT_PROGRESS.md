@@ -59,6 +59,35 @@ quests + 7-day login streak exist); new animations (movement poses unchanged); t
 **Next steps:** open `dist/Catch-Me-If-You-Can-Final.rbxl`, Play solo (Studio solo practice starts after PLAY), then
 Server & Clients with 2-12; tune `applyLighting()`; merge `mall-rebuild` into main when happy.
 
+## v0.5.0 - Quality overhaul (branch `mall-rebuild`, checkpoint tag `stage-0.4.0-checkpoint` is the pre-overhaul state)
+Driven by the owner's Studio feedback ("overexposed, basic UI, cramped mall, empty stores, bland characters").
+Only the three concept images were available; no new Studio screenshots reached the session.
+
+| # | Stage | Status |
+| - | --- | --- |
+| 1 | Lighting/exposure | Done in code (restrained preset `LIGHTING` in MapBuilder: Brightness 1.7, ambient ~0.48, exposure -0.1, bloom 0.12 @ threshold 2.2, de-whitened palette, neon softened to 22% transparency, checker marble, wood food court). **Unverified by eye.** |
+| 2 | HUD + buttons | Done: icon dock (5 + MORE), themed gradient/outline/shadow buttons with hover/press motion, ability tiles, pill toasts, safe-area handling, chat zone kept clear. |
+| 3 | Shop / Locker / Quests / Career / Settings / Crew / Results / Tutorial | Done: rarity cards with 3D thumbnails (cached rigs), featured banner, icon tabs, drag-to-spin preview, burst feedback, 7-day streak track, progress bars, badge grid, compact results (practice vs competitive, rewards delta, PLAY AGAIN / LOBBY), bottom-card tutorial. |
+| 4 | Bigger mall | Done: 264x192 footprint (was 224x160, +41% floor), 112-deep hall, 40-deep stores, 60-wide wings, bigger void, escalator slope 23 deg. |
+| 5 | Store interiors | Done: 10 enterable stores with real merchandise models (sneakers, racks, TVs/laptops, plush, books, drinks, jerseys, perfume...), food court stalls with food, arcade cabinets/sims/claw machines/prize counter, department store. ~5,300 parts. |
+| 6 | Chase routes | Mostly existing: side-door chains, 2 shutters, 2 drop gaps, skybridge, 4 vertical links, vaultable props, tracking pulse. No slide-under geometry (the server slide does not shrink the collision hull). |
+| 7 | Plaza hub | Improved: fixed vertical-disc bug (fountain "dome"), facade pilasters, balcony, portico, showcase glass, indigo signs, ring-shaped spawn marker. |
+| 8 | Characters | Added vault tuck, tag lunge and landing squash poses (local + replicated), 3 new skins. **Not done:** faces/expressions (needs face decal assets), hair/headwear, new running cycle. |
+| 9 | Sound | Volume settings (music/effects, saved), UI click + reward sounds, zone ambience system (silent until IDs supplied) - see `docs/AUDIO_SOURCING.md`. |
+| 10 | Multiplayer/perf testing | **Not possible here.** Static budgets in `docs/PERFORMANCE_BUDGET.md`; mocked-boundary suites only. |
+
+Tools added: `tools/ui-preview.py` (layout/render from real GUI trees dumped by the client test with `UI_DUMP`),
+`tools/render-views.py` (perspective map previews), `tools/budget.luau`. Previews are geometry approximations:
+no Gotham font, emoji only where the font allows, no Studio lighting.
+
+Verified by `./tools/check.sh`: compile, build, 6 suites (rules 311, data 152, gameplay 250, appearance 223,836 incl. 60 skin x mask
+combos, client 1,403, map 161,719 incl. walkability flood fill of every spawn and store).
+
+**Still needs a human in Studio (do these first):** (1) lighting by eye in hub/atrium/stores/arcade/food court;
+(2) phone and low-end frame rate; (3) 2-12 client round via PLAY queue incl. return to Plaza; (4) emoji icons render on
+console/mobile; (5) shop/locker previews load; (6) escalator/stair feel and the 2 shutters; (7) new poses look right;
+(8) ProximityPrompts on console; (9) all audio.
+
 ## Completed
 - [x] Takeover audit, baseline `./tools/check.sh` green (all suites).
 - [x] **Bright city pass:** late-afternoon lighting (ClockTime 15.2, high ambient, warm sun, light haze,

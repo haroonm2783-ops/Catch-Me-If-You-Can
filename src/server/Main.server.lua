@@ -54,6 +54,8 @@ local function validPayload(payload)
 		if count > 8 or type(key) ~= "string" or #key > 30 then return false end
 		if type(value) == "string" then
 			if #value > 80 then return false end
+		elseif type(value) == "number" then
+			if value ~= value or math.abs(value) > 1000000 then return false end
 		elseif type(value) ~= "boolean" then return false end
 	end
 	return true

@@ -18,8 +18,10 @@ local WHITE = Color3.fromRGB(237, 249, 255)
 -- Missing engine files are cached as unavailable and skipped without repeated loads.
 local BUILTIN_AUDIO = {
 	Sprint = { path = "action_footsteps_plastic.mp3", pitch = 1.2, gain = 0.4 },
-	Slide = { path = "action_footsteps_plastic.mp3", pitch = 0.7, gain = 0.4 },
-	Land = { path = "action_footsteps_plastic.mp3", pitch = 0.82, gain = 0.38 },
+	Slide = { path = "swoosh.wav", pitch = 0.9, gain = 0.5 },
+	Land = { path = "action_jump_land.mp3", pitch = 1, gain = 0.45 },
+	UiClick = { path = "button.wav", pitch = 1.1, gain = 0.5 },
+	Reward = { path = "electronicpingshort.wav", pitch = 1.7, gain = 0.5 },
 	Vault = { path = "action_jump.mp3", pitch = 1.08, gain = 0.5 },
 	Tag = { path = "electronicpingshort.wav", pitch = 1.25, gain = 0.55 },
 	Win = { path = "electronicpingshort.wav", pitch = 1.4, gain = 0.6 },
@@ -102,6 +104,53 @@ function EffectsController:_settings()
 	return self.ctx.Profile.settings or {}
 end
 
+function EffectsController:_volume(key, default)
+	local value = self:_settings()[key]
+	return type(value) == "number" and math.clamp(value, 0, 1) or default
+end
+
+-- Zone ambience: looped beds for the mall hall, arcade, food court and Plaza. Each is silent
+-- until Config.Audio provides a licensed ID, then fades in only where the player stands.
+local AMBIENCE_ZONES = {
+	{ key = "ArcadeAmbience", test = function(p) return p.Y < 18 and p.X > 72 and math.abs(p.Z) < 56 end },
+	{ key = "FoodCourtAmbience", test = function(p) return p.Y < 18 and p.X < -72 and math.abs(p.Z) < 56 end },
+	{ key = "PlazaAmbience", test = function(p) return p.Z > 190 end },
+	{ key = "MallAmbience", test = function(p) return math.abs(p.Z) < 110 and math.abs(p.X) < 140 end },
+}
+
+function EffectsController:_ambience(dt)
+	self.ambienceClock = (self.ambienceClock or 0) + dt
+	if self.ambienceClock < 0.4 then return end
+	self.ambienceClock = 0
+	local character = self.player.Character
+	local root = character and character:FindFirstChild("HumanoidRootPart")
+	local zone
+	if root then
+		for _, candidate in ipairs(AMBIENCE_ZONES) do
+			if candidate.test(root.Position) then zone = candidate.key break end
+		end
+	end
+	self.ambience = self.ambience or {}
+	for _, candidate in ipairs(AMBIENCE_ZONES) do
+		local id = tonumber((self.ctx.Config.Audio or {})[candidate.key])
+		if id and id > 0 and id == math.floor(id) then
+			local sound = self.ambience[candidate.key]
+			if not sound then
+				sound = Instance.new("Sound")
+				sound.Name = "Catch" .. candidate.key
+				sound.SoundId = "rbxassetid://" .. tostring(id)
+				sound.Looped = true
+				sound.Volume = 0
+				sound.Parent = SoundService
+				self.ambience[candidate.key] = sound
+				sound:Play()
+			end
+			local target = (zone == candidate.key and self:_settings().music ~= false) and 0.22 * self:_volume("volumeMusic", 0.6) / 0.6 or 0
+			tween(sound, 0.8, { Volume = target })
+		end
+	end
+end
+
 function EffectsController:_sound(name, volume)
 	if self:_settings().sfx == false then
 		return
@@ -114,7 +163,7 @@ function EffectsController:_sound(name, volume)
 	sound.Name = "Catch" .. name
 	sound.SoundId = source
 	sound.PlaybackSpeed = pitch
-	sound.Volume = (volume or 0.4) * gain
+	sound.Volume = (volume or 0.4) * gain * self:_volume("volumeSfx", 0.8)
 	sound.Parent = SoundService
 	self.sounds[sound] = true
 	sound.Ended:Once(function()
@@ -138,7 +187,7 @@ function EffectsController:_music()
 		self.music.Name = "CatchMusic"
 		self.music.SoundId = "rbxassetid://" .. tostring(id)
 		self.music.Looped = true
-		self.music.Volume = 0.18
+		self.music.Volume = 0.18 * self:_volume("volumeMusic", 0.6) / 0.6
 		self.music.Parent = SoundService
 	end
 	if self:_settings().music == false then
@@ -178,7 +227,7 @@ function EffectsController:_sprintAudio()
 		self.sprintSound.Name = "CatchSprint"
 		self.sprintSound.SoundId = source
 		self.sprintSound.PlaybackSpeed = pitch
-		self.sprintSound.Volume = 0.12 * gain
+		self.sprintSound.Volume = 0.12 * gain * self:_volume("volumeSfx", 0.8)
 		self.sprintSound.Looped = true
 		self.sprintSound.Parent = SoundService
 	end
@@ -483,6 +532,7 @@ function EffectsController:Start()
 			self:_countdown()
 			self:_sprintAudio()
 		end
+		self:_ambience(dt)
 	end))
 	self:_music()
 	self:OnState(self.ctx.State)
@@ -490,6 +540,8 @@ end
 
 function EffectsController:Destroy()
 	self.destroyed = true
+	for _, sound in pairs(self.ambience or {}) do sound:Destroy() end
+	self.ambience = nil
 	if self.landingConnection then self.landingConnection:Disconnect() self.landingConnection = nil end
 	for _, connection in ipairs(self.connections) do
 		connection:Disconnect()

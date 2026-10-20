@@ -406,7 +406,7 @@ do
 	expect(effects.music == nil, "Zero music ID must not start unknown audio")
 	effects:OnNotice({kind = "ability", action = "Slide", cooldown = 3})
 	local sounds = f.services.SoundService:GetChildren()
-	expect(#sounds == 1 and sounds[1].SoundId == "rbxasset://sounds/action_footsteps_plastic.mp3" and sounds[1].IsPlaying, "Slide must use the verified engine fallback when its ID is zero")
+	expect(#sounds == 1 and sounds[1].SoundId == "rbxasset://sounds/swoosh.wav" and sounds[1].IsPlaying, "Slide must use the verified engine fallback when its ID is zero")
 	f.ctx.Profile.settings.sfx = false; effects:OnProfile(f.ctx.Profile)
 	expect(#f.services.SoundService:GetChildren() == 0, "Disabling SFX must stop active one-shot sounds")
 	f.ctx.Profile.settings.reducedMotion = true
@@ -561,6 +561,31 @@ do
 	expect(replacementKnee.C0 == remoteBase, "Controller destruction must release remote joint offsets")
 end
 
+-- Vault tuck and tag lunge poses are replicated attributes and fully clean up.
+do
+	local f = fixture(Vector2.new(1280, 720))
+	local other = f.instance.new("Player"); other.UserId = 99; other.Character = f.character(); table.insert(f.players.list, other)
+	local movement = f.load("MovementController"); movement:Start()
+	local knee = other.Character:FindFirstChild("LeftKnee", true)
+	local localKnee = f.player.Character:FindFirstChild("LeftKnee", true)
+	local base, localBase = knee.C0, localKnee.C0
+	other.Character:SetAttribute("Vaulting", true); f.player.Character:SetAttribute("Vaulting", true)
+	for _ = 1, 3 do movement:_feedback(0.1) end
+	expect(knee.C0 ~= base and localKnee.C0 ~= localBase, "A replicated vault tucks the knees of both avatars")
+	other.Character:SetAttribute("Vaulting", false); f.player.Character:SetAttribute("Vaulting", false)
+	for _ = 1, 40 do movement:_feedback(0.1) end
+	expect(knee.C0 == base and localKnee.C0 == localBase, "Finished vault returns every joint to its base")
+	local shoulder = other.Character:FindFirstChild("RightShoulder", true)
+	if shoulder then
+		local shoulderBase = shoulder.C0
+		other.Character:SetAttribute("CatchTagAt", f.workspace:GetServerTimeNow())
+		movement:_feedback(0.1)
+		expect(shoulder.C0 ~= shoulderBase, "A replicated tag drives the hunter's lunge pose")
+	end
+	movement:Destroy()
+	expect(knee.C0 == base, "Destroying the controller releases tag and vault poses")
+end
+
 -- Audio failures are cached, music preferences are independent, and landings reset.
 do
 	local f = fixture(Vector2.new(1280, 720))
@@ -594,6 +619,25 @@ do
 	effects:Destroy()
 end
 
+
+-- Volume settings scale sound effects; zone ambience stays silent until an ID is configured.
+do
+	local f = fixture(Vector2.new(1280, 720))
+	f.ctx.Profile.settings.volumeSfx = 0.2
+	local effects = f.load("EffectsController"); effects:Start()
+	effects:OnNotice({kind = "ability", action = "Slide", cooldown = 3})
+	local sounds = f.services.SoundService:GetChildren()
+	expect(#sounds >= 1 and sounds[1].Volume < 0.2, "SFX volume setting scales effect volume")
+	effects:_ambience(1)
+	expect(effects.ambience and next(effects.ambience) == nil, "Unconfigured ambience beds create no sounds")
+	f.ctx.Config = table.clone(f.ctx.Config); f.ctx.Config.Audio = table.clone(f.ctx.Config.Audio); f.ctx.Config.Audio.MallAmbience = 12345
+	effects:_ambience(1)
+	expect(effects.ambience.MallAmbience ~= nil and effects.ambience.MallAmbience.Looped, "A configured ambience ID loops")
+	local ui = f.load("UIController"); ui:Start(); ui:OpenMenu("Settings")
+	local up = ui.panelContent:FindFirstChild("VolumeUp_volumeSfx", true)
+	up.Activated:Fire()
+	expect(f.actions[#f.actions].action == "Settings" and math.abs(f.actions[#f.actions].payload.volumeSfx - 0.3) < 0.001, "Volume + sends the next tenth")
+end
 
 -- Optional layout dump for tools/ui-preview.py: UI_DUMP=/dir lune run tests/client_controllers.spec.luau
 local dumpDir = require("@lune/process").env.UI_DUMP

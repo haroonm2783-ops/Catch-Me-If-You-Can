@@ -59,7 +59,7 @@ function Rules.NewProfile(now)
 		schemaVersion=1, coins=0, xp=0, level=1, rating=1000, streak=0, bestStreak=0,
 		stats={rounds=0,wins=0,hunterWins=0,runnerWins=0,tags=0,survived=0},
 		owned=Catalog.DefaultOwned(), equipped=table.clone(Catalog.DefaultEquipment),
-		settings={music=true,sfx=true,reducedMotion=false,cameraShake=true,tutorialDone=false},
+		settings={music=true,sfx=true,reducedMotion=false,cameraShake=true,tutorialDone=false,volumeMusic=0.6,volumeSfx=0.8},
 		daily={day=Rules.DayKey(now),progress={rounds=0,tags=0,survived=0},claimed={}},
 		achievements={},
 		login={streak=0,lastClaim=""},
@@ -91,7 +91,11 @@ function Rules.NormalizeProfile(raw, now)
 	end
 	if type(raw.settings) == "table" then
 		for key in pairs(result.settings) do
-			if type(raw.settings[key]) == "boolean" then result.settings[key] = raw.settings[key] end
+			local incoming = raw.settings[key]
+			if type(result.settings[key]) == "boolean" and type(incoming) == "boolean" then result.settings[key] = incoming
+			elseif type(result.settings[key]) == "number" and type(incoming) == "number" and incoming == incoming then
+				result.settings[key] = math.clamp(math.floor(incoming * 10 + 0.5) / 10, 0, 1)
+			end
 		end
 	end
 	if type(raw.daily) == "table" and raw.daily.day == result.daily.day then

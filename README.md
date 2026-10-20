@@ -9,6 +9,8 @@ where players spawn, shop, check boards and press PLAY to join the chase queue. 
 `CityMapBuilder.lua` (tag `backup-city-v0.3.0`). Live status: [DEVELOPMENT_PROGRESS.md](DEVELOPMENT_PROGRESS.md).
 
 ![Mall overview (geometry preview, not a Studio screenshot)](docs/previews/mall-overview.png)
+![Shop UI layout preview](docs/previews/ui/desktop_shop.png)
+![HUD layout preview](docs/previews/ui/desktop_hud.png)
 ![Plaza hub (geometry preview)](docs/previews/plaza-hub.png)
 
 **Direct-open Studio places are included.** The user confirmed running, sprinting,
@@ -27,7 +29,7 @@ claim of launch readiness.
 2. In Roblox Studio, choose **File → Open from File** and select the downloaded
    place. Neon Heights is already present in the editor; it is not an empty place
    that requires pasting scripts. The map is reused at runtime.
-3. Press **Play**. Output should say `Neon Mall initialized. 0.4.0`; if it
+3. Press **Play**. Output should say `Neon Mall initialized. 0.5.0`; if it
    shows an older version, download and open the updated file. A solo Studio
    session enters a clearly labeled practice round
    after the 16-second intermission and 5-second head start. Practice awards no

@@ -106,6 +106,7 @@ local function shade(color, factor)
 	return Color3.new(math.clamp(color.R * factor, 0, 1), math.clamp(color.G * factor, 0, 1), math.clamp(color.B * factor, 0, 1))
 end
 
+local CLICK -- set by UIController:Start so every styled button can play the UI click
 local function hook(object, name, callback)
 	local signal = object[name]
 	if signal and type(signal) ~= "boolean" and type(signal) ~= "number" and signal.Connect then return signal:Connect(callback) end
@@ -148,7 +149,10 @@ local function button(parent, text, callback, props)
 	node("UIStroke", {Color = shade(base, 0.45), Thickness = 2, ApplyStrokeMode = Enum.ApplyStrokeMode.Border}, object)
 	local scale = node("UIScale", {Scale = 1}, object)
 	attachMotion(object, scale)
-	object.Activated:Connect(callback)
+	object.Activated:Connect(function(...)
+		if CLICK then CLICK() end
+		callback(...)
+	end)
 	return object
 end
 
@@ -185,7 +189,10 @@ local function iconButton(parent, spec)
 	local caption = label(object, spec.text or "", {Name = "Caption", Size = UDim2.fromScale(1, 0.26), Position = UDim2.fromScale(0, 0.70), TextXAlignment = Enum.TextXAlignment.Center, TextSize = 9, Font = F.black, TextStrokeTransparency = 0.5, TextStrokeColor3 = shade(spec.bottom, 0.4)})
 	local scale = node("UIScale", {Scale = 1}, holder)
 	attachMotion(object, scale)
-	if spec.callback then object.Activated:Connect(spec.callback) end
+	object.Activated:Connect(function(...)
+		if CLICK then CLICK() end
+		if spec.callback then spec.callback(...) end
+	end)
 	return holder, object, glyph, caption
 end
 
@@ -268,6 +275,11 @@ function UIController:_tween(object, duration, props, style)
 end
 
 -- Confetti-style burst of small squares from the center of a GUI object.
+function UIController:_reward()
+	local effects = self.ctx.Controllers and self.ctx.Controllers.EffectsController
+	if effects and effects._sound then effects:_sound("Reward", 0.35) end
+end
+
 function UIController:_burst(origin, colors)
 	if not self:_motion() or not origin or not self.root then return end
 	local size = origin.AbsoluteSize
@@ -302,6 +314,10 @@ function UIController:Start()
 	hideCoreGui()
 	-- The CoreGui can register late on slow devices; a second pass makes the setting stick.
 	task.delay(3, hideCoreGui)
+	CLICK = function()
+		local effects = self.ctx.Controllers and self.ctx.Controllers.EffectsController
+		if effects and effects._sound then effects:_sound("UiClick", 0.25) end
+	end
 	self.root = frame(self.gui, {Size = UDim2.fromScale(1, 1), BackgroundTransparency = 1})
 	self:_buildHeader()
 	self:_buildDock()
@@ -1014,7 +1030,7 @@ function UIController:_renderQuests()
 			AnchorPoint = narrow and Vector2.new(0.5, 1) or Vector2.new(1, 0), Position = narrow and UDim2.new(0.5, 0, 1, -12) or UDim2.new(1, -16, 0, 36), Size = narrow and UDim2.new(1, -32, 0, 40) or UDim2.fromOffset(140, 56),
 			TextSize = 14, Font = F.black, BackgroundColor3 = login.canClaim and C.amber or C.card, TextColor3 = login.canClaim and Color3.fromRGB(50, 30, 10) or C.muted})
 		claim.Activated:Connect(function()
-			if login.canClaim then self:_send("ClaimLogin") self:_burst(claim, {C.amber, C.green, C.cyan}) end
+			if login.canClaim then self:_send("ClaimLogin") self:_burst(claim, {C.amber, C.green, C.cyan}) self:_reward() end
 		end)
 	end
 	sectionLabel(container, "TODAY'S CHALLENGES", 1)
@@ -1034,7 +1050,7 @@ function UIController:_renderQuests()
 			AnchorPoint = narrow and Vector2.new(0.5, 1) or Vector2.new(1, 0.5), Position = narrow and UDim2.new(0.5, 0, 1, -10) or UDim2.new(1, -14, 0.5, 0), Size = narrow and UDim2.new(1, -28, 0, 36) or UDim2.fromOffset(140, 48),
 			TextSize = 12, Font = F.black, BackgroundColor3 = claimable and C.green or C.card, TextColor3 = claimable and Color3.fromRGB(14, 50, 30) or C.muted})
 		claim.Activated:Connect(function()
-			if claimable then self:_send("ClaimQuest", {id = quest.id}) self:_burst(claim, {C.green, C.amber, C.cyan}) end
+			if claimable then self:_send("ClaimQuest", {id = quest.id}) self:_burst(claim, {C.green, C.amber, C.cyan}) self:_reward() end
 		end)
 	end
 	if #quests == 0 then label(container, "Your daily quests are loading.", {Size = UDim2.new(1, 0, 0, 50), TextColor3 = C.muted}) end
@@ -1121,6 +1137,17 @@ function UIController:_renderSettings()
 		local enabled = settings[spec[1]] == true
 		button(row, enabled and "ON" or "OFF", function() self:_send("Settings", {[spec[1]] = not enabled}) end, {Name = "Setting_" .. spec[1], AnchorPoint = Vector2.new(1, 0.5), Position = UDim2.new(1, -14, 0.5, 0), Size = UDim2.fromOffset(84, 40), TextSize = 14, Font = F.black,
 			BackgroundColor3 = enabled and C.green or C.card, TextColor3 = enabled and Color3.fromRGB(14, 50, 30) or C.muted})
+	end
+	for index, spec in ipairs({{"volumeMusic", "MUSIC VOLUME", "🎶"}, {"volumeSfx", "EFFECTS VOLUME", "🔉"}}) do
+		local level = type(settings[spec[1]]) == "number" and settings[spec[1]] or (spec[1] == "volumeMusic" and 0.6 or 0.8)
+		local row = card(container, {Name = "Volume_" .. spec[1], Size = UDim2.new(1, -5, 0, 76), LayoutOrder = 5 + index}, C.line)
+		label(row, spec[3], {Position = UDim2.fromOffset(12, 14), Size = UDim2.fromOffset(44, 48), TextSize = 26, TextXAlignment = Enum.TextXAlignment.Center})
+		label(row, spec[2] .. "  " .. math.floor(level * 100 + 0.5) .. "%", {Position = UDim2.fromOffset(64, 10), Size = UDim2.new(1, -240, 0, 22), TextSize = 13, Font = F.black})
+		progressBar(row, {Position = UDim2.fromOffset(64, 42), Size = UDim2.new(1, -240, 0, 14)}, level, C.cyan, C.blue)
+		button(row, "−", function() self:_send("Settings", {[spec[1]] = math.max(0, math.floor((level - 0.1) * 10 + 0.5) / 10)}) end,
+			{Name = "VolumeDown_" .. spec[1], AnchorPoint = Vector2.new(1, 0.5), Position = UDim2.new(1, -62, 0.5, 0), Size = UDim2.fromOffset(44, 44), TextSize = 22, Font = F.black})
+		button(row, "+", function() self:_send("Settings", {[spec[1]] = math.min(1, math.floor((level + 0.1) * 10 + 0.5) / 10)}) end,
+			{Name = "VolumeUp_" .. spec[1], AnchorPoint = Vector2.new(1, 0.5), Position = UDim2.new(1, -12, 0.5, 0), Size = UDim2.fromOffset(44, 44), TextSize = 22, Font = F.black})
 	end
 	local howto = button(container, "📖  HOW TO PLAY", function() self:ShowTutorial() end, {Name = "HowToPlay", Size = UDim2.new(1, -5, 0, 46), LayoutOrder = 11, TextSize = 13, BackgroundColor3 = THEME.Progress.top, TextColor3 = Color3.fromRGB(10, 50, 54)})
 	local instructions = card(container, {Size = UDim2.new(1, -5, 0, 150), LayoutOrder = 12}, C.line)

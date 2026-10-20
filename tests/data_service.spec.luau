@@ -153,6 +153,10 @@ do
 	expect(profile.coins == 0 and not profile.owned.trail_cyan, "Failed debit must not alter balance or ownership")
 	f.data:UpdateSettings(f.player, { music = false, sfx = "false", coins = 999999 })
 	expect(profile.settings.music == false and profile.settings.sfx == true and profile.coins == 0, "Only known boolean settings may change")
+	f.data:UpdateSettings(f.player, { volumeSfx = 0.34, volumeMusic = 7, coins = 5 })
+	expect(profile.settings.volumeSfx == 0.3 and profile.settings.volumeMusic == 1 and profile.coins == 0, "Volume settings are clamped to tenths in [0,1]")
+	f.data:UpdateSettings(f.player, { volumeSfx = "loud", volumeMusic = 0 / 0 })
+	expect(profile.settings.volumeSfx == 0.3 and profile.settings.volumeMusic == 1, "Non-numeric or NaN volumes are ignored")
 end
 
 -- Only one reward per server round; practice cannot farm any progression.

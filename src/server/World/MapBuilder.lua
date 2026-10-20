@@ -19,7 +19,7 @@ local P = {
 	green = Color3.fromRGB(62, 182, 118), leaf = Color3.fromRGB(104, 204, 104), wood = Color3.fromRGB(164, 110, 68),
 	teal = Color3.fromRGB(44, 190, 192), pink = Color3.fromRGB(255, 152, 202), glass = Color3.fromRGB(128, 186, 214),
 	steel = Color3.fromRGB(150, 160, 178), red = Color3.fromRGB(214, 48, 70), orange = Color3.fromRGB(255, 152, 70),
-	soil = Color3.fromRGB(70, 60, 54), yellow = Color3.fromRGB(240, 204, 80),
+	soil = Color3.fromRGB(70, 60, 54), yellow = Color3.fromRGB(240, 204, 80), indigo = Color3.fromRGB(40, 32, 108),
 }
 
 -- Tunable lighting preset. Values are deliberately restrained: surfaces keep their color,
@@ -183,6 +183,7 @@ function MapBuilder.Build(options)
 	end
 	local function neon(parent, name, x, y, z, sx, sy, sz, color, pulse)
 		local p = art(parent, name, Vector3.new(sx, sy, sz), Vector3.new(x, y, z), color, Enum.Material.Neon)
+		p.Transparency = 0.22 -- softened glow: neon is an accent, not a floodlight
 		if pulse then p:SetAttribute("Pulse", pulse) end
 		return p
 	end
@@ -251,7 +252,7 @@ function MapBuilder.Build(options)
 	-- A lit sign: dark backing, glowing edge strips and a SurfaceGui on the +Z (Back) face at rotation 0.
 	local function sign(parent, text, center, width, height, accent, rotation, textColor)
 		local cf = CFrame.new(center) * CFrame.Angles(0, rotation or 0, 0)
-		local backing = part(parent, "Sign_" .. text, Vector3.new(width, height, 0.4), cf, P.ink, Enum.Material.SmoothPlastic, false)
+		local backing = part(parent, "Sign_" .. text, Vector3.new(width, height, 0.4), cf, P.indigo, Enum.Material.SmoothPlastic, false)
 		backing:SetAttribute("VisualPolish", true)
 		surfaceText(backing, Enum.NormalId.Back, text, textColor or accent or P.white, 34)
 		for _, side in ipairs({ -1, 1 }) do
@@ -603,12 +604,12 @@ function MapBuilder.Build(options)
 	-- =====================================================================================
 	cylinder(atrium, "FountainStep", Vector3.new(0, 0.4, 0), 31, 0.8, P.marble2, Enum.Material.Marble)
 	cylinder(atrium, "FountainBasin", Vector3.new(0, 1.1, 0), 25, 1.8, P.white, Enum.Material.Marble)
-	disc(atrium, "FountainWater", CFrame.new(0, 2.05, 0), 23, 0.1, P.blue, Enum.Material.Glass).Transparency = 0.35
-	disc(atrium, "FountainGlow", CFrame.new(0, 0.9, 0), 32, 0.12, P.cyan, Enum.Material.Neon):SetAttribute("Pulse", 1)
+	cylinder(atrium, "FountainWater", Vector3.new(0, 2.05, 0), 23, 0.1, P.blue, Enum.Material.Glass, false).Transparency = 0.35
+	cylinder(atrium, "FountainGlow", Vector3.new(0, 0.9, 0), 32, 0.12, P.cyan, Enum.Material.Neon, false):SetAttribute("Pulse", 1)
 	cylinder(atrium, "FountainPedestal", Vector3.new(0, 4.6, 0), 4.4, 5.6, P.white, Enum.Material.Marble)
 	for i, tier in ipairs({ { 10, 8.4 }, { 6.6, 10.6 }, { 4, 12.2 } }) do
 		cylinder(atrium, "FountainTier" .. i, Vector3.new(0, tier[2], 0), tier[1], 0.7, P.white, Enum.Material.Marble, false)
-		disc(atrium, "TierWater", CFrame.new(0, tier[2] + 0.45, 0), tier[1] - 0.8, 0.08, P.cyan, Enum.Material.Glass).Transparency = 0.4
+		cylinder(atrium, "TierWater", Vector3.new(0, tier[2] + 0.45, 0), tier[1] - 0.8, 0.08, P.cyan, Enum.Material.Glass, false).Transparency = 0.4
 	end
 	for i = 1, 8 do
 		local angle = i * math.pi / 4
@@ -1446,8 +1447,8 @@ function MapBuilder.Build(options)
 	end
 	addPrompt(portal, "Play", "PLAY", "Enter the mall", 22)
 	-- Giant title sign above the entrance, with a neon runner.
-	local title1 = part(hub, "TitleTop", Vector3.new(58, 11, 1.6), Vector3.new(0, 49, 211.6), P.ink, Enum.Material.SmoothPlastic, false)
-	local title2 = part(hub, "TitleBottom", Vector3.new(58, 11, 1.6), Vector3.new(0, 38.6, 211.6), P.ink, Enum.Material.SmoothPlastic, false)
+	local title1 = part(hub, "TitleTop", Vector3.new(58, 11, 1.6), Vector3.new(0, 49, 211.6), P.indigo, Enum.Material.SmoothPlastic, false)
+	local title2 = part(hub, "TitleBottom", Vector3.new(58, 11, 1.6), Vector3.new(0, 38.6, 211.6), P.indigo, Enum.Material.SmoothPlastic, false)
 	title1:SetAttribute("VisualPolish", true); title2:SetAttribute("VisualPolish", true)
 	surfaceText(title1, Enum.NormalId.Back, "CATCH ME", P.cyan, 28, 0.74, 0.92)
 	surfaceText(title2, Enum.NormalId.Back, "IF YOU CAN", P.coral, 28, 0.74, 0.92)
@@ -1462,7 +1463,7 @@ function MapBuilder.Build(options)
 	limb({ 0, 3 }, { 3.5, 1 }); limb({ 0, 3 }, { -3, 1.5 })
 	-- Side billboards.
 	local function billboard(cx, title, subtitle, accent)
-		local b = part(hub, "Billboard", Vector3.new(38, 17, 1), Vector3.new(cx, 22, 212.9), P.ink, Enum.Material.SmoothPlastic, false)
+		local b = part(hub, "Billboard", Vector3.new(38, 17, 1), Vector3.new(cx, 22, 212.9), P.indigo, Enum.Material.SmoothPlastic, false)
 		b:SetAttribute("VisualPolish", true)
 		local gui = surfaceText(b, Enum.NormalId.Back, title, P.white, 28, 0.9, 0.46)
 		gui.Position = UDim2.fromScale(0.05, 0.08)
@@ -1489,9 +1490,9 @@ function MapBuilder.Build(options)
 	local FZ = 248
 	cylinder(hub, "HubFountainStep", Vector3.new(0, 0.4, FZ), 28, 0.8, P.marble2, Enum.Material.Marble)
 	cylinder(hub, "HubFountainBasin", Vector3.new(0, 1.2, FZ), 22, 2, P.white, Enum.Material.Marble)
-	disc(hub, "HubFountainWater", CFrame.new(0, 2.25, FZ), 20, 0.1, P.blue, Enum.Material.Glass).Transparency = 0.3
-	disc(hub, "HubFountainRing", CFrame.new(0, 2.4, FZ), 21.4, 0.1, P.cyan, Enum.Material.Neon):SetAttribute("Pulse", 2)
-	disc(hub, "HubFountainRing", CFrame.new(0, 0.9, FZ), 29.5, 0.12, P.magenta, Enum.Material.Neon):SetAttribute("Pulse", 4)
+	cylinder(hub, "HubFountainWater", Vector3.new(0, 2.25, FZ), 20, 0.1, P.blue, Enum.Material.Glass, false).Transparency = 0.3
+	cylinder(hub, "HubFountainRing", Vector3.new(0, 2.32, FZ), 21.4, 0.06, P.cyan, Enum.Material.Neon, false):SetAttribute("Pulse", 2)
+	cylinder(hub, "HubFountainRing", Vector3.new(0, 0.86, FZ), 29.5, 0.08, P.magenta, Enum.Material.Neon, false):SetAttribute("Pulse", 4)
 	cylinder(hub, "StatuePedestal", Vector3.new(0, 4.6, FZ), 8, 5, P.ink, Enum.Material.Metal)
 	cylinder(hub, "StatueCap", Vector3.new(0, 7.3, FZ), 8.6, 0.5, P.gold, Enum.Material.Metal, false)
 	sign(hub, "CATCH ME IF YOU CAN", Vector3.new(0, 4.8, FZ + 4.3), 6.4, 1.8, P.cyan, 0)
@@ -1523,6 +1524,34 @@ function MapBuilder.Build(options)
 	hubSpray.LightEmission = 0.6
 	hubSpray.Parent = hub:FindFirstChild("StatueCap")
 
+	-- Facade architecture: pilasters with gold capitals, a balcony with glass rail, portico columns and canopy.
+	for k = 1, 6 do
+		for _, side in ipairs({ -1, 1 }) do
+			local x = side * (12 + k * 10)
+			art(hub, "Pilaster", Vector3.new(2.2, 26, 1.4), Vector3.new(x, 13, 212.7), P.white, Enum.Material.Concrete)
+			art(hub, "PilasterCap", Vector3.new(3.2, 0.9, 2.2), Vector3.new(x, 26.4, 212.9), P.gold, Enum.Material.Metal)
+			art(hub, "PilasterBase", Vector3.new(3, 1, 2), Vector3.new(x, 0.5, 212.8), P.gold, Enum.Material.Metal)
+		end
+	end
+	art(hub, "BalconyLedge", Vector3.new(150, 0.6, 3), Vector3.new(0, 17.6, 213.4), P.cream, Enum.Material.Concrete)
+	glassBox(hub, "BalconyGlass", 0, 19.4, 214.7, 150, 3, 0.2, 0.6, false)
+	art(hub, "BalconyHandrail", Vector3.new(150, 0.3, 0.4), Vector3.new(0, 21, 214.7), P.gold, Enum.Material.Metal)
+	for _, side in ipairs({ -1, 1 }) do
+		cylinder(hub, "PorticoColumn", Vector3.new(side * 19, 10, 218), 3, 20, P.white, Enum.Material.Marble)
+		cylinder(hub, "PorticoBase", Vector3.new(side * 19, 0.6, 218), 4.4, 1.2, P.gold, Enum.Material.Metal, false)
+		cylinder(hub, "PorticoCap", Vector3.new(side * 19, 20.4, 218), 4.2, 0.8, P.gold, Enum.Material.Metal, false)
+		neon(hub, "PorticoGlow", side * 19, 10, 216.4, 0.2, 18, 0.2, side < 0 and P.cyan or P.magenta)
+	end
+	art(hub, "PorticoCanopy", Vector3.new(46, 1.2, 9), Vector3.new(0, 21.2, 217), P.white, Enum.Material.Concrete)
+	neon(hub, "PorticoEdge", 0, 20.5, 221.6, 46, 0.25, 0.25, P.gold)
+	for i = -3, 3 do ceilingStrip(hub, i * 6, 20.4, 217, 0.5, 8) end
+	-- Skin showcase cases: glass fronts and glowing frames around each pedestal.
+	for i = 1, 4 do
+		local z = 230 + (i - 1) * 12
+		glassBox(hub, "ShowcaseGlass", -58.6, 6, z, 0.2, 11, 10.6, 0.72, false)
+		neon(hub, "ShowcaseFrame", -58.5, 11.6, z, 0.25, 0.25, 10.8, i % 2 == 0 and P.magenta or P.cyan)
+		neon(hub, "ShowcaseFrame", -58.5, 0.5, z, 0.25, 0.25, 10.8, i % 2 == 0 and P.magenta or P.cyan)
+	end
 	-- Interactive displays ------------------------------------------------------------
 	local function console(x, z, width, color, rot)
 		local c = box(hub, "Console", x, 1.6, z, width, 3.2, 2.4, P.ink, Enum.Material.Metal)
@@ -1608,7 +1637,7 @@ function MapBuilder.Build(options)
 		addPrompt(base, "Shop", "BROWSE", pod[1] == "COINS" and "Coin items" or (pod[1] == "EFFECTS" and "Trails & effects" or "Game passes"), 16)
 	end
 	-- QUESTS board and LEADERBOARD board flank the PLAY arch.
-	local questBoard = part(hub, "QuestBoard", Vector3.new(19, 11, 0.6), Vector3.new(-34, 9.5, 220), P.ink, Enum.Material.SmoothPlastic, false)
+	local questBoard = part(hub, "QuestBoard", Vector3.new(19, 11, 0.6), Vector3.new(-34, 9.5, 220), P.indigo, Enum.Material.SmoothPlastic, false)
 	questBoard:SetAttribute("VisualPolish", true)
 	local qtitle = surfaceText(questBoard, Enum.NormalId.Back, "QUESTS", P.gold, 30, 0.8, 0.26)
 	qtitle.Parent.Name = "QuestGui"
@@ -1643,7 +1672,7 @@ function MapBuilder.Build(options)
 	questConsole.Name = "QuestsKiosk"
 	addPrompt(questConsole, "Quests", "OPEN QUESTS", "Daily dispatch", 16)
 	-- Leaderboard: rows are updated by HubService from the live server roster.
-	local board = part(hub, "LeaderboardBoard", Vector3.new(21, 11.5, 0.6), Vector3.new(34, 9.7, 220), P.ink, Enum.Material.SmoothPlastic, false)
+	local board = part(hub, "LeaderboardBoard", Vector3.new(21, 11.5, 0.6), Vector3.new(34, 9.7, 220), P.indigo, Enum.Material.SmoothPlastic, false)
 	board:SetAttribute("VisualPolish", true)
 	local gui = surfaceText(board, Enum.NormalId.Back, "LEADERBOARD", P.cyan, 30, 0.84, 0.2)
 	gui.Position = UDim2.fromScale(0.08, 0.04)
@@ -1695,7 +1724,7 @@ function MapBuilder.Build(options)
 	for i, item in ipairs({ { 0, 2.4, "1", P.gold }, { -14, 1.4, "2", P.cyan }, { 14, 0.9, "3", P.pink } }) do
 		local x, h, numeral, accent = item[1], item[2], item[3], item[4]
 		cylinder(hub, "WinnerPodium_" .. numeral, Vector3.new(x, 1.4 + h / 2, 292), 10.5, h, P.steel, Enum.Material.Metal)
-		cylinder(hub, "PodiumLight", Vector3.new(x, 1.45 + h, 292), 10.6, 0.12, accent, Enum.Material.Neon, false)
+		cylinder(hub, "PodiumLight", Vector3.new(x, 1.45 + h, 292), 10.6, 0.12, accent, Enum.Material.SmoothPlastic, false)
 		sign(hub, numeral, Vector3.new(x, 2.6, 286.4), 3, 1.4, accent, 0)
 		podiums[i] = CFrame.lookAt(Vector3.new(x, 4.6 + h, 292), Vector3.new(x, 4.6 + h, 310))
 	end
@@ -1750,7 +1779,8 @@ function MapBuilder.Build(options)
 	spawn.Duration = 0
 	spawn.Parent = hub
 	partCount += 1
-	cylinder(hub, "SpawnRing", Vector3.new(0, 0.1, 312), 22, 0.1, P.cyan, Enum.Material.Neon, false):SetAttribute("Pulse", 2)
+	ring(hub, "SpawnRing", CFrame.new(0, 0.14, 312) * CFrame.Angles(math.pi / 2, 0, 0), 11, 0.3, P.cyan, Enum.Material.Neon, 28)
+	ring(hub, "SpawnRing", CFrame.new(0, 0.14, 312) * CFrame.Angles(math.pi / 2, 0, 0), 8.5, 0.2, P.magenta, Enum.Material.Neon, 24)
 	sign(hub, "WELCOME TO THE PLAZA", Vector3.new(0, 6, 322.8), 24, 2.4, P.white, math.pi)
 	local lobbySpawn = CFrame.lookAt(Vector3.new(0, 3.4, 312), Vector3.new(0, 3.4, 215))
 

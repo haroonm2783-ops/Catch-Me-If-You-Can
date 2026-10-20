@@ -1,7 +1,7 @@
 -- Shared tunables. Prices and pass IDs live in Catalog.lua.
 local Config = {
 	GameName = "CATCH ME IF YOU CAN",
-	Version = "0.4.0",
+	Version = "0.5.0",
 	Round = {
 		MaxPlayers = 12, MinimumPlayers = 2, Duration = 180, Intermission = 16,
 		ResultsDuration = 10, HeadStart = 5, FinalSeconds = 30, RespawnDelay = 2,
@@ -29,7 +29,9 @@ local Config = {
 	-- Unavailable audio is skipped; every action also has visual feedback.
 	Audio = {
 		Music = 0, Sprint = 0, Slide = 0, Vault = 0, Land = 0, Tag = 0, Win = 0, Lose = 0,
-		Level = 0, Countdown = 0, Final = 0, Purchase = 0,
+		Level = 0, Countdown = 0, Final = 0, Purchase = 0, UiClick = 0, Reward = 0,
+		-- Looped ambience beds, faded by where the player stands. 0 = silent (nothing licensed is bundled).
+		MallAmbience = 0, ArcadeAmbience = 0, FoodCourtAmbience = 0, PlazaAmbience = 0,
 	},
 }
 return table.freeze(Config)

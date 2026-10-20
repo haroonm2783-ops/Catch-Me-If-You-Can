@@ -543,6 +543,8 @@ function RoundService:TryTag(player)
 	end
 	local hunter = self.roster[player.UserId]
 	hunter.tags += 1
+	-- Replicated so every client can play the hunter's lunge pose on a successful tag.
+	character:SetAttribute("CatchTagAt", now())
 	local target = closest.player
 	local targetCharacter, _, targetRoot = liveCharacter(target)
 	local cosmetic = self.ctx.Services.CosmeticService

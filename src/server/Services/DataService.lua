@@ -387,6 +387,14 @@ function DataService:UpdateSettings(player, settings)
 			record.profile.settings[key] = settings[key]; changed = true
 		end
 	end
+	-- Volume is a 0..1 number in tenths; anything else is ignored.
+	for _, key in ipairs({ "volumeMusic", "volumeSfx" }) do
+		local value = settings[key]
+		if type(value) == "number" and value == value then
+			value = math.clamp(math.floor(value * 10 + 0.5) / 10, 0, 1)
+			if record.profile.settings[key] ~= value then record.profile.settings[key] = value; changed = true end
+		end
+	end
 	if changed then self:_Dirty(record); self:Send(player) end
 	return true
 end
