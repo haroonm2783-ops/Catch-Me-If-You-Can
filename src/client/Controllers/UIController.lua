@@ -54,20 +54,6 @@ local function label(parent, text, props)
 	return node("TextLabel", values, parent)
 end
 
-local function button(parent, text, callback, props)
-	local values = {
-		Text = text, Font = F.bold, TextSize = 13, TextColor3 = C.text,
-		BackgroundColor3 = C.card, BorderSizePixel = 0, AutoButtonColor = true,
-		Selectable = true, Size = UDim2.fromOffset(150, 40),
-	}
-	for key, value in pairs(props or {}) do values[key] = value end
-	local object = node("TextButton", values, parent)
-	corner(object, 10)
-	stroke(object, values.BackgroundColor3 == C.cyan and C.cyan or C.line, 0.3)
-	object.Activated:Connect(callback)
-	return object
-end
-
 local function scroll(parent, props, horizontal)
 	local values = {
 		BackgroundTransparency = 1, BorderSizePixel = 0, ScrollBarThickness = 3,
@@ -111,6 +97,119 @@ local function clear(parent)
 	for _, child in ipairs(parent:GetChildren()) do child:Destroy() end
 end
 
+-- ======================================================================================
+-- UI kit: gradients, outlines, drop shadows, hover/press motion, rarity + menu themes.
+-- Icons are emoji glyphs rendered by Roblox's built-in emoji font (no uploaded assets).
+-- ======================================================================================
+local function shade(color, factor)
+	return Color3.new(math.clamp(color.R * factor, 0, 1), math.clamp(color.G * factor, 0, 1), math.clamp(color.B * factor, 0, 1))
+end
+
+local function hook(object, name, callback)
+	local signal = object[name]
+	if signal and type(signal) ~= "boolean" and type(signal) ~= "number" and signal.Connect then return signal:Connect(callback) end
+end
+
+local function springTo(object, duration, props, style)
+	pcall(function()
+		TweenService:Create(object, TweenInfo.new(duration, style or Enum.EasingStyle.Quad, Enum.EasingDirection.Out), props):Play()
+	end)
+end
+
+-- Hover grows, press squashes, release pops. Works with mouse, touch and gamepad selection.
+local function attachMotion(object, scale)
+	hook(object, "MouseEnter", function() springTo(scale, 0.12, {Scale = 1.06}) end)
+	hook(object, "MouseLeave", function() springTo(scale, 0.12, {Scale = 1}) end)
+	hook(object, "MouseButton1Down", function() springTo(scale, 0.07, {Scale = 0.93}) end)
+	hook(object, "MouseButton1Up", function() springTo(scale, 0.14, {Scale = 1.06}, Enum.EasingStyle.Back) end)
+	hook(object, "SelectionGained", function() springTo(scale, 0.12, {Scale = 1.06}) end)
+	hook(object, "SelectionLost", function() springTo(scale, 0.12, {Scale = 1}) end)
+end
+
+local function gloss(parent, radius)
+	local sheen = frame(parent, {Name = "Gloss", Size = UDim2.new(1, -6, 0.5, -3), Position = UDim2.fromOffset(3, 3), BackgroundColor3 = Color3.new(1, 1, 1), BackgroundTransparency = 0.8, ZIndex = (parent.ZIndex or 1)}, radius or 12)
+	node("UIGradient", {Transparency = NumberSequence.new(0.55, 1), Rotation = 90}, sheen)
+	return sheen
+end
+
+local function button(parent, text, callback, props)
+	local values = {
+		Text = text, Font = F.bold, TextSize = 13, TextColor3 = C.text,
+		BackgroundColor3 = C.card, BorderSizePixel = 0, AutoButtonColor = false,
+		Selectable = true, Size = UDim2.fromOffset(150, 40),
+		TextStrokeTransparency = 0.8, TextStrokeColor3 = Color3.new(0, 0, 0),
+	}
+	for key, value in pairs(props or {}) do values[key] = value end
+	local object = node("TextButton", values, parent)
+	local base = values.BackgroundColor3
+	corner(object, 12)
+	gloss(object, 11)
+	node("UIStroke", {Color = shade(base, 0.45), Thickness = 2, ApplyStrokeMode = Enum.ApplyStrokeMode.Border}, object)
+	local scale = node("UIScale", {Scale = 1}, object)
+	attachMotion(object, scale)
+	object.Activated:Connect(callback)
+	return object
+end
+
+local RARITY = {
+	Common = {main = Color3.fromRGB(150, 168, 200), deep = Color3.fromRGB(52, 60, 96), label = "COMMON"},
+	Rare = {main = Color3.fromRGB(84, 172, 255), deep = Color3.fromRGB(32, 62, 130), label = "RARE"},
+	Epic = {main = Color3.fromRGB(188, 120, 255), deep = Color3.fromRGB(70, 38, 130), label = "EPIC"},
+	Legendary = {main = Color3.fromRGB(255, 202, 74), deep = Color3.fromRGB(128, 78, 22), label = "LEGENDARY"},
+}
+local function rarityOf(item) return RARITY[item and item.rarity or "Common"] or RARITY.Common end
+
+-- One accent per menu: icon, header gradient, outline.
+local THEME = {
+	Shop = {icon = "🛍️", top = Color3.fromRGB(255, 176, 64), bottom = Color3.fromRGB(240, 96, 48), title = "SHOP"},
+	Inventory = {icon = "👕", top = Color3.fromRGB(196, 136, 255), bottom = Color3.fromRGB(116, 70, 232), title = "LOCKER"},
+	Quests = {icon = "📜", top = Color3.fromRGB(255, 216, 94), bottom = Color3.fromRGB(240, 150, 36), title = "QUESTS"},
+	Progress = {icon = "🏆", top = Color3.fromRGB(80, 228, 204), bottom = Color3.fromRGB(34, 150, 176), title = "CAREER"},
+	Leaderboard = {icon = "👥", top = Color3.fromRGB(110, 176, 255), bottom = Color3.fromRGB(54, 100, 232), title = "CREW"},
+	Settings = {icon = "⚙️", top = Color3.fromRGB(176, 186, 220), bottom = Color3.fromRGB(104, 112, 160), title = "SETTINGS"},
+	Results = {icon = "🎉", top = Color3.fromRGB(255, 120, 204), bottom = Color3.fromRGB(150, 80, 240), title = "RESULTS"},
+}
+
+-- Chunky icon button: drop shadow, gradient, thick outline, big glyph, small caption.
+local function iconButton(parent, spec)
+	local size = spec.size or 56
+	local holder = frame(parent, {Name = (spec.name or "Icon") .. "Slot", Size = UDim2.fromOffset(size, size), BackgroundTransparency = 1, LayoutOrder = spec.order or 0})
+	frame(holder, {Name = "Shadow", Position = UDim2.fromOffset(0, 4), Size = UDim2.fromScale(1, 1), BackgroundColor3 = Color3.new(0, 0, 0), BackgroundTransparency = 0.55}, 16)
+	local object = node("TextButton", {Name = spec.name, Text = "", AutoButtonColor = false, BackgroundColor3 = spec.top, Size = UDim2.fromScale(1, 1), Selectable = true, BorderSizePixel = 0}, holder)
+	corner(object, 16)
+	node("UIGradient", {Color = ColorSequence.new(spec.top, spec.bottom), Rotation = 90}, object)
+	node("UIStroke", {Color = shade(spec.bottom, 0.5), Thickness = 2.5, ApplyStrokeMode = Enum.ApplyStrokeMode.Border}, object)
+	gloss(object, 14)
+	local glyph = label(object, spec.icon, {Name = "Glyph", Size = UDim2.fromScale(1, 0.68), Position = UDim2.fromScale(0, 0.04), TextXAlignment = Enum.TextXAlignment.Center, TextSize = math.floor(size * 0.46), Font = F.bold})
+	local caption = label(object, spec.text or "", {Name = "Caption", Size = UDim2.fromScale(1, 0.26), Position = UDim2.fromScale(0, 0.70), TextXAlignment = Enum.TextXAlignment.Center, TextSize = 9, Font = F.black, TextStrokeTransparency = 0.5, TextStrokeColor3 = shade(spec.bottom, 0.4)})
+	local scale = node("UIScale", {Scale = 1}, holder)
+	attachMotion(object, scale)
+	if spec.callback then object.Activated:Connect(spec.callback) end
+	return holder, object, glyph, caption
+end
+
+-- Pill-shaped progress bar with a gradient fill and a highlight.
+local function progressBar(parent, props, ratio, colorA, colorB)
+	local values = {BackgroundColor3 = Color3.fromRGB(18, 16, 44), Size = UDim2.new(1, 0, 0, 12)}
+	for key, value in pairs(props or {}) do values[key] = value end
+	local track = frame(parent, values, 100)
+	node("UIStroke", {Color = Color3.fromRGB(8, 8, 24), Thickness = 1.5, ApplyStrokeMode = Enum.ApplyStrokeMode.Border}, track)
+	ratio = math.clamp(ratio or 0, 0, 1)
+	local fill = frame(track, {Name = "Fill", Size = UDim2.fromScale(ratio > 0 and math.max(ratio, 0.05) or 0, 1), BackgroundColor3 = colorA, Visible = ratio > 0}, 100)
+	node("UIGradient", {Color = ColorSequence.new(colorA, colorB or colorA), Rotation = 0}, fill)
+	gloss(fill, 100)
+	return track, fill
+end
+
+local function pill(parent, text, color, props)
+	local values = {Text = text, Font = F.black, TextSize = 9, TextColor3 = shade(color, 0.18), BackgroundColor3 = color, BackgroundTransparency = 0,
+		Size = UDim2.fromOffset(#text * 6.4 + 16, 18), TextXAlignment = Enum.TextXAlignment.Center}
+	for key, value in pairs(props or {}) do values[key] = value end
+	local object = label(parent, text, values)
+	corner(object, 9)
+	return object
+end
+
 local function isQueued(ctx)
 	local required = ctx and ctx.Config and ctx.Config.Round and ctx.Config.Round.RequireQueue
 	return not required or Players.LocalPlayer:GetAttribute("CatchQueued") == true
@@ -146,12 +245,26 @@ function UIController:_motion()
 	return not (self.ctx.Profile.settings or {}).reducedMotion
 end
 
-function UIController:_tween(object, duration, props)
+function UIController:_tween(object, duration, props, style)
 	if not self:_motion() then
 		for key, value in pairs(props) do object[key] = value end
 		return
 	end
-	TweenService:Create(object, TweenInfo.new(duration, Enum.EasingStyle.Quart, Enum.EasingDirection.Out), props):Play()
+	TweenService:Create(object, TweenInfo.new(duration, style or Enum.EasingStyle.Quart, Enum.EasingDirection.Out), props):Play()
+end
+
+-- Confetti-style burst of small squares from the center of a GUI object.
+function UIController:_burst(origin, colors)
+	if not self:_motion() or not origin or not self.root then return end
+	local size = origin.AbsoluteSize
+	local center = origin.AbsolutePosition and (origin.AbsolutePosition + size / 2 - self.root.AbsolutePosition) or Vector2.new(0, 0)
+	colors = colors or {C.amber, C.cyan, C.magenta, C.green}
+	for index = 1, 14 do
+		local angle = index * math.pi * 2 / 14
+		local piece = frame(self.root, {AnchorPoint = Vector2.new(0.5, 0.5), Position = UDim2.fromOffset(center.X, center.Y), Size = UDim2.fromOffset(9, 9), BackgroundColor3 = colors[index % #colors + 1], ZIndex = 60, Rotation = index * 25}, 3)
+		springTo(piece, 0.7, {Position = UDim2.fromOffset(center.X + math.cos(angle) * 70, center.Y + math.sin(angle) * 70 + 14), BackgroundTransparency = 1, Rotation = index * 25 + 180})
+		task.delay(0.8, function() if piece.Parent then piece:Destroy() end end)
+	end
 end
 
 function UIController:Start()
@@ -184,16 +297,23 @@ function UIController:Start()
 	self.panel = frame(self.root, {
 		Name = "MenuPanel", AnchorPoint = Vector2.new(0.5, 0.5), Position = UDim2.fromScale(0.5, 0.53),
 		Size = UDim2.new(1, -40, 1, -160), BackgroundColor3 = C.background, Visible = false, ZIndex = 5,
-	}, 18)
-	node("UISizeConstraint", {MaxSize = Vector2.new(1180, 760), MinSize = Vector2.new(270, 160)}, self.panel)
-	stroke(self.panel)
-	gradient(self.panel, C.panel, C.background, 110)
+	}, 22)
+	self.panelConstraint = node("UISizeConstraint", {MaxSize = Vector2.new(1000, 640), MinSize = Vector2.new(270, 160)}, self.panel)
+	self.panelStroke = stroke(self.panel, C.purple, 0)
+	self.panelStroke.Thickness = 3
+	gradient(self.panel, Color3.fromRGB(44, 36, 96), C.background, 100)
 	self.panelScale = node("UIScale", {Scale = 1}, self.panel)
-	frame(self.panel, {Position = UDim2.fromOffset(20, 0), Size = UDim2.fromOffset(80, 3), BackgroundColor3 = C.cyan}, 2)
-	self.panelTitle = label(self.panel, "THE COLLECTION", {Position = UDim2.fromOffset(20, 12), Size = UDim2.new(1, -90, 0, 27), Font = F.black, TextSize = 22, TextTruncate = Enum.TextTruncate.AtEnd})
-	self.panelSubtitle = label(self.panel, "", {Position = UDim2.fromOffset(20, 43), Size = UDim2.new(1, -90, 0, 20), TextColor3 = C.muted, TextSize = 11})
-	button(self.panel, "X", function() self:CloseMenu() end, {Name = "Close", Position = UDim2.new(1, -56, 0, 16), Size = UDim2.fromOffset(38, 38)})
-	self.panelContent = frame(self.panel, {Position = UDim2.fromOffset(16, 78), Size = UDim2.new(1, -32, 1, -94), BackgroundTransparency = 1})
+	-- Floating header card: themed gradient, round icon plate, title and a round close button.
+	self.panelHeader = frame(self.panel, {Name = "Header", Position = UDim2.fromOffset(10, 10), Size = UDim2.new(1, -20, 0, 58), BackgroundColor3 = C.purple, ZIndex = 6}, 18)
+	self.panelGradient = gradient(self.panelHeader, C.purple, C.magenta, 0)
+	node("UIStroke", {Color = Color3.fromRGB(10, 8, 30), Thickness = 2.5, ApplyStrokeMode = Enum.ApplyStrokeMode.Border, Transparency = 0.3}, self.panelHeader)
+	gloss(self.panelHeader, 16)
+	local plate = frame(self.panelHeader, {Position = UDim2.fromOffset(9, 8), Size = UDim2.fromOffset(42, 42), BackgroundColor3 = Color3.new(1, 1, 1), BackgroundTransparency = 0.78, ZIndex = 7}, 21)
+	self.panelIcon = label(plate, "🛍️", {TextXAlignment = Enum.TextXAlignment.Center, TextSize = 24, ZIndex = 8})
+	self.panelTitle = label(self.panelHeader, "THE COLLECTION", {Position = UDim2.fromOffset(62, 6), Size = UDim2.new(1, -130, 0, 28), Font = F.black, TextSize = 22, TextTruncate = Enum.TextTruncate.AtEnd, ZIndex = 7, TextStrokeTransparency = 0.6, TextStrokeColor3 = Color3.fromRGB(20, 10, 40)})
+	self.panelSubtitle = label(self.panelHeader, "", {Position = UDim2.fromOffset(62, 34), Size = UDim2.new(1, -130, 0, 18), TextColor3 = Color3.fromRGB(240, 236, 255), TextSize = 11, ZIndex = 7, TextTruncate = Enum.TextTruncate.AtEnd})
+	self.panelClose = button(self.panelHeader, "✕", function() self:CloseMenu() end, {Name = "Close", AnchorPoint = Vector2.new(1, 0.5), Position = UDim2.new(1, -10, 0.5, 0), Size = UDim2.fromOffset(38, 38), BackgroundColor3 = Color3.fromRGB(240, 70, 92), TextSize = 18, Font = F.black, ZIndex = 8})
+	self.panelContent = frame(self.panel, {Position = UDim2.fromOffset(16, 80), Size = UDim2.new(1, -32, 1, -96), BackgroundTransparency = 1})
 	self:_buildToast()
 	self:_buildAnnouncement()
 	self:_buildTutorial()
@@ -266,18 +386,50 @@ function UIController:_buildHeader()
 	self.roleChip = label(self.root, "EXPLORE THE PLAZA", {AnchorPoint = Vector2.new(0.5, 0), Position = UDim2.new(0.5, 0, 0, 86), Size = UDim2.fromOffset(320, 20), Font = F.bold, TextSize = 11, TextColor3 = C.cyan, TextXAlignment = Enum.TextXAlignment.Center})
 end
 
+local DOCK = {
+	{"Shop", "SHOP", "🛍️", Color3.fromRGB(255, 176, 64), Color3.fromRGB(240, 96, 48)},
+	{"Inventory", "LOCKER", "👕", Color3.fromRGB(196, 136, 255), Color3.fromRGB(116, 70, 232)},
+	{"Quests", "QUESTS", "📜", Color3.fromRGB(255, 216, 94), Color3.fromRGB(240, 150, 36)},
+	{"Progress", "CAREER", "🏆", Color3.fromRGB(80, 228, 204), Color3.fromRGB(34, 150, 176)},
+	{"Leaderboard", "CREW", "👥", Color3.fromRGB(110, 176, 255), Color3.fromRGB(54, 100, 232)},
+}
+
 function UIController:_buildDock()
-	-- Vertical menu rail on the right, below the wallet; scrolls on short screens.
-	self.dock = scroll(self.root, {AnchorPoint = Vector2.new(1, 0), Position = UDim2.new(1, -12, 0, 96), Size = UDim2.new(0, 92, 1, -250), ScrollBarThickness = 0, ClipsDescendants = true})
-	list(self.dock, false, 6)
-	local options = {{"Shop", "SHOP"}, {"Inventory", "LOCKER"}, {"Quests", "QUESTS"}, {"Progress", "CAREER"}, {"Leaderboard", "CREW"}, {"Settings", "SETTINGS"}}
-	for index, option in ipairs(options) do
-		button(self.dock, option[2], function() self:OpenMenu(option[1]) end, {Name = option[1], Size = UDim2.fromOffset(88, 38), LayoutOrder = index, TextSize = 11, BackgroundColor3 = C.panel})
+	-- Five primary icon buttons plus a "more" toggle for SETTINGS and EMOTE.
+	self.dock = frame(self.root, {Name = "Dock", AnchorPoint = Vector2.new(1, 0), Position = UDim2.new(1, -12, 0, 96), Size = UDim2.fromOffset(60, 60), BackgroundTransparency = 1, AutomaticSize = Enum.AutomaticSize.XY})
+	self.dockLayout = list(self.dock, false, 8)
+	self.dockLayout.HorizontalAlignment = Enum.HorizontalAlignment.Right
+	self.dockSlots = {}
+	for index, entry in ipairs(DOCK) do
+		local holder, object, glyph, caption = iconButton(self.dock, {name = entry[1], text = entry[2], icon = entry[3], top = entry[4], bottom = entry[5], order = index,
+			callback = function() self:OpenMenu(entry[1]) end})
+		table.insert(self.dockSlots, {holder = holder, glyph = glyph, caption = caption})
+		if entry[1] == "Quests" then
+			self.questBadge = frame(holder, {Name = "Badge", AnchorPoint = Vector2.new(0.5, 0.5), Position = UDim2.new(1, -4, 0, 4), Size = UDim2.fromOffset(20, 20), BackgroundColor3 = Color3.fromRGB(255, 64, 84), Visible = false, ZIndex = 5}, 10)
+			node("UIStroke", {Color = Color3.new(1, 1, 1), Thickness = 2, ApplyStrokeMode = Enum.ApplyStrokeMode.Border}, self.questBadge)
+			label(self.questBadge, "!", {TextXAlignment = Enum.TextXAlignment.Center, Font = F.black, TextSize = 13, ZIndex = 6})
+		end
 	end
-	self.emoteButton = button(self.dock, "EMOTE", function()
+	local moreHolder, moreButton, moreGlyph, moreCaption = iconButton(self.dock, {name = "More", text = "MORE", icon = "•••", top = Color3.fromRGB(150, 160, 200), bottom = Color3.fromRGB(88, 96, 150), order = 10})
+	table.insert(self.dockSlots, {holder = moreHolder, glyph = moreGlyph, caption = moreCaption})
+	self.moreExpanded = false
+	local function secondary(name, text, icon, top, bottom, order, callback)
+		local holder, object, glyph, caption = iconButton(self.dock, {name = name, text = text, icon = icon, top = top, bottom = bottom, order = order, callback = callback})
+		holder.Visible = false
+		table.insert(self.dockSlots, {holder = holder, glyph = glyph, caption = caption})
+		return holder
+	end
+	self.settingsSlot = secondary("Settings", "SETTINGS", "⚙️", Color3.fromRGB(176, 186, 220), Color3.fromRGB(104, 112, 160), 11, function() self:OpenMenu("Settings") end)
+	self.emoteSlot = secondary("Emote", "EMOTE", "😀", Color3.fromRGB(255, 160, 214), Color3.fromRGB(226, 84, 160), 12, function()
 		local id = (self.ctx.Profile.equipped or {}).emotes
 		if id and id ~= "" then self:_send("Emote", {id = id}) end
-	end, {Size = UDim2.fromOffset(88, 38), LayoutOrder = 7, TextSize = 11, BackgroundColor3 = C.panel})
+	end)
+	self.emoteButton = self.emoteSlot
+	moreButton.Activated:Connect(function()
+		self.moreExpanded = not self.moreExpanded
+		moreGlyph.Text = self.moreExpanded and "✕" or "•••"
+		self:_responsive()
+	end)
 end
 
 -- Bottom-center call to action. In the Plaza this is the PLAY / queue control.
@@ -312,17 +464,22 @@ function UIController:_updatePlay()
 end
 
 function UIController:_buildAbilities()
-	self.abilities = frame(self.root, {AnchorPoint = Vector2.new(0.5, 1), Position = UDim2.new(0.5, 0, 1, -32), Size = UDim2.fromOffset(402, 54), BackgroundTransparency = 1})
-	list(self.abilities, true, 6)
+	self.abilities = frame(self.root, {AnchorPoint = Vector2.new(0.5, 1), Position = UDim2.new(0.5, 0, 1, -24), Size = UDim2.fromOffset(384, 66), BackgroundTransparency = 1})
+	local layout = list(self.abilities, true, 8)
+	layout.HorizontalAlignment = Enum.HorizontalAlignment.Center
 	self.abilityLabels = {}
-	local specs = {{"Sprint", "SHIFT", "L3"}, {"Slide", "C", "B"}, {"Vault", "SPACE", "A"}, {"Tag", "F", "R2"}}
+	local specs = {{"Sprint", "SHIFT", "L3", "🏃", Color3.fromRGB(80, 228, 204)}, {"Slide", "C", "B", "🌀", Color3.fromRGB(110, 176, 255)},
+		{"Vault", "SPACE", "A", "🤸", Color3.fromRGB(196, 136, 255)}, {"Tag", "F", "R2", "✋", Color3.fromRGB(255, 120, 130)}}
 	for index, spec in ipairs(specs) do
-		local box = frame(self.abilities, {Size = UDim2.fromOffset(96, 52), BackgroundColor3 = C.background, BackgroundTransparency = 0.12, LayoutOrder = index}, 9)
-		stroke(box, C.line, 0.2)
-		local name = label(box, string.upper(spec[1]), {Position = UDim2.fromOffset(8, 7), Size = UDim2.new(1, -16, 0, 16), Font = F.bold, TextSize = 10})
-		local status = label(box, spec[2], {Position = UDim2.fromOffset(8, 28), Size = UDim2.new(1, -16, 0, 14), TextColor3 = C.cyan, TextSize = 9})
-		local fill = frame(box, {AnchorPoint = Vector2.new(0, 1), Position = UDim2.new(0, 8, 1, -4), Size = UDim2.new(1, -16, 0, 2), BackgroundColor3 = C.cyan}, 2)
-		self.abilityLabels[spec[1]] = {box = box, name = name, status = status, fill = fill, keyboard = spec[2], gamepad = spec[3]}
+		local box = frame(self.abilities, {Size = UDim2.fromOffset(86, 64), BackgroundColor3 = C.background, BackgroundTransparency = 0.12, LayoutOrder = index}, 16)
+		gradient(box, C.card, C.background)
+		node("UIStroke", {Color = spec[5], Thickness = 2, ApplyStrokeMode = Enum.ApplyStrokeMode.Border, Transparency = 0.35}, box)
+		local icon = label(box, spec[4], {Position = UDim2.fromOffset(8, 5), Size = UDim2.fromOffset(28, 28), TextSize = 22, TextXAlignment = Enum.TextXAlignment.Center})
+		local name = label(box, string.upper(spec[1]), {Position = UDim2.fromOffset(38, 8), Size = UDim2.new(1, -44, 0, 18), Font = F.black, TextSize = 10})
+		local status = label(box, spec[2], {Position = UDim2.fromOffset(8, 38), Size = UDim2.new(1, -16, 0, 18), TextColor3 = spec[5], TextSize = 10, Font = F.black, TextXAlignment = Enum.TextXAlignment.Center, BackgroundTransparency = 0.6, BackgroundColor3 = C.line})
+		corner(status, 9)
+		local fill = frame(box, {AnchorPoint = Vector2.new(0, 1), Position = UDim2.new(0, 10, 1, -3), Size = UDim2.new(1, -20, 0, 2), BackgroundColor3 = spec[5]}, 2)
+		self.abilityLabels[spec[1]] = {box = box, name = name, status = status, fill = fill, keyboard = spec[2], gamepad = spec[3], accent = spec[5]}
 	end
 end
 
@@ -399,19 +556,22 @@ function UIController:_finishTutorial()
 end
 
 function UIController:_buildToast()
-	self.toast = frame(self.root, {AnchorPoint = Vector2.new(0.5, 0), Position = UDim2.new(0.5, 0, 0, 112), Size = UDim2.new(0.8, 0, 0, 54), Visible = false, BackgroundColor3 = C.card, ZIndex = 20}, 12)
-	node("UISizeConstraint", {MaxSize = Vector2.new(600, 90)}, self.toast)
-	self.toastStroke = stroke(self.toast, C.cyan)
-	self.toastText = label(self.toast, "", {Position = UDim2.fromOffset(14, 8), Size = UDim2.new(1, -28, 1, -16), TextSize = 13, Font = F.medium, TextWrapped = true, TextXAlignment = Enum.TextXAlignment.Center})
+	self.toast = frame(self.root, {AnchorPoint = Vector2.new(0.5, 0), Position = UDim2.new(0.5, 0, 0, 112), Size = UDim2.new(0.8, 0, 0, 48), Visible = false, BackgroundColor3 = C.card, ZIndex = 20}, 24)
+	node("UISizeConstraint", {MaxSize = Vector2.new(560, 80)}, self.toast)
+	gradient(self.toast, C.card, C.background, 0)
+	self.toastStroke = node("UIStroke", {Color = C.cyan, Thickness = 2.5, ApplyStrokeMode = Enum.ApplyStrokeMode.Border}, self.toast)
+	self.toastIcon = label(self.toast, "💬", {Position = UDim2.fromOffset(12, 0), Size = UDim2.fromOffset(30, 48), TextSize = 22, TextXAlignment = Enum.TextXAlignment.Center, ZIndex = 21})
+	self.toastText = label(self.toast, "", {Position = UDim2.fromOffset(48, 6), Size = UDim2.new(1, -62, 1, -12), TextSize = 13, Font = F.bold, TextWrapped = true, TextXAlignment = Enum.TextXAlignment.Left, ZIndex = 21})
 end
 
 function UIController:_buildAnnouncement()
-	self.announcement = frame(self.root, {AnchorPoint = Vector2.new(0.5, 0.5), Position = UDim2.fromScale(0.5, 0.38), Size = UDim2.new(0.85, 0, 0, 144), BackgroundColor3 = C.background, BackgroundTransparency = 0.05, Visible = false, ZIndex = 18}, 16)
-	node("UISizeConstraint", {MaxSize = Vector2.new(640, 144)}, self.announcement)
-	self.announcementStroke = stroke(self.announcement, C.cyan)
-	self.announcementTitle = label(self.announcement, "YOU ARE A RUNNER", {Position = UDim2.fromOffset(12, 24), Size = UDim2.new(1, -24, 0, 47), TextSize = 30, Font = F.black, TextXAlignment = Enum.TextXAlignment.Center, TextScaled = true})
+	self.announcement = frame(self.root, {AnchorPoint = Vector2.new(0.5, 0.5), Position = UDim2.fromScale(0.5, 0.36), Size = UDim2.new(0.85, 0, 0, 120), BackgroundColor3 = C.background, BackgroundTransparency = 0.04, Visible = false, ZIndex = 18}, 24)
+	node("UISizeConstraint", {MaxSize = Vector2.new(560, 120)}, self.announcement)
+	gradient(self.announcement, C.card, C.background, 90)
+	self.announcementStroke = node("UIStroke", {Color = C.cyan, Thickness = 3, ApplyStrokeMode = Enum.ApplyStrokeMode.Border}, self.announcement)
+	self.announcementTitle = label(self.announcement, "YOU ARE A RUNNER", {Position = UDim2.fromOffset(12, 14), Size = UDim2.new(1, -24, 0, 46), TextSize = 30, Font = F.black, TextXAlignment = Enum.TextXAlignment.Center, TextScaled = true, ZIndex = 19, TextStrokeTransparency = 0.5, TextStrokeColor3 = Color3.fromRGB(10, 8, 30)})
 	node("UITextSizeConstraint", {MaxTextSize = 32, MinTextSize = 16}, self.announcementTitle)
-	self.announcementCopy = label(self.announcement, "", {Position = UDim2.fromOffset(20, 83), Size = UDim2.new(1, -40, 0, 37), TextSize = 13, TextWrapped = true, TextColor3 = C.muted, TextXAlignment = Enum.TextXAlignment.Center})
+	self.announcementCopy = label(self.announcement, "", {Position = UDim2.fromOffset(20, 66), Size = UDim2.new(1, -40, 0, 42), TextSize = 13, TextWrapped = true, TextColor3 = C.muted, TextXAlignment = Enum.TextXAlignment.Center, ZIndex = 19})
 end
 
 function UIController:_buildLoading()
@@ -443,26 +603,33 @@ function UIController:_responsive()
 	self.levelLabel.TextSize = small and 8 or 10
 	self.levelLabel.Position = UDim2.fromOffset(10, small and 29 or 34)
 	self.roleChip.Position = UDim2.new(0.5, 0, 0, small and 76 or 86)
-	-- Right-hand menu rail: sits under the wallet and above the touch buttons.
-	local railTop = small and 70 or 96
-	self.dock.Position = UDim2.new(1, -10, 0, railTop)
-	self.dock.Size = UDim2.new(0, small and 78 or 92, 1, -(railTop + (touch and 170 or 110)))
-	for _, child in ipairs(self.dock:GetChildren()) do
-		if child:IsA("GuiButton") then child.Size = UDim2.fromOffset(small and 74 or 88, small and 34 or 38) end
+	-- Menu icons: a vertical rail on the right, or a compact row under the wallet on short landscape phones.
+	local horizontal = short and size.X >= 600
+	local button = small and 46 or 58
+	self.dockLayout.FillDirection = horizontal and Enum.FillDirection.Horizontal or Enum.FillDirection.Vertical
+	self.dockLayout.HorizontalAlignment = Enum.HorizontalAlignment.Right
+	self.dock.Position = UDim2.new(1, -10, 0, horizontal and 78 or (small and 70 or 94))
+	for _, slot in ipairs(self.dockSlots) do
+		slot.holder.Size = UDim2.fromOffset(button, button)
+		slot.glyph.TextSize = math.floor(button * 0.46)
+		slot.caption.TextSize = button < 50 and 8 or 9
 	end
-	self.dock.Visible = not self.menu
+	self.settingsSlot.Visible = self.moreExpanded
+	self.emoteSlot.Visible = self.moreExpanded and not self.roundActiveForMe
 	-- Menus are modal; keep them clear of the top bar and the clock.
 	self.panel.Size = UDim2.new(1, -24, 1, short and -104 or -150)
 	self.panel.Position = UDim2.new(0.5, 0, 0.5, short and 42 or 50)
 	self.panelTitle.TextSize = small and 18 or 22
 	self.panelSubtitle.TextSize = small and 10 or 11
 	self.panelSubtitle.TextTruncate = Enum.TextTruncate.AtEnd
-	self.roleChip.Visible = not self.menu
+	self.roleChip.Visible = not self.menu and not (short and size.X >= 600)
 	-- PLAY control: Plaza only. Hidden during menus, the tutorial, and active rounds.
 	local state = self.ctx.State or {}
 	local role = myRole(state, self.ctx)
 	local inRound = (state.phase == "Active" or state.phase == "HeadStart") and role ~= "Lobby"
 	local tutorial = self.tutorial and self.tutorial.Visible
+	self.roundActiveForMe = inRound
+	self.dock.Visible = not self.menu and not inRound and not tutorial
 	self.hero.Size = UDim2.fromOffset(math.min(size.X - 24, 280), 86)
 	self.playButton.Size = UDim2.fromOffset(math.min(size.X - 24, 280), 44)
 	self.hero.Position = UDim2.new(0.5, 0, 1, touch and (short and -16 or -28) or -96)
@@ -483,14 +650,18 @@ function UIController:OpenMenu(name)
 	if self.menu == name then self:CloseMenu() return end
 	self.menu = name
 	self.player:SetAttribute("CatchMenuOpen", true)
+	local theme = THEME[name] or THEME.Shop
+	self.panelGradient.Color = ColorSequence.new(theme.top, theme.bottom)
+	self.panelStroke.Color = theme.bottom
+	self.panelIcon.Text = theme.icon
 	self.panel.Visible = true
-	self.panelScale.Scale = self:_motion() and 0.97 or 1
-	self:_tween(self.panelScale, 0.22, {Scale = 1})
+	self.panelScale.Scale = self:_motion() and 0.9 or 1
+	self:_tween(self.panelScale, 0.32, {Scale = 1}, Enum.EasingStyle.Back)
 	self.hero.Visible = false
 	self:_renderMenu()
 	self:_responsive()
 	if UserInputService.GamepadEnabled then
-		local close = self.panel:FindFirstChild("Close")
+		local close = self.panelClose
 		if close then GuiService.SelectedObject = close end
 	end
 end
@@ -520,7 +691,7 @@ function UIController:_renderMenu()
 	-- Rerendering an equipped item or category must not strand controller focus.
 	if focusName then
 		local replacement = self.panelContent:FindFirstChild(focusName, true)
-		GuiService.SelectedObject = replacement and replacement:IsA("GuiButton") and replacement or self.panel:FindFirstChild("Close")
+		GuiService.SelectedObject = replacement and replacement:IsA("GuiButton") and replacement or self.panelClose
 	end
 end
 
@@ -828,7 +999,13 @@ function UIController:Toast(text, kind)
 	self.toastSerial += 1
 	local serial = self.toastSerial
 	self.toastText.Text = tostring(text)
+	local icons = {purchase = "🛍️", level = "⭐", unlock = "🔓", welcome = "👋", round = "🏁"}
+	self.toastIcon.Text = icons[kind] or "💬"
 	self.toastStroke.Color = (kind == "purchase" or kind == "level" or kind == "unlock") and C.amber or C.cyan
+	if self:_motion() then
+		self.toast.Position = UDim2.new(0.5, 0, 0, 96)
+		self:_tween(self.toast, 0.3, {Position = UDim2.new(0.5, 0, 0, 112)}, Enum.EasingStyle.Back)
+	end
 	self.toast.Visible = true
 	self.toast.BackgroundTransparency = 0.04
 	task.delay(4.3, function() if serial == self.toastSerial then self.toast.Visible = false end end)
@@ -924,8 +1101,8 @@ function UIController:_tick()
 		if action == "Tag" and (role ~= "Hunter" or state.phase ~= "Active") then enabled = false end
 		local gamepad = string.find(UserInputService:GetLastInputType().Name, "Gamepad") ~= nil
 		widgets.status.Text = not enabled and (frozen and "HEAD START" or action == "Tag" and "HUNTERS ONLY" or "SPECTATING") or (cooldown > 0 and string.format("%.1fs", cooldown) or (gamepad and widgets.gamepad or widgets.keyboard))
-		widgets.status.TextColor3 = not enabled and C.muted or (cooldown > 0 and C.amber or C.cyan)
-		widgets.fill.BackgroundColor3 = not enabled and C.line or (cooldown > 0 and C.amber or C.cyan)
+		widgets.status.TextColor3 = not enabled and C.muted or (cooldown > 0 and C.amber or widgets.accent)
+		widgets.fill.BackgroundColor3 = not enabled and C.line or (cooldown > 0 and C.amber or widgets.accent)
 	end
 	self:_updatePlay()
 	if self.wasSpectating then self:_updateSpectator() end
@@ -947,7 +1124,6 @@ function UIController:OnState(state)
 	self.aliveLabel.Text = active and (tostring(state.aliveRunners or 0) .. " RUNNERS LEFT") or (phase == "Waiting" and "Waiting for the crew" or (state.mapName or "NEON MALL"))
 	self.roleChip.Text = state.practice and "PRACTICE / NO PROGRESSION REWARDS" or (active and string.upper(role) .. " / " .. (role == "Hunter" and "TAG EVERY RUNNER" or role == "Runner" and "SURVIVE THE CHASE" or "NEXT ROUND IS YOURS") or "EXPLORE THE PLAZA")
 	self.roleChip.TextColor3 = role == "Hunter" and C.coral or C.cyan
-	self.emoteButton.Visible = not active
 	if active and (self.lastRound ~= state.roundId or self.lastRole ~= role) then
 		self:CloseMenu()
 		if self.tutorial and self.tutorial.Visible and role ~= "Spectator" then self:_finishTutorial() end
@@ -982,8 +1158,13 @@ function UIController:OnProfile(profile)
 	self.saveLabel.TextColor3 = profile.persistence == "saved" and C.muted or C.amber
 	self.pendingId = nil
 	local login = profile.loginStatus
-	local questsButton = self.dock and self.dock:FindFirstChild("Quests")
-	if questsButton then questsButton.Text = (login and login.canClaim) and "QUESTS  !" or "QUESTS" end
+	if self.questBadge then
+		local claimable = login and login.canClaim
+		for _, quest in ipairs(profile.quests or {}) do
+			if not quest.claimed and (quest.progress or 0) >= (quest.goal or 1) then claimable = true end
+		end
+		self.questBadge.Visible = claimable == true
+	end
 	if profile.loaded and profile.settings and profile.settings.tutorialDone == false and not self.tutorialShown then
 		self.tutorialShown = true
 		self:ShowTutorial()

@@ -190,7 +190,8 @@ local function fixture(viewport, inputType)
 		require = function(module) expect(module == appearanceModule, "UI must use shared Appearance"); return appearance end,
 		TweenInfo = {new = function() return {} end}, Random = {new = function() return {NextInteger = function(_, a, b) return math.floor((a + b) / 2) end, NextNumber = function(_, a, b) return (a + b) / 2 end} end},
 	}
-	for _, name in ipairs({"Enum", "Color3", "ColorSequence", "UDim", "UDim2", "Vector2", "Vector3", "CFrame"}) do environment[name] = roblox[name] end
+	for _, name in ipairs({"Enum", "Color3", "ColorSequence", "NumberSequence", "UDim", "UDim2", "Vector2", "Vector3", "CFrame"}) do environment[name] = roblox[name] end
+	environment.TweenInfo = {new = function(...) return {...} end}
 	local profile = Rules.NewProfile(1700000000); profile.loaded = true; profile.persistence = "session"; profile.quests = {}
 	local actions = {}
 	local ctx = {Config = Config, Catalog = Catalog, Rules = Rules, Achievements = Achievements, Profile = profile, State = {phase = "Waiting", roundId = 0, players = {}}, Controllers = {},
@@ -263,7 +264,7 @@ do
 	f.ctx.Profile.loginStatus = {streak = 2, canClaim = true, day = 3, coins = 40, xp = 30}
 	local ui = f.load("UIController"); f.ctx.Controllers.UIController = ui; ui:Start()
 	expect(ui.tutorial.Visible and ui.tutorialStep.Text == "HOW TO PLAY  /  1 OF 5", "First-time players must see the tutorial")
-	expect(ui.dock:FindFirstChild("Quests").Text == "QUESTS  !", "Claimable daily reward must flag the Quests button")
+	expect(ui.questBadge.Visible, "Claimable daily reward must badge the Quests button")
 	for _ = 1, 4 do ui.tutorialNext.Activated:Fire() end
 	expect(ui.tutorialNext.Text == "LET'S RUN" and ui.tutorialTitle.Text:find("EARN"), "Final tutorial page should start the game")
 	ui.tutorialNext.Activated:Fire()
@@ -515,7 +516,7 @@ do
 	expect(f.actions[#f.actions].action == "Slide" and movement:GetCooldown("Slide") == 0, "C requests a slide without predicting a successful cooldown")
 	f.advance(0.2); ui:OpenMenu("Inventory"); local count = #f.actions; f.cas:Press(Enum.KeyCode.C)
 	expect(#f.actions == count, "C must not slide while a menu is open")
-	ui:CloseMenu(); f.guiService.SelectedObject = ui.dock:FindFirstChild("Inventory")
+	ui:CloseMenu(); f.guiService.SelectedObject = ui.dock:FindFirstChild("Inventory", true)
 	f.cas:Press(Enum.KeyCode.C)
 	expect(#f.actions == count + 1 and f.actions[#f.actions].action == "Slide", "A lingering GUI selection must not disable PC sliding after closing a menu")
 	f.advance(0.2); f.guiService.SelectedObject = nil; f.cas:Press(Enum.KeyCode.ButtonB)
@@ -591,6 +592,85 @@ do
 	humanoid.StateChanged:Fire(Enum.HumanoidStateType.Freefall, Enum.HumanoidStateType.Landed)
 	expect(landings == 2, "Landing feedback must recover on the replacement humanoid")
 	effects:Destroy()
+end
+
+
+-- Optional layout dump for tools/ui-preview.py: UI_DUMP=/dir lune run tests/client_controllers.spec.luau
+local dumpDir = require("@lune/process").env.UI_DUMP
+if dumpDir then
+	local serde = require("@lune/serde")
+	local function u2(v) return {v.X.Scale, v.X.Offset, v.Y.Scale, v.Y.Offset} end
+	local function c3(c) return {math.floor(c.R * 255 + 0.5), math.floor(c.G * 255 + 0.5), math.floor(c.B * 255 + 0.5)} end
+	local function enumName(v) return v and v.Name or nil end
+	local function dumpNode(n)
+		local p = n._props
+		local out = {cls = p.ClassName, name = p.Name, vis = p.Visible ~= false, children = {}}
+		if p.Size then out.size = u2(p.Size) end
+		if p.Position then out.pos = u2(p.Position) end
+		if p.AnchorPoint then out.anchor = {p.AnchorPoint.X, p.AnchorPoint.Y} end
+		if p.BackgroundColor3 then out.bg = c3(p.BackgroundColor3) end
+		out.bgt = p.BackgroundTransparency or 0
+		out.text, out.textSize, out.textWrapped, out.textScaled = p.Text, p.TextSize, p.TextWrapped, p.TextScaled
+		if p.TextColor3 then out.textColor = c3(p.TextColor3) end
+		out.tx, out.ty, out.font = enumName(p.TextXAlignment), enumName(p.TextYAlignment), enumName(p.Font)
+		out.z, out.order, out.auto = p.ZIndex or 1, p.LayoutOrder or 0, enumName(p.AutomaticSize)
+		out.rot = p.Rotation
+		if p.CornerRadius then out.radius = {p.CornerRadius.Scale, p.CornerRadius.Offset} end
+		if p.Thickness then out.thickness = p.Thickness end
+		if p.Transparency and type(p.Transparency) == "number" then out.alpha = p.Transparency end
+		if p.Color and typeof(p.Color) == "Color3" then out.color = c3(p.Color) end
+		if p.Color and typeof(p.Color) == "ColorSequence" then
+			local k = p.Color.Keypoints
+			out.gradient = {c3(k[1].Value), c3(k[#k].Value)}
+		end
+		out.rotation = p.Rotation
+		if p.FillDirection then out.fill = enumName(p.FillDirection) end
+		if p.HorizontalAlignment then out.ha = enumName(p.HorizontalAlignment) end
+		if p.VerticalAlignment then out.va = enumName(p.VerticalAlignment) end
+		if p.Padding then out.padding = p.Padding.Offset end
+		if p.CellSize then out.cell = u2(p.CellSize) end
+		if p.CellPadding then out.cellPad = u2(p.CellPadding) end
+		if p.Scale then out.scale = p.Scale end
+		if p.MinSize then out.minSize = {p.MinSize.X, p.MinSize.Y} end
+		if p.MaxSize then out.maxSize = {p.MaxSize.X, p.MaxSize.Y} end
+		for _, child in ipairs(n._children) do table.insert(out.children, dumpNode(child)) end
+		return out
+	end
+	local function snapshot(name, viewport, prepare)
+		local f = fixture(viewport, viewport.X < 900 and Enum.UserInputType.Touch or Enum.UserInputType.Keyboard)
+		f.ctx.Profile.settings = {tutorialDone = true}
+		local ui = f.load("UIController"); f.ctx.Controllers.UIController = ui; ui:Start()
+		ui:OnProfile(f.ctx.Profile)
+		if prepare then prepare(f, ui) end
+		ui:_responsive()
+		fs.writeFile(dumpDir .. "/" .. name .. ".json", serde.encode("json", {viewport = {viewport.X, viewport.Y}, tree = dumpNode(ui.gui)}))
+	end
+	local function rich(f)
+		f.ctx.Profile.loaded = true; f.ctx.Profile.coins = 1250; f.ctx.Profile.level = 12; f.ctx.Profile.xp = 4100; f.ctx.Profile.rank = "Sprinter"; f.ctx.Profile.rating = 1180
+		f.ctx.Profile.owned = {skin_courier = true, skin_rooftop = true, mask_street = true, trail_cyan = true, emote_wave = true, name_rookie = true, tag_spark = true, victory_wave = true}
+		f.ctx.Profile.equipped = {skins = "skin_rooftop", masks = "mask_street", trails = "", tagEffects = "tag_spark", victories = "victory_wave", emotes = "emote_wave", nameplates = "name_rookie"}
+		f.ctx.Profile.stats = {rounds = 31, wins = 11, tags = 42, hunterWins = 3, runnerWins = 8, survived = 2100}
+		f.ctx.Profile.bestStreak = 4
+		f.ctx.Profile.achievements = {first_round = true}
+		f.ctx.Profile.quests = {{id = "rounds", text = "Complete 3 competitive rounds", xp = 75, coins = 30, goal = 3, progress = 3, claimed = false},
+			{id = "tags", text = "Tag 5 runners", xp = 75, coins = 30, goal = 5, progress = 2, claimed = false},
+			{id = "survived", text = "Survive 240 seconds as a runner", xp = 90, coins = 40, goal = 240, progress = 0, claimed = true}}
+		f.ctx.Profile.loginStatus = {streak = 2, canClaim = true, day = 3, coins = 40, xp = 30}
+		f.ctx.Profile.settings = {tutorialDone = true, music = true, sfx = true}
+	end
+	for _, view in ipairs({{"desktop", Vector2.new(1440, 860)}, {"phone", Vector2.new(844, 390)}, {"portrait", Vector2.new(390, 780)}}) do
+		local v = view[2]
+		snapshot(view[1] .. "_hud", v, function(f) rich(f) end)
+		for _, menu in ipairs({"Shop", "Inventory", "Quests", "Progress", "Settings", "Leaderboard", "Results"}) do
+			snapshot(view[1] .. "_" .. string.lower(menu), v, function(f, ui)
+				rich(f)
+				f.ctx.State = {phase = "Results", roundId = 3, players = {{userId = 42, role = "Runner", alive = true, displayName = "Test Runner"}, {userId = 7, role = "Hunter", displayName = "Rival"}}, winners = {42}, resultText = "Runners escaped!"}
+				ui:OnProfile(f.ctx.Profile)
+				ui:OpenMenu(menu)
+			end)
+		end
+		snapshot(view[1] .. "_tutorial", v, function(f, ui) rich(f); f.ctx.Profile.settings.tutorialDone = false; ui.tutorialShown = false; ui:OnProfile(f.ctx.Profile) end)
+	end
 end
 
 print("Client controller integration: " .. checks .. " checks passed")
