@@ -75,6 +75,7 @@ check composition, palette balance, sight lines and UI overlap without Studio. T
 - No uploaded animations, music or audio (no assets could be created or licensed here); engine fallbacks only.
 - No new store *layouts* or shortcut routes; the 24 existing interiors were restyled and extended with hiding spots.
 - Shop previews depend on a runtime `HumanoidDescription` call that could not be exercised.
+- No HUD scale-up for large monitors: an attempt using `UIScale` was dropped because how `UIScale` treats `Position` offsets could not be confirmed without Studio. Check HUD text size on a 1080p/4K monitor and, if too small, scale the whole HUD through one full-screen container.
 - The two-player Studio checklist (TESTING B) is the list of everything solo practice cannot prove.
 
 ## Owner actions
