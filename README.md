@@ -56,8 +56,8 @@ into the source tree.
 - **Catch Mall:** 324 × 304 studs, two floors plus a back-of-house service ring, a
   fountain atrium with a glass roof, 8 escalators, 4 grand stairs, 2 skybridges, balconies
   with 8 drop gaps, ladders, a food court, restrooms, an arcade, a cinema and 24 distinct,
-  furnished stores whose interiors connect so chases loop through them. About 7,200 parts.
-- **Hiding and searching:** 106 hide cells (fitting rooms, stalls, lockers, booths, a vault,
+  furnished stores whose interiors connect so chases loop through them. About 6,700 parts.
+- **Hiding and searching:** 111 hide cells (fitting rooms, stalls, lockers, booths, a vault,
   a freezer and more). Hold E to hide for at most 7 seconds (12 s cooldown). Hidden runners
   cannot be tagged, but hunters can search a cell (E) to flush the occupant out, and SCAN (Q,
   25 s cooldown) shows movement and anonymous "occupied" markers within 45 studs.
@@ -152,10 +152,15 @@ remove the generated `Workspace.CatchMall` model before the next Play session so
   and performance checks before launch.
 - [Progress and continuation](PROGRESS.md): verified results and remaining work.
 
-The mall intentionally loads as a whole so lobby spectators can follow any runner. Streaming
-is disabled, so **mobile memory and frame rate are the top risk** to measure first: the map is
-about 7,200 parts, 51 local lights, and at most 100 parts per avatar. These are geometry
-budgets, **not measured frame rates**.
+**Performance design.** The mall is only 324 x 304 studs and the lobby sits about 90 studs outside it,
+so any streaming radius that keeps chases and spectating correct would still load nearly the whole
+map; `StreamingEnabled` is therefore left off, and weaker devices save work on the client instead
+(`PerformanceController`): about 1,500 small decoration parts and the 51 lights are hidden beyond a
+radius on MEDIUM/LOW, ambient particles are halved or stopped, sun rays/bloom/shadows are trimmed on
+LOW, and the quality steps down automatically after sustained low FPS. Phones start on MEDIUM; the
+player can pick AUTO/HIGH/MEDIUM/LOW in Settings > GRAPHICS. Budgets (enforced by tests): at most
+7,000 parts, 600 transparent parts, 70 lights, 24 emitters, 150 signs, 100 parts per avatar.
+These are budgets, **not measured frame rates**: measure on a real low-end phone before launch.
 
 ## Source layout
 

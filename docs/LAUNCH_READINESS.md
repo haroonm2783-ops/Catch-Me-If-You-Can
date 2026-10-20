@@ -13,8 +13,8 @@ and new tests (mall navigation, enum validity, hiding, UI visibility, receipts).
 
 ## What is verified (automated, mocked Roblox boundaries)
 `./tools/check.sh` (eight suites + compile + deterministic rebuild + both place files deserialize):
-rules 398 · data/shop/receipts 172 · gameplay 270 · appearance 283,138 · client UI 1,309 ·
-Neon Heights legacy map 28,291 · **mall 125,020** · enum validity 856 references.
+rules 398 · data/shop/receipts 172 · gameplay + end-to-end 287 · appearance 283,138 · client UI 1,393 ·
+Neon Heights legacy map 28,291 · **mall 118,049** · enum validity 867 references.
 
 Specifically proven in those suites (mock/analytic, not engine):
 - Every one of the 24 stores has ≥3 doors, clear doorways on both sides, furniture and coins; every hide cell
@@ -28,36 +28,46 @@ Specifically proven in those suites (mock/analytic, not engine):
 - Coin pack receipts: grant once per `PurchaseId`, only after a successful save, retry-safe, unknown/malformed
   receipts never granted, unconfigured packs never prompt.
 
+## Final-pass changes (performance, polish)
+- **Performance:** parts cut from ~7,200 to 6,731 (-7%); `PerformanceController` adds distance LOD for ~1,500 small
+  decoration parts and the 51 lights, ambient-particle scaling, effect trimming and automatic step-down after sustained
+  low FPS (phones start on MEDIUM; Settings > GRAPHICS overrides). Shop thumbnails are limited on weaker tiers.
+  `StreamingEnabled` stays **off on purpose**: the map is 324 x 304 studs and the lobby is ~90 studs away, so any radius
+  that keeps chases and spectating correct would still load nearly everything, while adding risk (streamed prompts/coins,
+  spectator replication focus). Revisit only if real phone measurements say memory is the problem.
+- **Characters:** the premium skins were near-black; Streetwear is now a royal-blue varsity with cream bucket hat,
+  Neon Phantom violet, Shadow Ninja cobalt, Midnight Menace bright violet, Golden Champion white-and-gold with a purple cape.
+- **Mall:** every store has at least 2 hide spots and 6 cover pieces (enforced); fountain spray/sparkle and food-court
+  steam particles; three dark store floors brightened.
+- **Mobile HUD:** touch buttons arranged around Roblox's jump button without overlap in portrait and landscape (tested);
+  chat is repositioned with the real TextChat alignment API on keyboard devices and left in the topbar on phones; the
+  default player list is hidden on keyboard devices (CREW menu replaces it).
+- **Integration:** a new end-to-end test runs a real round (coins, a hiding spot, a find), pays through the real DataService,
+  buys and equips a cosmetic through the real ShopService, and checks replays and coin-pack receipts.
+
 ## Honest ratings (out of 10)
-Nothing here is 9/10 because nothing has been seen in the real engine.
+Nothing here is 9/10 because nothing has been seen in the real engine. A 9 needs the Studio/phone playtest below.
 
 | Area | Score | Why |
 | --- | ---: | --- |
-| Characters, skins, masks | 6 | Geometry and faces rendered with a software rasterizer only; poses/arm-bend signs unverified; fit on real R15 avatars unseen. |
+| Characters, skins, masks | 7 | Colorful, distinct silhouettes and faces in software renders; real-engine look, poses and R15 fit unseen. |
 | Mall layout and scale | 7 | Structure and navigation are the most rigorously checked part. Looks, lighting, collision snags unseen. |
-| Stores and landmarks | 6 | 24 distinct, furnished, themed; whether they read as distinctive in-engine is unknown. Some are still plain. |
-| Hiding / search / chase gameplay | 6 | Rules are tested; fairness and fun need real players. Balance numbers are guesses. |
-| UI / UX | 6 | Layout contracts tested; actual look, text fit and touch ergonomics unseen. |
-| Replayability / core loop | 6 | Coins, close calls, finds, rewards, modifiers, daily quests give reasons to replay; no long-term content calendar. |
-| Animation, audio, atmosphere | 4 | Procedural poses and engine-bundled SFX only. No licensed music; no uploaded animations. Weakest area. |
-| Progression and monetization | 7 | Fair, cosmetic-only; passes and coin packs implemented but all IDs are 0 and never settled for real. |
-| Security / saves | 7 | Rate-limited, validated remotes; session-leased saves; idempotent receipts. Not penetration-tested; no real DataStore run. |
-| Performance | 4 | ~7,200 parts, 51 lights, StreamingEnabled off. Never measured. Biggest launch risk on phones. |
-| **Launch readiness overall** | **5** | Content-complete and well-tested on paper; zero engine playtests. |
-
-## Independent code review
-A separate reviewer read the client code against real Roblox behavior (no Studio). It found and I fixed: a crash that
-would have broken the Shop/Locker on phones (reading `CanvasPosition` on a plain Frame), gradients darkening their
-frames, an off-screen objective card on short screens, overlapping banners/toasts, tiny Leave-spot touch target,
-missing hunter `finds` in the state snapshot, unguarded client startup, and a slide/mood pose pop. The mock now throws
-on that class of error. Roblox's default player list is hidden (the CREW menu replaces it) and the chat window is
-moved to the lower left on wide screens: **verify chat and the HUD do not overlap in Studio.**
+| Stores, props, hiding spots | 7 | 24 furnished stores, 111 hide spots, every store has hiding and cover (enforced). Real-engine distinctiveness unverified. |
+| Hiding / search / chase gameplay | 6 | Rules and integration are tested; fairness and fun need real players. Balance numbers are guesses. |
+| UI / UX / mobile HUD | 7 | Layout contracts tested for 6 sizes incl. touch buttons and chat; actual look and ergonomics unseen. |
+| Replayability / core loop | 6 | Coins, close calls, finds, rewards, modifiers, daily missions; no long-term content calendar. |
+| Animation, audio, atmosphere | 5 | Procedural poses, particles, bright lighting; engine-bundled SFX only, no licensed music or uploaded animations. |
+| Progression and monetization | 7 | Fair, cosmetic-only; passes and coin packs implemented, end-to-end tested, IDs all 0, never settled for real. |
+| Security / saves | 7 | Rate-limited validated remotes, session-leased saves, idempotent receipts. No penetration test, no real DataStore run. |
+| Performance | 5 | Budgets enforced, LOD and quality tiers built; never measured on a device. |
+| **Launch readiness overall** | **5** | Content-complete and well tested on paper; zero engine playtests. |
 
 ## What is NOT verified (needs a human in Studio / published test place)
 | Area | Why it matters | How to verify |
 | --- | --- | --- |
 | Visual quality of the mall | Colors, lighting and bloom were tuned blind | Studio look-through; tune `applyLighting()` and palette `P` |
-| Mobile performance and memory | 7.2k parts, no streaming | Test on a low-end phone; consider StreamingEnabled + `ReplicationFocus` |
+| Mobile performance and memory | 6.7k parts, no streaming, LOD tiers untested on device | Low-end phone: watch FPS/memory in the full mall; read `CatchGraphicsTier` (player attribute); try Settings > GRAPHICS |
+| Chat/HUD overlap | Chat API behavior differs by place chat version | Check the chat window sits lower-left on PC and the topbar icon on phones |
 | Hide / search / scan feel and fairness | Numbers (7 s hide, 12 s cooldown, 45 stud scan) are guesses | Playtest with 2–7 players; tune `Config.Hide` |
 | Procedural poses | Rotation signs for shoulders/neck/elbows are derived by hand | Check Win/Lose/Scared/Hunt poses; flip signs in `MOOD_POSES` |
 | Stuck spots and exploits | Navigation test is analytic, not physics | Use the escape-route step in TESTING.md |

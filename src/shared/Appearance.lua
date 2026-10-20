@@ -234,15 +234,15 @@ skins.skin_rooftop = {
 }
 
 skins.skin_streetwear = {
-	paint = {top = C(248, 238, 214), waist = C(28, 28, 34), upperArm = C(26, 26, 32), lowerArm = C(26, 26, 32),
-		upperLeg = C(28, 28, 34), lowerLeg = C(28, 28, 34), foot = C(250, 250, 252)},
+	paint = {top = C(248, 238, 214), waist = C(40, 66, 150), upperArm = C(46, 100, 220), lowerArm = C(46, 100, 220),
+		upperLeg = C(40, 66, 150), lowerLeg = C(40, 66, 150), foot = C(250, 250, 252)},
 	iris = C(120, 74, 40), hair = C(40, 28, 24),
 	build = function(k)
-		local gold, red, black, cream = C(255, 200, 60), C(232, 60, 70), C(26, 26, 32), C(248, 238, 214)
+		local gold, red, black, cream = C(255, 200, 60), C(232, 60, 70), C(30, 64, 160), C(255, 244, 214)
 		-- Bucket hat over curly hair, gold hoops.
-		k.p("Head", "BucketCrown", Vector3.new(1.3, 0.62, 1.3), offset(0, 0.86, 0.02), black, nil, "Can")
-		k.p("Head", "BucketCrownTop", Vector3.new(1.2, 0.1, 1.2), offset(0, 1.2, 0.02), black, nil, "Can")
-		k.p("Head", "BucketBrim", Vector3.new(1.9, 0.07, 1.9), offset(0, 0.56, 0.02), black, nil, "Can")
+		k.p("Head", "BucketCrown", Vector3.new(1.3, 0.62, 1.3), offset(0, 0.86, 0.02), cream, nil, "Can")
+		k.p("Head", "BucketCrownTop", Vector3.new(1.2, 0.1, 1.2), offset(0, 1.2, 0.02), cream, nil, "Can")
+		k.p("Head", "BucketBrim", Vector3.new(1.9, 0.07, 1.9), offset(0, 0.56, 0.02), red, nil, "Can")
 		k.p("Head", "BucketBand", Vector3.new(1.34, 0.14, 1.34), offset(0, 0.64, 0.02), gold, Enum.Material.Metal, "Can")
 		for _, s in ipairs(SIDES) do
 			k.p("Head", "CurlPuff_" .. s[1], Vector3.new(0.34, 0.4, 0.5), offset(s[2] * 0.62, 0.02, 0.1), k.hair, nil, "Ball", {hair = true})
@@ -275,11 +275,11 @@ skins.skin_streetwear = {
 }
 
 skins.skin_neonphantom = {
-	paint = {top = C(26, 22, 44), waist = C(22, 18, 38), upperArm = C(26, 22, 44), lowerArm = C(26, 22, 44),
-		upperLeg = C(22, 18, 38), lowerLeg = C(22, 18, 38), foot = C(28, 24, 44)},
+	paint = {top = C(74, 52, 142), waist = C(60, 42, 118), upperArm = C(74, 52, 142), lowerArm = C(74, 52, 142),
+		upperLeg = C(60, 42, 118), lowerLeg = C(60, 42, 118), foot = C(40, 30, 80)},
 	iris = C(255, 70, 210), hair = C(255, 70, 210),
 	build = function(k)
-		local neon, cyan, dark = C(255, 70, 210), C(70, 240, 255), C(32, 26, 54)
+		local neon, cyan, dark = C(255, 70, 210), C(70, 240, 255), C(52, 38, 100)
 		local N = Enum.Material.Neon
 		-- Hood up with a glowing rim; the face stays readable inside.
 		k.p("Head", "HoodShell", Vector3.new(1.58, 1.4, 1.5), offset(0, 0.14, 0.18), dark, nil, "Ball")
@@ -313,8 +313,8 @@ skins.skin_neonphantom = {
 }
 
 skins.skin_ninja = {
-	paint = {top = C(40, 46, 70), waist = C(40, 46, 70), upperArm = C(40, 46, 70), lowerArm = C(40, 46, 70),
-		upperLeg = C(34, 38, 60), lowerLeg = C(34, 38, 60), foot = C(24, 24, 32)},
+	paint = {top = C(60, 86, 176), waist = C(60, 86, 176), upperArm = C(60, 86, 176), lowerArm = C(60, 86, 176),
+		upperLeg = C(48, 66, 140), lowerLeg = C(48, 66, 140), foot = C(24, 24, 32)},
 	iris = C(235, 50, 60), hair = C(28, 26, 34),
 	build = function(k)
 		local red, steel, wrap = C(226, 48, 58), C(180, 196, 214), C(214, 208, 192)
@@ -392,11 +392,11 @@ skins.skin_cyber = {
 }
 
 skins.skin_golden = {
-	paint = {top = C(30, 30, 36), waist = C(30, 30, 36), upperArm = C(30, 30, 36), lowerArm = C(30, 30, 36),
-		upperLeg = C(30, 30, 36), lowerLeg = C(30, 30, 36), foot = C(255, 200, 60)},
+	paint = {top = C(252, 248, 236), waist = C(252, 248, 236), upperArm = C(252, 248, 236), lowerArm = C(252, 248, 236),
+		upperLeg = C(252, 248, 236), lowerLeg = C(252, 248, 236), foot = C(255, 200, 60)},
 	iris = C(150, 96, 30), hair = C(30, 26, 26),
 	build = function(k)
-		local gold, jewel, black = C(255, 200, 60), C(232, 40, 70), C(30, 30, 36)
+		local gold, jewel, black = C(255, 200, 60), C(232, 40, 70), C(104, 60, 200)
 		local M = Enum.Material.Metal
 		-- Laurel crown with a ruby; slicked hair.
 		k.p("Head", "SlickHair", Vector3.new(1.3, 0.5, 1.3), offset(0, 0.44, 0.06), k.hair, nil, "Ball", {hair = true})
@@ -424,7 +424,7 @@ skins.skin_golden = {
 		k.p("LowerTorso", "ChampionBelt", Vector3.new(2.1, 0.3, 1.1), offset(0, 0.06, 0), gold, M)
 		k.p("LowerTorso", "BeltPlaque", Vector3.new(0.9, 0.46, 0.08), offset(0, 0.04, -0.58), black, M)
 		k.p("LowerTorso", "BeltJewel", Vector3.new(0.3, 0.3, 0.06), offset(0, 0.04, -0.64), jewel, Enum.Material.Neon, "Disc")
-		-- Cape: black outside, gold inside edge.
+		-- Cape: royal purple outside, gold inside edge.
 		k.p("UpperTorso", "Cape", Vector3.new(1.9, 2.5, 0.1), offset(0, -0.7, 0.62, 8, 0, 0), black)
 		k.p("UpperTorso", "CapeTrim", Vector3.new(1.9, 0.12, 0.12), offset(0, -1.92, 0.76, 8, 0, 0), gold, M)
 		wristbands(k, gold, M)
@@ -433,11 +433,11 @@ skins.skin_golden = {
 }
 
 skins.skin_midnight = {
-	paint = {top = C(40, 34, 84), waist = C(28, 24, 58), upperArm = C(40, 34, 84), lowerArm = C(40, 34, 84),
-		upperLeg = C(28, 24, 58), lowerLeg = C(28, 24, 58), foot = C(22, 20, 36), hand = C(24, 22, 40)},
+	paint = {top = C(112, 76, 204), waist = C(84, 56, 162), upperArm = C(112, 76, 204), lowerArm = C(112, 76, 204),
+		upperLeg = C(84, 56, 162), lowerLeg = C(84, 56, 162), foot = C(22, 20, 36), hand = C(24, 22, 40)},
 	iris = C(190, 110, 255), hair = C(70, 50, 120),
 	build = function(k)
-		local silver, moon, coat, deep = C(214, 220, 240), C(255, 236, 160), C(40, 34, 84), C(26, 22, 56)
+		local silver, moon, coat, deep = C(214, 220, 240), C(255, 236, 160), C(112, 76, 204), C(70, 44, 140)
 		local M = Enum.Material.Metal
 		-- Fedora with a moon charm; long swept hair behind.
 		k.p("Head", "HatBrim", Vector3.new(2.0, 0.07, 2.0), offset(0, 0.56, 0.02), deep, nil, "Can")

@@ -58,6 +58,7 @@ do
 	expect(bad == 0, "Detail parts must be non-colliding decoration only")
 	expect(transparent <= 600, "Transparent part (overdraw) budget (" .. transparent .. ")")
 end
+expect(kit.emitters >= 8 and kit.emitters <= 24, "Ambient emitter budget (" .. kit.emitters .. ")")
 expect(kit.lights <= 70, "Point-light budget (" .. kit.lights .. ")")
 expect(kit.signs <= 150, "SurfaceGui budget (" .. kit.signs .. ")")
 expect(model:GetAttribute("StaticPartCount") == kit.count, "Part count metadata matches the builder")
@@ -83,7 +84,7 @@ for _, store in ipairs(storeModels) do
 	end
 	expect(count >= 100, name .. " is furnished, not an empty box (" .. count .. " parts)")
 	expect(cover >= 3, name .. " offers cover (" .. cover .. ")")
-	expect(hides >= 1 or cover >= 12, name .. " has a hiding opportunity")
+	expect(hides >= 2 and cover >= 6, name .. " has hiding spots (" .. hides .. ") and cover (" .. cover .. ")")
 end
 expect(floors[1] == 12 and floors[2] == 12, "Twelve slots on each floor")
 local doorsByStore = {}

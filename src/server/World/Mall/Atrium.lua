@@ -59,6 +59,12 @@ function Atrium.build(kit, Layout)
 		kit.can(plaza, "FountainJet", math.cos(a) * 11, 5, math.sin(a) * 11, 0.9, 5, P.white, Enum.Material.Glass, false, {transparency = 0.5})
 		kit.ball(plaza, "FountainSplash", math.cos(a) * 11, 7.6, math.sin(a) * 11, 1.6, 1.2, 1.6, P.white, Enum.Material.Glass, false, {transparency = 0.45})
 	end
+	-- Water leaps from the top ring and the eight jets; sparkles hang over the basin.
+	kit.emitter(plaza:FindFirstChild("FountainTopRing"), "spray")
+	for _, child in ipairs(plaza:GetChildren()) do
+		if child.Name == "FountainJet" then kit.emitter(child, "spray").Rate = 8 end
+	end
+	kit.emitter(plaza:FindFirstChild("FountainWater"), "sparkle")
 	kit.lamp(plaza, Vector3.new(0, 12.4, 0), P.sky, 1.0, 40)
 
 	-- Planter islands in the four quadrants, clear of stairs, ramps and drop landings.

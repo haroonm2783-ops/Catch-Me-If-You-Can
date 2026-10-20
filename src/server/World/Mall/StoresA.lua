@@ -177,6 +177,9 @@ function StoresA.defs(P, Fixtures)
 				interior = function(g, w, d)
 					for i = 1, 3 do g.b("FreezerShelf", -3.5 + (i - 1) * 3.5, 0, d / 2 - 1.2, 3, 5, 1.4, P.white, Enum.Material.SmoothPlastic, false) end
 				end})
+			-- A stock closet on the left, mirroring the freezer so both back aisles have somewhere to duck.
+			Fx.hideCell(ctx, {id = "mart_stock", kind = "Stock Closet", lx = -14, lz = 44.5, yaw = 0, w = 7, d = 8, wall = P.sun,
+				accent = P.red, door = P.red, carpet = P.cream})
 			f.can("SodaCanLandmark", 0, 0, 18, 4, 10, P.red, Enum.Material.SmoothPlastic, true, {cover = "Full"})
 			f.can("SodaCanTop", 0, 10, 18, 3.6, 0.4, P.steel, Enum.Material.Metal, false)
 			f.can("SodaCanBand", 0, 4.5, 18, 4.1, 1.8, P.white, Enum.Material.SmoothPlastic, false)

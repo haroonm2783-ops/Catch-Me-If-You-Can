@@ -19,7 +19,7 @@ Kit.KeepVisible = {MallCoin = true, CoinInner = true, Lamp = true, PromptPart = 
 
 function Kit.new(model)
 	local kit = {
-		model = model, count = 0, lights = 0, signs = 0, detail = 0, P = Kit.P,
+		model = model, count = 0, lights = 0, signs = 0, detail = 0, emitters = 0, P = Kit.P,
 		hideSpots = {}, coins = {}, landmarks = {}, covers = {}, doors = {},
 	}
 
@@ -136,6 +136,39 @@ function Kit.new(model)
 		light.Parent = bulb
 		kit.lights += 1
 		return bulb
+	end
+
+	-- Ambient particles. Budgeted (see tests) and switched off or halved by the client's performance tier.
+	-- kinds: "spray" (fountain water), "sparkle" (glitter), "steam" (kitchen vapour).
+	function kit.emitter(part, kind)
+		local e = Instance.new("ParticleEmitter")
+		e.Name = "Ambient_" .. kind
+		e.LockedToPart = false
+		e.Shape = Enum.ParticleEmitterShape.Box
+		if kind == "spray" then
+			e.Rate, e.Lifetime, e.Speed, e.SpreadAngle = 22, NumberRange.new(1.1, 1.7), NumberRange.new(9, 13), Vector2.new(22, 22)
+			e.Acceleration = Vector3.new(0, -28, 0)
+			e.Size = NumberSequence.new({NumberSequenceKeypoint.new(0, 0.7), NumberSequenceKeypoint.new(1, 0.15)})
+			e.Transparency = NumberSequence.new({NumberSequenceKeypoint.new(0, 0.25), NumberSequenceKeypoint.new(1, 1)})
+			e.Color = ColorSequence.new(Color3.fromRGB(190, 230, 255), Color3.fromRGB(255, 255, 255))
+			e.LightEmission = 0.35
+		elseif kind == "sparkle" then
+			e.Rate, e.Lifetime, e.Speed, e.SpreadAngle = 6, NumberRange.new(1.2, 2.2), NumberRange.new(1, 3), Vector2.new(180, 180)
+			e.Acceleration = Vector3.new(0, 1.5, 0)
+			e.Size = NumberSequence.new({NumberSequenceKeypoint.new(0, 0.5), NumberSequenceKeypoint.new(0.5, 0.35), NumberSequenceKeypoint.new(1, 0)})
+			e.Transparency = NumberSequence.new({NumberSequenceKeypoint.new(0, 0.1), NumberSequenceKeypoint.new(1, 1)})
+			e.Color = ColorSequence.new(Color3.fromRGB(255, 226, 120), Color3.fromRGB(255, 160, 220))
+			e.LightEmission = 0.8
+		else
+			e.Rate, e.Lifetime, e.Speed, e.SpreadAngle = 3, NumberRange.new(1.8, 2.8), NumberRange.new(1.5, 2.5), Vector2.new(15, 15)
+			e.Acceleration = Vector3.new(0, 1, 0)
+			e.Size = NumberSequence.new({NumberSequenceKeypoint.new(0, 0.8), NumberSequenceKeypoint.new(1, 2.2)})
+			e.Transparency = NumberSequence.new({NumberSequenceKeypoint.new(0, 0.7), NumberSequenceKeypoint.new(1, 1)})
+			e.Color = ColorSequence.new(Color3.fromRGB(255, 255, 255))
+		end
+		e.Parent = part
+		kit.emitters += 1
+		return e
 	end
 
 	-- Local frame: origin on the floor, yaw about Y; boxes are bottom-based (`y0` is the base height).

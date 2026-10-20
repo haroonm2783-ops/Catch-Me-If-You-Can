@@ -26,7 +26,7 @@ function PerformanceController.new(ctx)
 	ctx.Perf = ctx.Perf or {tier = 1, name = "HIGH", auto = true}
 	return setmetatable({
 		ctx = ctx, player = Players.LocalPlayer, connections = {}, details = {}, lights = {}, effects = {},
-		clock = 0, lodClock = 0, windowTime = 0, windowFrames = 0, slowWindows = 0, started = false,
+		emitters = {}, clock = 0, lodClock = 0, windowTime = 0, windowFrames = 0, slowWindows = 0, started = false,
 	}, PerformanceController)
 end
 
@@ -46,16 +46,32 @@ function PerformanceController:_collect(model)
 	self.model = model
 	table.clear(self.details)
 	table.clear(self.lights)
+	table.clear(self.emitters)
 	for _, descendant in ipairs(model:GetDescendants()) do
 		if descendant:IsA("BasePart") then
 			if descendant:GetAttribute("CatchDetail") then
 				table.insert(self.details, {part = descendant, hidden = false})
 			end
+		elseif descendant:IsA("ParticleEmitter") then
+			table.insert(self.emitters, {emitter = descendant, rate = descendant.Rate, enabled = descendant.Enabled})
 		elseif descendant:IsA("PointLight") or descendant:IsA("SpotLight") then
 			table.insert(self.lights, {light = descendant, enabled = descendant.Enabled, off = false})
 		end
 	end
+	self:_applyEmitters()
 	self:_lod(true)
+end
+
+-- Ambient particles: full rate on HIGH, half on MEDIUM, off on LOW.
+function PerformanceController:_applyEmitters()
+	local tier = self.ctx.Perf.tier
+	for _, record in ipairs(self.emitters) do
+		local emitter = record.emitter
+		if emitter.Parent then
+			emitter.Rate = tier == 2 and math.max(1, math.floor(record.rate * 0.5)) or record.rate
+			emitter.Enabled = record.enabled and tier < 3
+		end
+	end
 end
 
 -- Post effects are remembered so a manual tier change can restore them.
@@ -121,6 +137,7 @@ function PerformanceController:SetTier(tier, manual)
 	perf.tier, perf.name = tier, TIER_NAMES[tier]
 	self.player:SetAttribute("CatchGraphicsTier", tier)
 	self:_applyEffects()
+	self:_applyEmitters()
 	self:_lod(true)
 end
 
@@ -186,6 +203,9 @@ function PerformanceController:Destroy()
 	for _, record in ipairs(self.details) do if record.part.Parent then record.part.LocalTransparencyModifier = 0 end end
 	for _, record in ipairs(self.lights) do if record.light.Parent then record.light.Enabled = record.enabled end end
 	for effect, saved in pairs(self.effects) do if effect.Parent then effect.Enabled = saved.enabled end end
+	for _, record in ipairs(self.emitters) do
+		if record.emitter.Parent then record.emitter.Rate, record.emitter.Enabled = record.rate, record.enabled end
+	end
 	if self.shadowsDefault ~= nil then Lighting.GlobalShadows = self.shadowsDefault end
 end
 

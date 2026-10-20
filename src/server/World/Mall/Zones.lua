@@ -23,7 +23,8 @@ local function foodStall(ctx, lx, name, color, prop)
 	local depth = ctx.D
 	f.b("StallCounter", lx, 0, depth - 8, 14, 3.6, 3, P.white, Enum.Material.SmoothPlastic, true, {cover = "Low", vault = true})
 	f.b("StallTop", lx, 3.6, depth - 8, 14.3, 0.3, 3.3, color, Enum.Material.SmoothPlastic, false)
-	f.b("StallKitchen", lx, 0, depth - 3.5, 14, 11, 2, P.dark, Enum.Material.SmoothPlastic, true, {cover = "Full"})
+	local kitchen = f.b("StallKitchen", lx, 0, depth - 3.5, 14, 11, 2, P.dark, Enum.Material.SmoothPlastic, true, {cover = "Full"})
+	ctx.kit.emitter(kitchen, "steam")
 	f.b("StallMenu", lx, 6.5, depth - 4.6, 11, 4.2, 0.3, P.white, Enum.Material.SmoothPlastic, false)
 	f.sign(name, lx, 12.2, depth - 5.2, 13, 3.4, P.white, color, true, {pixels = 26})
 	for i = 1, 4 do f.b("MenuLine", lx, 7.4 + (i - 1) * 0.9, depth - 4.8, 8 - (i % 2) * 2, 0.3, 0.15, color, Enum.Material.SmoothPlastic, false) end
@@ -187,13 +188,13 @@ function Zones.defs(P, Fx)
 						if not (id == "S2" and math.abs(x) < 12 and z == 12) then diningIsland(ctx, x, z, cols[((i + j) % #cols) + 1]) end
 					end
 				end
-				-- Staff rooms and a cooler behind the stalls.
-				if id == "S1" then
-					Fx.hideCell(ctx, {id = "food_staff_" .. id, kind = "Staff Room", lx = 45.5, lz = 43.5, yaw = 0, w = 7, d = 7, wall = P.white, accent = P.orange, door = P.orange, carpet = P.cream,
-						interior = function(g, w, d) g.b("StaffLocker", 0, 0, d / 2 - 1, 5, 6, 1, P.steel, Enum.Material.Metal, false) end})
-				end
+				-- A staff room and a walk-in cooler behind the stalls, in every food court.
+				Fx.hideCell(ctx, {id = "food_staff_" .. id, kind = "Staff Room", lx = 45.5, lz = 43.5, yaw = 0, w = 7, d = 7, wall = P.white, accent = P.orange, door = P.orange, carpet = P.cream,
+					interior = function(g, w, d) g.b("StaffLocker", 0, 0, d / 2 - 1, 5, 6, 1, P.steel, Enum.Material.Metal, false) end})
 				if id == "S3" then
-					Fx.hideCell(ctx, {id = "food_cooler", kind = "Walk-in Cooler", lx = -45.5, lz = 43.5, yaw = 0, w = 7, d = 7, wall = P.sky, accent = P.sky, door = P.sky, doorMaterial = Enum.Material.Glass, carpet = P.sky})
+					Fx.hideCell(ctx, {id = "food_cooler_" .. id, kind = "Walk-in Cooler", lx = -45.5, lz = 43.5, yaw = 0, w = 7, d = 7, wall = P.sky, accent = P.sky, door = P.sky, doorMaterial = Enum.Material.Glass, carpet = P.sky})
+				else
+					Fx.hideCell(ctx, {id = "food_pantry_" .. id, kind = "Mascot Closet", lx = -26, lz = 36, yaw = 0, w = 5, d = 5, wall = P.sun, accent = P.orange, door = P.sky, carpet = P.cream})
 				end
 			end})
 	end

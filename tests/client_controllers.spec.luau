@@ -826,8 +826,9 @@ do
 		rays.Enabled, bloom.Enabled = true, true
 		rays.Parent, bloom.Parent = f.services.Lighting, f.services.Lighting
 		f.services.Lighting.GlobalShadows = true
+		local steam = f.instance.new("ParticleEmitter"); steam.Rate = 10; steam.Enabled = true; steam.Parent = near
 		f.workspace.ChildAdded = signal()
-		return {near = near, far = far, wall = wall, light = light, nearLight = nearLight, rays = rays, bloom = bloom}
+		return {steam = steam, near = near, far = far, wall = wall, light = light, nearLight = nearLight, rays = rays, bloom = bloom}
 	end
 	-- PC: everything stays on.
 	local f = fixture(Vector2.new(1440, 860), Enum.UserInputType.Keyboard)
@@ -841,15 +842,17 @@ do
 	expect(not w.light.Enabled and w.nearLight.Enabled, "MEDIUM turns off far lights only")
 	expect(not w.rays.Enabled and w.bloom.Enabled, "MEDIUM drops sun rays but keeps bloom")
 	expect((w.wall.LocalTransparencyModifier or 0) == 0, "Architecture is never culled")
+	expect(w.steam.Enabled and w.steam.Rate == 5, "MEDIUM halves ambient particle rates")
 	-- Hysteresis: a part just inside the radius stays hidden once hidden.
 	w.far.Position = Vector3.new(105, 0, 0); perf:_lod(false)
 	expect(w.far.LocalTransparencyModifier == 1, "LOD uses hysteresis so decoration does not flicker at the boundary")
 	w.far.Position = Vector3.new(90, 0, 0); perf:_lod(false)
 	expect(w.far.LocalTransparencyModifier == 0, "Decoration returns when comfortably inside the radius")
 	perf:SetPreference(3)
-	expect(not w.bloom.Enabled and not f.services.Lighting.GlobalShadows, "LOW disables bloom and global shadows")
+	expect(not w.bloom.Enabled and not f.services.Lighting.GlobalShadows and not w.steam.Enabled, "LOW disables bloom, global shadows and ambient particles")
 	perf:SetPreference(nil)
 	expect(f.ctx.Perf.tier == 1 and w.bloom.Enabled and w.rays.Enabled and f.services.Lighting.GlobalShadows and w.light.Enabled, "AUTO restores every effect and light")
+	expect(w.steam.Rate == 10 and w.steam.Enabled, "AUTO restores particle rates")
 	-- Adaptive: sustained low FPS steps down (once per two slow windows), good FPS never does.
 	for _ = 1, 3000 do f.services.RunService.Heartbeat:Fire(1 / 60) end
 	expect(f.ctx.Perf.tier == 1, "A healthy frame rate must never lower quality")

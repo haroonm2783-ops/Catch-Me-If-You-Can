@@ -7,6 +7,8 @@ local roblox = require("@lune/roblox")
 local Rules = require("../src/shared/Rules")
 local Config = require("../src/shared/Config")
 local Modifiers = require("../src/shared/Modifiers")
+local Catalog = require("../src/shared/Catalog")
+local Achievements = require("../src/shared/Achievements")
 local Vector3, CFrame, Enum = roblox.Vector3, roblox.CFrame, roblox.Enum
 local checks = 0
 
@@ -93,6 +95,7 @@ local function fixture(playerCount, studio)
 		OverlapParams = { new = function() return {} end },
 		task = {
 			spawn = function(fn) schedule(fn) end,
+			defer = function(fn) schedule(fn) end,
 			delay = function(delay, fn) schedule(fn, delay) end,
 			wait = function(delay) return coroutine.yield(delay or 1 / 60) end,
 		},
@@ -123,7 +126,7 @@ local function fixture(playerCount, studio)
 	local Movement = luau.load(fs.readFile("src/server/Services/MovementService.lua"), { environment = environment, debugName = "MovementService" })()
 	local round, movement = Round.new(ctx), Movement.new(ctx)
 	ctx.Services.RoundService, ctx.Services.MovementService = round, movement
-	local f = { environment = environment, ctx = ctx, round = round, movement = movement, players = roster, playersService = players, run = run, world = world, ground = ground, notices = notices, snapshots = snapshots, awards = awards }
+	local f = { services = services, environment = environment, ctx = ctx, round = round, movement = movement, players = roster, playersService = players, run = run, world = world, ground = ground, notices = notices, snapshots = snapshots, awards = awards }
 	function f:advance(seconds)
 		local target, executions = timestamp + seconds, 0
 		while true do
@@ -891,6 +894,102 @@ do
 	f.round.phase = "Active"
 	hide:ResetRound()
 	expect(not record.collected and coinPart.Transparency == 0, "A new round restores the coins")
+end
+
+-- End to end: a real round with hiding, coins and a find feeds the real DataService; the earned coins buy and
+-- equip a cosmetic through the real ShopService; replays and bad receipts change nothing.
+do
+	local f = fixture(4, true)
+	f.ctx.Catalog, f.ctx.Achievements = Catalog, Achievements
+	f.ctx.Config.Persistence = { StoreName = "e2e", Retries = 1, UseStudioDataStores = false, AutosaveSeconds = 60, SessionLockSeconds = 180 }
+	local profiles, applied = {}, 0
+	f.ctx.Remotes.Profile = { FireClient = function(_, player, snapshot) profiles[player] = snapshot end }
+	local guid = 0
+	local marketplace = { PromptGamePassPurchaseFinished = { Connect = function() end } }
+	function marketplace:PromptProductPurchase() end
+	f.services.MarketplaceService = marketplace
+	f.services.DataStoreService = { GetDataStore = function() return {} end }
+	f.services.HttpService = { GenerateGUID = function() guid += 1; return "e2e" .. guid end }
+	function f.playersService:GetPlayerByUserId(id) for _, member in ipairs(f.players) do if member.UserId == id then return member end end end
+	local Data = luau.load(fs.readFile("src/server/Services/DataService.lua"), { environment = f.environment, debugName = "DataService" })()
+	local Shop = luau.load(fs.readFile("src/server/Services/ShopService.lua"), { environment = f.environment, debugName = "ShopService" })()
+	local Hide = luau.load(fs.readFile("src/server/Services/HideService.lua"), { environment = f.environment, debugName = "HideService" })()
+	local data = Data.new(f.ctx)
+	f.ctx.Services.DataService = data
+	f.ctx.Services.ShopService = Shop.new(f.ctx)
+	f.ctx.Services.CosmeticService = { ShowWinners = function() end, Apply = function() applied += 1 end }
+	f.round.ctx = f.ctx
+	local hide = Hide.new(f.ctx)
+	f.ctx.Services.HideService = hide
+	for _, player in ipairs(f.players) do data:_Load(player) end
+	f:startActive()
+	local hunter, runners = nil, {}
+	for _, player in ipairs(f.players) do
+		if f.round:GetRole(player) == "Hunter" then hunter = player else table.insert(runners, player) end
+	end
+	local collector, hider = runners[1], runners[2]
+	-- Spread everyone out, then play the objectives.
+	for _, player in ipairs(f.players) do f:pose(player, 90, 3, 90, true) end
+	local coinParts, records = {}, {}
+	for i = 1, 4 do
+		local p = object("Part"); p.CFrame = CFrame.new(21, 3.2, 2); p.GetChildren = function() return {} end
+		records[i] = { part = p, position = p.CFrame.Position, collected = false }
+		coinParts[i] = p
+	end
+	hide.coins, hide.coinBuckets = records, { ["1,0,0"] = records }
+	f:pose(collector, 21, 3, 2, true)
+	hide:_collectCoins(collector, collector.Character.children.HumanoidRootPart)
+	expect(f.round.roster[collector.UserId].pickups == 4, "Four coins collected through the real pickup path")
+	-- A hunter finds a hidden runner.
+	local anchor = object("Part"); anchor.CFrame = CFrame.new(22, 3, 0); anchor.GetChildren = function() return {} end
+	local spot = { id = "e2e", model = object("Model"), prompt = { MaxActivationDistance = 8, Parent = anchor }, door = object("Part"),
+		inside = CFrame.new(30, 3.1, 0), exit = CFrame.new(22, 3.1, -5), lockedUntil = 0, anchorPart = anchor }
+	hide.spots = { spot }
+	f:pose(hider, 21, 3, 0, true); hide:_triggered(hider, spot)
+	f:pose(hunter, 18, 3, 0, true); hide:_triggered(hunter, spot)
+	expect(f.round.roster[hunter.UserId].finds == 1 and not hide:IsHiding(hider), "A hidden runner is found")
+	-- The round ends on the clock; everyone is rewarded exactly as Rules says.
+	local before = {}
+	for _, player in ipairs(f.players) do
+		before[player] = table.clone(data:Get(player))
+		before[player].achievements = table.clone(data:Get(player).achievements)
+	end
+	f.round:Start()
+	f:advance(f.ctx.Config.Round.Duration + 1)
+	local profile = data:Get(collector)
+	local expected = Rules.RoundReward({ role = "Runner", win = true, tags = 0, survived = f.ctx.Config.Round.Duration, pickups = 4, closeCalls = 0 }, f.ctx.Config)
+	expect(f.round.phase == "Results" or f.round.phase == "Intermission", "The round settled (" .. tostring(f.round.phase) .. ")")
+	-- First-time achievements add their own coin bonus on top of the round reward.
+	local bonus = 0
+	for _, achievement in ipairs(Achievements.List) do
+		if profile.achievements[achievement.id] and not before[collector].achievements[achievement.id] then bonus += achievement.coins end
+	end
+	expect(bonus > 0 and profile.coins == before[collector].coins + expected.coins + bonus and profile.xp == before[collector].xp + expected.xp, "Collector earns exactly the rule-defined coins and XP plus unlocked achievement bonuses")
+	expect(profile.stats.pickups == 4 and profile.stats.rounds == 1 and profile.stats.wins == 1, "Pickups, rounds and wins are saved to the profile")
+	expect(data:Get(hunter).stats.finds == 1, "The hunter's find is saved")
+	local rewardNotice
+	for _, item in ipairs(f.notices) do if item.notice.kind == "reward" and item.player == collector then rewardNotice = item.notice end end
+	expect(rewardNotice and rewardNotice.coins == expected.coins and rewardNotice.pickups == 4, "The results screen receives what the server granted")
+	-- Replaying the same round summary pays nothing.
+	local coins = profile.coins
+	expect(not data:AwardRound(collector, { role = "Runner", win = true, tags = 0, survived = 180, pickups = 25, roundId = f.round.roundId }), "A replayed round is refused")
+	expect(profile.coins == coins, "A replay never pays")
+	-- Spend coins on a cosmetic through the real shop, then equip it.
+	profile.coins = 400
+	expect(f.ctx.Services.ShopService:Purchase(collector, "mask_visor"), "Coins purchase succeeds")
+	expect(profile.coins == 100 and profile.owned.mask_visor, "Price is debited with the grant")
+	expect(f.ctx.Services.ShopService:Purchase(collector, "mask_visor") and profile.coins == 100, "Buying again never double-charges")
+	expect(data:Equip(collector, "masks", "mask_visor") and profile.equipped.masks == "mask_visor" and applied >= 1, "Equipping applies the look through CosmeticService")
+	expect(not f.ctx.Services.ShopService:Purchase(collector, "skin_golden"), "An unconfigured Robux item can never be bought")
+	expect(profiles[collector] and profiles[collector].coins == profile.coins, "The client snapshot matches the server balance")
+	-- Coin packs: unknown product receipts never grant; a configured one grants once.
+	f.ctx.Services.ShopService:Start()
+	expect(f.services.MarketplaceService.ProcessReceipt({ PlayerId = collector.UserId, ProductId = 123, PurchaseId = "x" }) == Enum.ProductPurchaseDecision.NotProcessedYet, "Unknown product receipts are retried")
+	Catalog.Products[1].productId = 555
+	local decision = f.services.MarketplaceService.ProcessReceipt({ PlayerId = collector.UserId, ProductId = 555, PurchaseId = "p-1" })
+	f.services.MarketplaceService.ProcessReceipt({ PlayerId = collector.UserId, ProductId = 555, PurchaseId = "p-1" })
+	Catalog.Products[1].productId = 0
+	expect(decision == Enum.ProductPurchaseDecision.PurchaseGranted and profile.coins == 100 + Catalog.Products[1].coins, "A coin pack receipt is granted exactly once")
 end
 
 print("Gameplay service tests passed: " .. checks .. " checks")

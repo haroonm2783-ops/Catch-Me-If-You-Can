@@ -31,12 +31,16 @@ All of the following are implemented, tested against mocks, and committed:
 - [x] **Docs:** README, LAUNCH_READINESS, TESTING, MONETIZATION updated; map previews `docs/Mall-*.png`
       and character sheets `docs/*-lineup.png` regenerated (software renders, not Studio screenshots).
 
+## Final quality pass (done after the first 0.4.0 commit)
+Performance tiers + LOD, part trims, brighter premium skins, 2+ hide spots per store, ambient particles, touch-button
+layout, correct chat API, end-to-end integration test, docs/ratings, PR description (`docs/PULL_REQUEST.md`).
+
 ## Test results (latest `./tools/check.sh`)
-rules 398 · data/shop/receipts 172 · gameplay 270 · appearance 283,138 · client 1,309 · legacy map 28,291 ·
-mall 125,020 · enums 856 refs — PASS. Mocked Roblox boundaries only. **Zero Studio/engine playtests have been run.**
+rules 398 · data/shop/receipts 172 · gameplay + e2e 287 · appearance 283,138 · client 1,393 · legacy map 28,291 ·
+mall 118,049 · enums 867 refs — PASS. Mocked Roblox boundaries only. **Zero Studio/engine playtests have been run.**
 
 ## Known risks (ranked)
-1. **Mobile performance** — ~7,200 parts, StreamingEnabled off. Unmeasured.
+1. **Mobile performance** — 6,731 parts, StreamingEnabled off by design, LOD/quality tiers built but unmeasured on a device.
 2. **Visual quality** — mall palette/lighting/UI never seen in the engine.
 3. **Mood pose rotation signs** (`MOOD_POSES` in `MovementController.lua`) are derived by hand; may need flipping.
 4. **Hide/search balance** numbers (`Config.Hide`) are guesses; fairness needs real players.

@@ -47,8 +47,17 @@ real phone in a private published server. Nothing below has been run by the auth
 8. **Money (private test place only).** Create one game pass and one developer product, put the IDs
    in `Catalog.lua`, then check cancel, success, rejoin (no double charge) and that coins arrive
    exactly once and survive a rejoin.
-9. **Performance.** On a low-end phone, record FPS, memory and join time in the full mall. If it is
-   unplayable, consider enabling StreamingEnabled with `ReplicationFocus` and re-testing spectating.
+9. **Performance.** On a low-end phone, record FPS, memory and join time in the full mall. Watch the client
+   graphics tier: select your player in the Explorer (Play mode, client) and read the `CatchGraphicsTier` attribute
+   (1 HIGH, 2 MEDIUM, 3 LOW). It should start at 2 on a phone and only step down after ~12 s of sustained <38 FPS.
+   Try Settings > GRAPHICS on every option; far decoration should vanish and fountain/steam particles should halve (MEDIUM)
+   or stop (LOW). Compare Micro Profiler frame time on HIGH vs MEDIUM. If LOW is still unplayable, reduce the
+   `DETAIL_RADIUS`/`LIGHT_RADIUS` values or part counts; consider streaming only if memory (not FPS) is the problem.
+10. **Mobile HUD.** On a phone in portrait and landscape: nothing overlaps RUN/SLIDE/TAG/SCAN/jump; the dock is below
+    the Roblox topbar with SHOP and LOCKER always visible; opening chat does not cover the dock. On PC: chat sits
+    lower-left, does not overlap the dock or ability bar, and the player list is hidden (use CREW).
+11. **Cosmetic review.** Open the Locker and compare the real avatars against `docs/Character-lineup.png`: do the faces,
+    hair, outfits and masks read at normal camera distance and on a phone? Note anything muddy.
 
 ## Reproduce automated checks
 
