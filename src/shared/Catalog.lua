@@ -33,6 +33,11 @@ local entries = {
 	{id="name_rookie",category="nameplates",name="CITY NEWCOMER",description="Every rooftop legend starts somewhere.",currency="Free",price=0,rarity="Common",accent={172,193,208}},
 	{id="name_survivor",category="nameplates",name="UNTOUCHABLE",description="Earn 10 wins and let your name do the talking.",currency="Milestone",price=0,milestone={stat="wins",value=10},rarity="Rare",accent={87,238,237}},
 	{id="name_legend",category="nameplates",name="SKYLINE LEGEND",description="Reach level 30. A badge of long-term city mastery.",currency="Milestone",price=0,milestone={stat="level",value=30},rarity="Legendary",accent={255,204,91}},
+	{id="name_regular",category="nameplates",name="ROOFTOP REGULAR",description="Finish 50 rounds. You know every shortcut by heart.",currency="Milestone",price=0,milestone={stat="rounds",value=50},rarity="Rare",accent={120,226,198}},
+	{id="name_relentless",category="nameplates",name="RELENTLESS",description="Catch 100 runners. Nobody stays hidden for long.",currency="Milestone",price=0,milestone={stat="tags",value=100},rarity="Rare",accent={255,128,120}},
+	{id="name_hotstreak",category="nameplates",name="HOT STREAK",description="Win 5 rounds in a row.",currency="Milestone",price=0,milestone={stat="bestStreak",value=5},rarity="Epic",accent={255,160,90}},
+	{id="name_apex",category="nameplates",name="APEX HUNTER",description="Win 15 rounds as a hunter.",currency="Milestone",price=0,milestone={stat="hunterWins",value=15},rarity="Epic",accent={255,88,109}},
+	{id="name_ghost",category="nameplates",name="GHOST RUNNER",description="Survive 3,000 seconds across your career.",currency="Milestone",price=0,milestone={stat="survived",value=3000},rarity="Epic",accent={190,170,255}},
 	{id="bundle_night",category="bundles",name="Nightfall Collection",description="Shadow Runner, Phantom Mask and Afterglow trail. Appearance only.",currency="Robux",price=649,gamePassId=0,grants={"skin_shadow","mask_phantom","trail_cyan"},rarity="Legendary",accent={164,129,255}},
 	{id="vip_founder",category="vip",name="Neon Social Club",description="Neon Outlaw, Prism Visor and Rooftop Shuffle. No XP, speed or currency boosts.",currency="Robux",price=699,gamePassId=0,grants={"skin_neon","mask_visor","emote_dance"},rarity="Legendary",accent={255,204,91}},
 }

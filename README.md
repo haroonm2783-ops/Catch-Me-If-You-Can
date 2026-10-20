@@ -4,9 +4,11 @@ An original Roblox multiplayer parkour chase game set in **Neon Heights**: a
 mint-and-coral twilight city with rooftop gardens, a lantern restaurant, an arcade,
 a clock tower, interconnected rooftops, and a separate social deck.
 
-**Version 0.2.1 fixes the reported floor flicker and R6 slide rejection**, while
-retaining the streetwear redesign, richer city and larger character locker. See the
-[update and first-play checklist](docs/UPDATE_0_2.md).
+**Version 0.3.0** brightens the city, adds round types (Classic, Infection, Swarm,
+Slide Frenzy), first-time onboarding, a daily login streak and 16 achievements with
+earnable titles. It builds on 0.2.1's floor-flicker and R6 slide fixes. Live status
+and next steps are in [DEVELOPMENT_PROGRESS.md](DEVELOPMENT_PROGRESS.md); the older
+[update and first-play checklist](docs/UPDATE_0_2.md) still applies.
 
 **Direct-open Studio places are included.** The user confirmed running, sprinting,
 and vaulting in the previous place, and reported that sliding failed. The new
@@ -24,7 +26,7 @@ claim of launch readiness.
 2. In Roblox Studio, choose **File → Open from File** and select the downloaded
    place. Neon Heights is already present in the editor; it is not an empty place
    that requires pasting scripts. The map is reused at runtime.
-3. Press **Play**. Output should say `Neon Heights initialized. 0.2.1`; if it
+3. Press **Play**. Output should say `Neon Heights initialized. 0.3.0`; if it
    shows an older version, download and open the updated file. A solo Studio
    session enters a clearly labeled practice round
    after the 16-second intermission and 5-second head start. Practice awards no

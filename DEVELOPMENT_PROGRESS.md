@@ -31,26 +31,34 @@ Weak (ranked by player impact):
       Geometry/collision untouched. MAP_VERSION 3→4 so old baked maps are replaced. Tests updated.
       UNVERIFIED visually — needs a Studio look; tune `applyLighting()` / palette `P` in MapBuilder.lua.
 
+- [x] **Round modifiers** (`src/shared/Modifiers.lua`, RoundService): Classic / Infection (tagged runners become
+      hunters after a 4s server-held respawn; no infection in last 6s; infected share hunter win and keep survival
+      XP) / Swarm (+1 hunter, 120s) / Slide Frenzy (slide+vault cooldown x0.5). Weighted, never repeats back-to-back,
+      size-gated (Infection>=4, Swarm>=6), practice always Classic. Previewed at intermission, shown in HUD + banner.
+      +43 gameplay checks.
+- [x] **Progression:** shared `Achievements.lua` (16, coin rewards, progress shown in Career), 5 new milestone title
+      nameplates, 7-day UTC login streak (`ClaimLogin`, server-owned, rate-limited, coins/XP only), QUESTS "!" flag.
+- [x] **Onboarding:** 5-page first-run overlay (platform-aware controls), persisted via `settings.tutorialDone`,
+      replayable from Settings > HOW TO PLAY, auto-dismissed when a round starts.
+- [x] Version bumped to 0.3.0.
+
 ## Current task
-Round modifiers (Infection etc.) to remove dead time and add variety — see below.
+Docs/QA pass for what exists, then pick the next item from Remaining.
 
 ## Remaining (priority order)
-1. Round modifiers: **Infection** (tagged runners become hunters), **Swarm** (extra hunter, shorter) — announce in HUD.
-2. First-time onboarding overlay (saved flag) + clearer role/objective banner.
-3. Achievements 6→~14 with titles, equip a title/banner on the nameplate, display on profile.
-4. Daily login reward with streak (server-granted once per UTC day; coins/XP only, no pay advantage).
-5. Map interactives (jump pads / limited-use shortcuts) — needs Studio feel testing; design in docs first.
-6. Global leaderboard via OrderedDataStore (needs published-place verification).
-7. Shop: more cosmetics (trails/emotes) and a featured/new rail; no timers/FOMO tricks.
-8. Audio: wire licensed IDs once the owner supplies them (Config.Audio).
-9. Full QA pass + launch-readiness report (`docs/LAUNCH_READINESS.md`).
+1. Map interactives (jump pads / limited-use shortcuts) — needs Studio feel testing; design in docs first.
+2. Global leaderboard via OrderedDataStore (needs published-place verification).
+3. Shop: more cosmetics (trails/emotes) and a featured/new rail; no timers/FOMO tricks.
+4. Audio: wire licensed IDs once the owner supplies them (Config.Audio).
+5. Full QA pass + launch-readiness report (`docs/LAUNCH_READINESS.md`).
 
 ## Known bugs / risks
 - None confirmed from the user's last Studio run besides the 0.2.1 slide/roof fixes awaiting acceptance.
 - Mobile performance, slide feel, camera, and avatar fit all unmeasured.
 
 ## Test results (latest)
-`./tools/check.sh`: rules 301, data/shop 136, gameplay 197, appearance 157,251, client 430, map 28,292 — PASS.
+`./tools/check.sh`: rules 308, data/shop 150, gameplay 240, appearance 157,251, client 494, map 28,292 — PASS.
+(Mocked Roblox boundaries only. Zero Studio/engine playtests have been run by this effort.)
 
 ## Implementation decisions
 - Keep the existing architecture (Rojo + services + pure Rules). Extend, don't rebuild.

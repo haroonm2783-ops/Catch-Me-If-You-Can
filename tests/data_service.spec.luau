@@ -5,6 +5,7 @@ local fs = require("@lune/fs")
 local luau = require("@lune/luau")
 local Catalog = require("../src/shared/Catalog")
 local Rules = require("../src/shared/Rules")
+local Achievements = require("../src/shared/Achievements")
 local checks = 0
 
 local function expect(value, message)
@@ -97,7 +98,7 @@ local function fixture(studio, existingStore)
 			Persistence = { StoreName = "test", Retries = 3, UseStudioDataStores = false, AutosaveSeconds = 60, SessionLockSeconds = 180 },
 			Progression = { RoundXP = 45, WinXP = 80, TagXP = 25, SurvivalXPPerSecond = 0.4, RoundCoins = 12, WinCoins = 25, TagCoins = 6 },
 		},
-		Catalog = Catalog, Rules = Rules, Services = {},
+		Catalog = Catalog, Rules = Rules, Achievements = Achievements, Services = {},
 		Remotes = {
 			Notice = { FireClient = function(_, _, notice) table.insert(notices, notice) end },
 			Profile = { FireClient = function(_, _, snapshot) table.insert(snapshots, snapshot) end },
@@ -456,6 +457,45 @@ do
 		end
 	end
 	expect(paid > 0 and f.marketplace.prompts == 0, "Every pass entry stays disabled when its ID is zero")
+end
+
+-- Achievements pay once; login rewards are server-owned, once per UTC day, streak-aware.
+do
+	local f = fixture(true)
+	f.data:_Load(f.player)
+	local profile = f.data:Get(f.player)
+	local record = f.data.records[f.player]
+	local before = profile.coins
+	profile.stats.tags = 55
+	f.data:_Unlocks(record, true)
+	expect(profile.achievements.tag_10 and profile.achievements.tag_50 and not profile.achievements.tag_200, "Tag achievements unlock by threshold")
+	expect(profile.coins - before == 40 + 80, "Achievement coin rewards are granted")
+	local coins = profile.coins
+	f.data:_Unlocks(record, true)
+	expect(profile.coins == coins, "Achievements never pay twice")
+	expect(profile.owned.tag_bloom, "Tag milestone cosmetic still unlocks")
+
+	local status = f.data:Snapshot(f.player).loginStatus
+	expect(status.canClaim and status.day == 1 and status.coins == 25, "New profile can claim day one")
+	coins = profile.coins
+	expect(f.data:ClaimLogin(f.player) and profile.coins == coins + 25 and profile.login.streak == 1, "First claim pays day one")
+	expect(not f.data:ClaimLogin(f.player) and profile.coins == coins + 25, "Second claim on the same UTC day is rejected")
+	expect(not f.data:Snapshot(f.player).loginStatus.canClaim, "Claimed state is visible to the client")
+	profile.login.lastClaim = Rules.DayKey(os.time() - 86400)
+	profile.login.streak = 6
+	coins = profile.coins
+	expect(f.data:ClaimLogin(f.player) and profile.login.streak == 7 and profile.coins == coins + 150, "Consecutive days continue the streak to the day-seven bonus")
+	profile.login.lastClaim = Rules.DayKey(os.time() - 3 * 86400)
+	expect(f.data:ClaimLogin(f.player) and profile.login.streak == 1, "A missed day restarts the cycle")
+	profile.login.lastClaim = Rules.DayKey(os.time() - 86400)
+	profile.login.streak = 7
+	local _, day = Rules.LoginReward(8)
+	expect(f.data:ClaimLogin(f.player) and profile.login.streak == 8 and day == 1, "The cycle wraps after day seven")
+	expect(not f.data:UpdateSettings(f.player, nil), "Invalid settings payload rejected")
+	f.data:UpdateSettings(f.player, { tutorialDone = true, coins = true })
+	expect(profile.settings.tutorialDone == true and profile.settings.coins == nil, "Settings only accept known flags")
+	local normalized = Rules.NormalizeProfile({ login = { streak = -5, lastClaim = "'; drop" }, settings = { tutorialDone = "yes" } })
+	expect(normalized.login.streak == 0 and normalized.login.lastClaim == "" and normalized.settings.tutorialDone == false, "Login state and tutorial flag are sanitized")
 end
 
 print("Data and shop service tests passed: " .. checks .. " checks")

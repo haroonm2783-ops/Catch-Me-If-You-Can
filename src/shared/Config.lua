@@ -1,7 +1,7 @@
 -- Shared tunables. Prices and pass IDs live in Catalog.lua.
 local Config = {
 	GameName = "CATCH ME IF YOU CAN",
-	Version = "0.2.1",
+	Version = "0.3.0",
 	Round = {
 		MaxPlayers = 12, MinimumPlayers = 2, Duration = 180, Intermission = 16,
 		ResultsDuration = 10, HeadStart = 5, FinalSeconds = 30, RespawnDelay = 2,

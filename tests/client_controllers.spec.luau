@@ -6,6 +6,7 @@ local luau = require("@lune/luau")
 local roblox = require("@lune/roblox")
 local Catalog = require("../src/shared/Catalog")
 local Rules = require("../src/shared/Rules")
+local Achievements = require("../src/shared/Achievements")
 local Config = require("../src/shared/Config")
 local Enum, Vector2, Vector3 = roblox.Enum, roblox.Vector2, roblox.Vector3
 local checks = 0
@@ -192,7 +193,7 @@ local function fixture(viewport, inputType)
 	for _, name in ipairs({"Enum", "Color3", "ColorSequence", "UDim", "UDim2", "Vector2", "Vector3", "CFrame"}) do environment[name] = roblox[name] end
 	local profile = Rules.NewProfile(1700000000); profile.loaded = true; profile.persistence = "session"; profile.quests = {}
 	local actions = {}
-	local ctx = {Config = Config, Catalog = Catalog, Rules = Rules, Profile = profile, State = {phase = "Waiting", roundId = 0, players = {}}, Controllers = {},
+	local ctx = {Config = Config, Catalog = Catalog, Rules = Rules, Achievements = Achievements, Profile = profile, State = {phase = "Waiting", roundId = 0, players = {}}, Controllers = {},
 		Remotes = {Action = {FireServer = function(_, action, payload) table.insert(actions, {action = action, payload = payload}) end}}}
 	local function load(name)
 		return luau.load(fs.readFile("src/client/Controllers/" .. name .. ".lua"), {environment = environment, debugName = name})().new(ctx)
@@ -219,6 +220,53 @@ for _, size in ipairs({Vector2.new(1440, 860), Vector2.new(390, 760), Vector2.ne
 	end
 	ui:CloseMenu()
 	expect(not f.player:GetAttribute("CatchMenuOpen"), "Closing the menu must release input")
+end
+
+-- Onboarding, daily login and round-type presentation.
+do
+	local f = fixture(Vector2.new(390, 760), Enum.UserInputType.Touch)
+	f.ctx.Profile.loginStatus = {streak = 2, canClaim = true, day = 3, coins = 40, xp = 30}
+	local ui = f.load("UIController"); f.ctx.Controllers.UIController = ui; ui:Start()
+	expect(ui.tutorial.Visible and ui.tutorialStep.Text == "HOW TO PLAY  /  1 OF 5", "First-time players must see the tutorial")
+	expect(ui.dock:FindFirstChild("Quests").Text == "QUESTS  !", "Claimable daily reward must flag the Quests button")
+	for _ = 1, 4 do ui.tutorialNext.Activated:Fire() end
+	expect(ui.tutorialNext.Text == "LET'S RUN" and ui.tutorialTitle.Text:find("EARN"), "Final tutorial page should start the game")
+	ui.tutorialNext.Activated:Fire()
+	expect(not ui.tutorial.Visible and f.actions[#f.actions].action == "Settings" and f.actions[#f.actions].payload.tutorialDone == true, "Finishing the tutorial must persist through the server")
+	f.ctx.Profile.settings.tutorialDone = true
+	ui:OnProfile(f.ctx.Profile)
+	expect(not ui.tutorial.Visible, "A completed tutorial must not reappear")
+	ui:OpenMenu("Settings")
+	ui.panelContent:FindFirstChild("HowToPlay", true).Activated:Fire()
+	expect(ui.tutorial.Visible and ui.tutorialPage == 1 and not ui.menu, "Settings can reopen the tutorial")
+	ui.tutorialSkip.Activated:Fire()
+	ui:OpenMenu("Quests")
+	local claim = ui.panelContent:FindFirstChild("ClaimLogin", true)
+	expect(claim and claim.Text == "CLAIM", "Quests show a claimable login reward")
+	claim.Activated:Fire()
+	expect(f.actions[#f.actions].action == "ClaimLogin", "Login claim goes to the server")
+	f.ctx.Profile.loginStatus = {streak = 3, canClaim = false, day = 3, coins = 40, xp = 30}
+	ui:OnProfile(f.ctx.Profile)
+	expect(ui.panelContent:FindFirstChild("ClaimLogin", true).Text == "CLAIMED", "Claimed login reward is shown as claimed")
+	ui:OpenMenu("Progress")
+	local rows = 0
+	for _, node in ipairs(ui.panelContent:GetDescendants()) do
+		if node.ClassName == "TextLabel" and node.Text:find("LOCKED  /  ") then rows += 1 end
+	end
+	expect(rows >= #Achievements.List, "Career lists every shared achievement")
+	ui:CloseMenu()
+	local userId = f.player.UserId
+	f.ctx.State = {phase = "Active", roundId = 9, endsAt = 280, players = {{userId = userId, role = "Runner", alive = true}}, aliveRunners = 5,
+		modifier = {id = "infection", name = "INFECTION", tagline = "Caught runners join the hunt."}}
+	ui:OnState(f.ctx.State)
+	expect(ui.phaseLabel.Text == "INFECTION" and ui.announcementCopy.Text:find("INFECTION"), "Active modifier is announced and shown in the HUD")
+	f.ctx.State = {phase = "Active", roundId = 9, endsAt = 280, players = {{userId = userId, role = "Hunter", alive = true}}, aliveRunners = 4,
+		modifier = f.ctx.State.modifier}
+	ui:OnState(f.ctx.State)
+	expect(ui.announcementTitle.Text == "INFECTED!", "A runner turned hunter is told what happened")
+	f.ctx.State = {phase = "Intermission", roundId = 10, endsAt = 300, players = {}, modifier = {id = "swarm", name = "SWARM", tagline = "x"}}
+	ui:OnState(f.ctx.State)
+	expect(ui.phaseLabel.Text == "NEXT: SWARM IN", "Upcoming modifier is previewed during intermission")
 end
 
 -- Cosmetics use independent shared preview slots and server-authoritative actions.

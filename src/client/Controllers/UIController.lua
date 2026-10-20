@@ -176,6 +176,7 @@ function UIController:Start()
 	self.panelContent = frame(self.panel, {Position = UDim2.fromOffset(16, 78), Size = UDim2.new(1, -32, 1, -94), BackgroundTransparency = 1})
 	self:_buildToast()
 	self:_buildAnnouncement()
+	self:_buildTutorial()
 	self:_buildLoading()
 	self.connections[#self.connections + 1] = UserInputService.InputBegan:Connect(function(input)
 		if self.menu and input.KeyCode == Enum.KeyCode.Escape then self:CloseMenu() end
@@ -292,6 +293,69 @@ function UIController:_buildSpectator()
 	self.spectatorName = label(self.spectator, "Waiting for runners", {Position = UDim2.fromOffset(52, 28), Size = UDim2.new(1, -104, 0, 22), Font = F.bold, TextSize = 13, TextXAlignment = Enum.TextXAlignment.Center, TextTruncate = Enum.TextTruncate.AtEnd})
 end
 
+-- First-time onboarding. Also reachable from Settings > HOW TO PLAY.
+function UIController:_buildTutorial()
+	self.tutorial = frame(self.root, {Name = "Tutorial", AnchorPoint = Vector2.new(0.5, 0.5), Position = UDim2.fromScale(0.5, 0.5), Size = UDim2.new(1, -40, 0, 300), BackgroundColor3 = C.background, Visible = false, ZIndex = 30}, 18)
+	node("UISizeConstraint", {MaxSize = Vector2.new(560, 330), MinSize = Vector2.new(260, 250)}, self.tutorial)
+	stroke(self.tutorial, C.cyan, 0.2)
+	gradient(self.tutorial, Color3.fromRGB(24, 40, 58), C.background, 110)
+	self.tutorialStep = label(self.tutorial, "", {Position = UDim2.fromOffset(22, 16), Size = UDim2.new(1, -44, 0, 16), TextSize = 10, Font = F.bold, TextColor3 = C.cyan, ZIndex = 31})
+	self.tutorialTitle = label(self.tutorial, "", {Position = UDim2.fromOffset(22, 38), Size = UDim2.new(1, -44, 0, 36), Font = F.black, TextSize = 22, TextWrapped = true, ZIndex = 31})
+	self.tutorialBody = label(self.tutorial, "", {Position = UDim2.fromOffset(22, 84), Size = UDim2.new(1, -44, 1, -158), TextSize = 14, TextColor3 = C.muted, TextWrapped = true, TextYAlignment = Enum.TextYAlignment.Top, ZIndex = 31})
+	self.tutorialSkip = button(self.tutorial, "SKIP", function() self:_finishTutorial() end, {Name = "TutorialSkip", AnchorPoint = Vector2.new(0, 1), Position = UDim2.new(0, 22, 1, -18), Size = UDim2.fromOffset(90, 40), ZIndex = 31})
+	self.tutorialNext = button(self.tutorial, "NEXT", function() self:_tutorialAdvance() end, {Name = "TutorialNext", AnchorPoint = Vector2.new(1, 1), Position = UDim2.new(1, -22, 1, -18), Size = UDim2.fromOffset(150, 40), BackgroundColor3 = C.cyan, TextColor3 = C.background, ZIndex = 31})
+end
+
+function UIController:_tutorialPages()
+	local touch = UserInputService.TouchEnabled and not UserInputService.KeyboardEnabled
+	local pad = UserInputService.GamepadEnabled and not UserInputService.KeyboardEnabled and not touch
+	local controls = touch and "Use the RUN, SLIDE and TAG buttons. The jump button also vaults low obstacles when you run at them."
+		or (pad and "Sprint: L3     Slide: B     Jump / vault: A     Tag: R2     Locker: Y")
+		or "Sprint: hold Shift     Slide: C while running     Jump / vault: Space     Tag: F"
+	return {
+		{title = "WELCOME TO NEON HEIGHTS", body = "Every round, a few HUNTERS chase the RUNNERS across the rooftops. The round starts by itself when enough players are ready."},
+		{title = "RUNNERS: STAY FREE", body = "Take ramps, bridges and ladders. Break line of sight and use the moving gates. Outlast the clock to win."},
+		{title = "HUNTERS: TAG THEM ALL", body = "Runners get a head start. Get close and tag them. In some rounds caught runners join the hunt, so watch the banner for the round type."},
+		{title = "MOVE LIKE A LEGEND", body = controls .. "\n\nSlide under pressure, vault over obstacles, and keep your momentum."},
+		{title = "EARN, CUSTOMIZE, SHOW OFF", body = "Win rounds and finish daily dispatches for coins and XP. Unlock skins, masks, trails and titles. Everything in the shop is cosmetic: nobody can buy an advantage."},
+	}
+end
+
+function UIController:ShowTutorial()
+	if not self.tutorial then return end
+	self.tutorialPages = self:_tutorialPages()
+	self.tutorialPage = 1
+	self:CloseMenu()
+	self.tutorial.Visible = true
+	self:_renderTutorial()
+end
+
+function UIController:_renderTutorial()
+	local page = self.tutorialPages[self.tutorialPage]
+	self.tutorialStep.Text = "HOW TO PLAY  /  " .. self.tutorialPage .. " OF " .. #self.tutorialPages
+	self.tutorialTitle.Text = page.title
+	self.tutorialBody.Text = page.body
+	self.tutorialNext.Text = self.tutorialPage == #self.tutorialPages and "LET'S RUN" or "NEXT"
+end
+
+function UIController:_tutorialAdvance()
+	if self.tutorialPage >= #self.tutorialPages then
+		self:_finishTutorial()
+	else
+		self.tutorialPage += 1
+		self:_renderTutorial()
+	end
+end
+
+function UIController:_finishTutorial()
+	if self.tutorial then self.tutorial.Visible = false end
+	self.visited = true
+	if self.hero then self.hero.Visible = false end
+	if (self.ctx.Profile.settings or {}).tutorialDone ~= true then
+		self:_send("Settings", {tutorialDone = true})
+	end
+end
+
 function UIController:_buildToast()
 	self.toast = frame(self.root, {AnchorPoint = Vector2.new(0.5, 0), Position = UDim2.new(0.5, 0, 0, 134), Size = UDim2.new(0.8, 0, 0, 54), Visible = false, BackgroundColor3 = C.card, ZIndex = 20}, 12)
 	node("UISizeConstraint", {MaxSize = Vector2.new(600, 90)}, self.toast)
@@ -406,7 +470,8 @@ function UIController:_itemPrice(item)
 	end
 	if item.currency == "Milestone" then
 		local milestone = item.milestone or {}
-		return string.upper(tostring(milestone.stat or "milestone")) .. " " .. number(milestone.value)
+		local names = {rounds = "ROUNDS", wins = "WINS", tags = "TAGS", level = "LEVEL", bestStreak = "WIN STREAK", hunterWins = "HUNTER WINS", survived = "SECONDS SURVIVED"}
+		return (names[milestone.stat] or string.upper(tostring(milestone.stat or "milestone"))) .. " " .. number(milestone.value)
 	end
 	return "FREE"
 end
@@ -555,6 +620,21 @@ function UIController:_renderQuests()
 	list(container, false, 12)
 	local quests = self.ctx.Profile.quests or {}
 	local narrow = self.panelContent.AbsoluteSize.X < 520
+	local login = self.ctx.Profile.loginStatus
+	if login then
+		local done = login.canClaim and (login.day - 1) or login.day
+		local card = frame(container, {Name = "DailyLogin", Size = UDim2.new(1, -5, 0, narrow and 176 or 132), LayoutOrder = 0}, 14)
+		stroke(card, login.canClaim and C.amber or C.line, 0.6)
+		label(card, "DAILY LOGIN  /  DAY " .. number(login.day) .. " OF 7", {Position = UDim2.fromOffset(18, 14), Size = UDim2.new(1, -36, 0, 15), TextSize = 9, TextColor3 = login.canClaim and C.amber or C.muted, Font = F.bold})
+		label(card, login.canClaim and ("Today: +" .. number(login.coins) .. " COINS  /  +" .. number(login.xp) .. " XP")
+			or ("Claimed. Return tomorrow to extend your " .. number(login.streak) .. "-day streak."), {Position = UDim2.fromOffset(18, 36), Size = UDim2.new(1, narrow and -36 or -168, 0, 40), TextSize = 16, Font = F.bold, TextWrapped = true})
+		for day = 1, 7 do
+			frame(card, {Name = "LoginDay" .. day, Position = UDim2.fromOffset(18 + (day - 1) * 34, 88), Size = UDim2.fromOffset(28, 10), BackgroundColor3 = day <= done and C.amber or C.line}, 3)
+		end
+		button(card, login.canClaim and "CLAIM" or "CLAIMED", function()
+			if login.canClaim then self:_send("ClaimLogin") end
+		end, {Name = "ClaimLogin", Position = UDim2.new(1, -142, 0, narrow and 128 or 36), Size = UDim2.fromOffset(124, 36), TextSize = 10, BackgroundColor3 = login.canClaim and C.amber or C.card, TextColor3 = login.canClaim and C.background or C.muted})
+	end
 	for index, quest in ipairs(quests) do
 		local card = frame(container, {Name = "Dispatch_" .. quest.id, Size = UDim2.new(1, -5, 0, narrow and 182 or 140), LayoutOrder = index}, 14)
 		stroke(card, quest.claimed and C.line or C.cyan, 0.75)
@@ -597,12 +677,13 @@ function UIController:_renderProgress()
 		label(row, spec[1], {Position = UDim2.fromOffset(16, 0), Size = UDim2.new(1, -100, 1, 0), Font = F.medium, TextColor3 = C.muted, TextSize = 11})
 		label(row, number(spec[2]), {Position = UDim2.new(1, -90, 0, 0), Size = UDim2.fromOffset(72, 48), Font = F.bold, TextSize = 20, TextXAlignment = Enum.TextXAlignment.Right})
 	end
-	local achievements = {{"first_round", "FIRST FOOTSTEPS", "Complete your first round"}, {"first_win", "FIRST GLORY", "Win your first chase"}, {"tag_10", "HOT PURSUIT", "Make 10 successful tags"}, {"survivor_600", "LONG WAY HOME", "Survive for 600 seconds"}, {"veteran_25", "CITY REGULAR", "Complete 25 rounds"}, {"streak_3", "ON A ROLL", "Win 3 rounds in a row"}}
-	for index, achievement in ipairs(achievements) do
-		local unlocked = (profile.achievements or {})[achievement[1]] == true
+	for index, achievement in ipairs(self.ctx.Achievements.List) do
+		local unlocked = (profile.achievements or {})[achievement.id] == true
+		local current = (profile.stats or {})[achievement.stat] or profile[achievement.stat] or 0
 		local row = frame(container, {Size = UDim2.new(1, -5, 0, 66), LayoutOrder = 20 + index}, 9)
-		label(row, (unlocked and "UNLOCKED  /  " or "LOCKED  /  ") .. achievement[2], {Position = UDim2.fromOffset(16, 9), Size = UDim2.new(1, -32, 0, 21), TextSize = 11, Font = F.bold, TextColor3 = unlocked and C.amber or C.muted})
-		label(row, achievement[3], {Position = UDim2.fromOffset(16, 36), Size = UDim2.new(1, -32, 0, 17), TextSize = 11, TextColor3 = C.muted})
+		label(row, (unlocked and "UNLOCKED  /  " or "LOCKED  /  ") .. achievement.name, {Position = UDim2.fromOffset(16, 9), Size = UDim2.new(1, -120, 0, 21), TextSize = 11, Font = F.bold, TextColor3 = unlocked and C.amber or C.muted, TextTruncate = Enum.TextTruncate.AtEnd})
+		label(row, "+" .. number(achievement.coins) .. " COINS", {Position = UDim2.new(1, -104, 0, 9), Size = UDim2.fromOffset(90, 21), TextSize = 10, Font = F.bold, TextColor3 = unlocked and C.muted or C.amber, TextXAlignment = Enum.TextXAlignment.Right})
+		label(row, achievement.text .. (unlocked and "" or ("   " .. number(math.min(current, achievement.goal)) .. " / " .. number(achievement.goal))), {Position = UDim2.fromOffset(16, 36), Size = UDim2.new(1, -32, 0, 17), TextSize = 11, TextColor3 = C.muted, TextTruncate = Enum.TextTruncate.AtEnd})
 	end
 end
 
@@ -626,6 +707,7 @@ function UIController:_renderSettings()
 		button(row, enabled and "ON" or "OFF", function() self:_send("Settings", {[spec[1]] = not enabled}) end, {Name = "Setting_" .. spec[1], Position = UDim2.new(1, -92, 0, 23), Size = UDim2.fromOffset(74, 36), BackgroundColor3 = enabled and C.cyan or C.card, TextColor3 = enabled and C.background or C.muted})
 	end
 	local instructions = frame(container, {Size = UDim2.new(1, -5, 0, 152), LayoutOrder = 10}, 10)
+	button(container, "HOW TO PLAY", function() self:ShowTutorial() end, {Name = "HowToPlay", Size = UDim2.new(1, -5, 0, 42), LayoutOrder = 11, TextSize = 11})
 	label(instructions, "KNOW YOUR ROUTE", {Position = UDim2.fromOffset(16, 12), Size = UDim2.new(1, -32, 0, 22), Font = F.bold, TextColor3 = C.cyan, TextSize = 12})
 	label(instructions, "Sprint  Shift / L3     Slide  C / B\nJump + vault  Space / A     Tag  F / R2\nTouch: use the on-screen controls.\nGamepad: Y opens your locker. A selects; B closes.\nRunners escape until time runs out. Hunters tag every runner.", {Position = UDim2.fromOffset(16, 40), Size = UDim2.new(1, -32, 0, 100), TextColor3 = C.muted, TextSize = 11, TextWrapped = true, TextYAlignment = Enum.TextYAlignment.Top})
 end
@@ -805,6 +887,7 @@ function UIController:OnState(state)
 	self.emoteButton.Visible = not active
 	if active and (self.lastRound ~= state.roundId or self.lastRole ~= role) then
 		self:CloseMenu()
+		if self.tutorial and self.tutorial.Visible and role ~= "Spectator" then self:_finishTutorial() end
 		self.visited = true
 		self:_announce(role, state.practice, state.modifier, self.lastRole)
 	end
@@ -835,6 +918,16 @@ function UIController:OnProfile(profile)
 	elseif profile.persistence == "unavailable" then self.saveLabel.Text = profile.saveMessage or "SAVING UNAVAILABLE / THIS SESSION MAY NOT PERSIST" end
 	self.saveLabel.TextColor3 = profile.persistence == "saved" and C.muted or C.amber
 	self.pendingId = nil
+	local login = profile.loginStatus
+	local questsButton = self.dock and self.dock:FindFirstChild("Quests")
+	if questsButton then questsButton.Text = (login and login.canClaim) and "QUESTS  !" or "QUESTS" end
+	if profile.loaded and profile.settings and profile.settings.tutorialDone == false and not self.tutorialShown then
+		self.tutorialShown = true
+		self:ShowTutorial()
+	elseif login and login.canClaim and not self.loginHinted and profile.loaded and not (self.tutorial and self.tutorial.Visible) then
+		self.loginHinted = true
+		self:Toast("Daily reward ready. Open QUESTS to claim it.", "unlock")
+	end
 	if self.menu then self:_renderMenu() end
 end
 

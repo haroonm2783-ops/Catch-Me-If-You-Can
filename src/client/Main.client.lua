@@ -3,7 +3,7 @@ local ReplicatedStorage = game:GetService("ReplicatedStorage")
 local shared = ReplicatedStorage:WaitForChild("CatchShared")
 local remoteFolder = ReplicatedStorage:WaitForChild("CatchRemotes")
 local ctx = {
-	Config=require(shared.Config), Catalog=require(shared.Catalog), Rules=require(shared.Rules),
+	Config=require(shared.Config), Catalog=require(shared.Catalog), Rules=require(shared.Rules), Achievements=require(shared.Achievements),
 	Remotes={}, State={}, Profile={}, Controllers={}, Signals={},
 }
 for _, name in ipairs({"State","Action","Profile","Notice","Query"}) do ctx.Remotes[name] = remoteFolder:WaitForChild(name) end

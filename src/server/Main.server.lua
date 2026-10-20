@@ -7,6 +7,7 @@ local Config = require(shared.Config)
 local Catalog = require(shared.Catalog)
 local Rules = require(shared.Rules)
 local Modifiers = require(shared.Modifiers)
+local Achievements = require(shared.Achievements)
 local MapBuilder = require(script.Parent.World.MapBuilder)
 
 local remotesFolder = Instance.new("Folder")
@@ -18,7 +19,7 @@ for _, name in ipairs({"State", "Action", "Profile", "Notice", "Query"}) do
 	remote.Parent = remotesFolder
 	remotes[name] = remote
 end
-local ctx = {Config=Config, Catalog=Catalog, Rules=Rules, Modifiers=Modifiers, Remotes=remotes, Services={}}
+local ctx = {Config=Config, Catalog=Catalog, Rules=Rules, Modifiers=Modifiers, Achievements=Achievements, Remotes=remotes, Services={}}
 ctx.World = MapBuilder.Build()
 for _, name in ipairs({"DataService", "CosmeticService", "ShopService", "MovementService", "RoundService"}) do
 	ctx.Services[name] = require(script.Parent.Services[name]).new(ctx)
@@ -27,7 +28,7 @@ end
 local limits = {
 	Sprint={capacity=6,refill=4}, Slide={capacity=3,refill=1}, Vault={capacity=5,refill=3},
 	Tag={capacity=5,refill=4}, Equip={capacity=4,refill=2}, Buy={capacity=2,refill=0.5},
-	ClaimQuest={capacity=3,refill=1}, Settings={capacity=4,refill=2}, Emote={capacity=2,refill=0.5},
+	ClaimQuest={capacity=3,refill=1}, ClaimLogin={capacity=2,refill=0.2}, Settings={capacity=4,refill=2}, Emote={capacity=2,refill=0.5},
 }
 local buckets = {}
 local queryTimes = {}
@@ -71,6 +72,8 @@ local function dispatch(player, action, payload)
 		if type(payload.id)=="string" then ctx.Services.ShopService:Purchase(player,payload.id) end
 	elseif action == "ClaimQuest" then
 		if type(payload.id)=="string" then ctx.Services.DataService:ClaimQuest(player,payload.id) end
+	elseif action == "ClaimLogin" then
+		ctx.Services.DataService:ClaimLogin(player)
 	elseif action == "Settings" then
 		ctx.Services.DataService:UpdateSettings(player, payload)
 	elseif action == "Emote" then

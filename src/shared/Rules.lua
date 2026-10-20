@@ -37,14 +37,32 @@ function Rules.DailyQuests(_dayKey)
 		{id="survive_120",text="Survive for 120 seconds",stat="survived",goal=120,xp=100,coins=40},
 	}
 end
+-- Seven-day login cycle. Coins and a little XP only; nothing here affects chase outcomes.
+Rules.LoginCycle = {
+	{coins=25,xp=25}, {coins=30,xp=25}, {coins=40,xp=30}, {coins=50,xp=30},
+	{coins=60,xp=40}, {coins=75,xp=40}, {coins=150,xp=75},
+}
+-- Returns nil when today's reward was already claimed, else the streak this claim would reach.
+function Rules.NextLoginStreak(login, now)
+	local today = Rules.DayKey(now)
+	if login.lastClaim == today then return nil end
+	local yesterday = Rules.DayKey((now or os.time()) - 86400)
+	if login.lastClaim == yesterday then return login.streak + 1 end
+	return 1
+end
+function Rules.LoginReward(streak)
+	streak = math.max(1, integer(streak, 1))
+	return Rules.LoginCycle[((streak - 1) % #Rules.LoginCycle) + 1], ((streak - 1) % #Rules.LoginCycle) + 1
+end
 function Rules.NewProfile(now)
 	return {
 		schemaVersion=1, coins=0, xp=0, level=1, rating=1000, streak=0, bestStreak=0,
 		stats={rounds=0,wins=0,hunterWins=0,runnerWins=0,tags=0,survived=0},
 		owned=Catalog.DefaultOwned(), equipped=table.clone(Catalog.DefaultEquipment),
-		settings={music=true,sfx=true,reducedMotion=false,cameraShake=true},
+		settings={music=true,sfx=true,reducedMotion=false,cameraShake=true,tutorialDone=false},
 		daily={day=Rules.DayKey(now),progress={rounds=0,tags=0,survived=0},claimed={}},
 		achievements={},
+		login={streak=0,lastClaim=""},
 	}
 end
 function Rules.NormalizeProfile(raw, now)
@@ -85,6 +103,11 @@ function Rules.NormalizeProfile(raw, now)
 				if raw.daily.claimed[quest.id] == true then result.daily.claimed[quest.id] = true end
 			end
 		end
+	end
+	if type(raw.login) == "table" then
+		result.login.streak = integer(raw.login.streak, 0, 100000)
+		local last = raw.login.lastClaim
+		if type(last) == "string" and (last == "" or last:match("^%d%d%d%d%-%d%d%-%d%d$")) then result.login.lastClaim = last end
 	end
 	if type(raw.achievements) == "table" then
 		for id, value in pairs(raw.achievements) do

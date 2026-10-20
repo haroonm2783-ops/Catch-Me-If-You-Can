@@ -10,15 +10,6 @@ DataService.__index = DataService
 
 local FORMAT = "CatchMeIfYouCan.profile.v1"
 local MAX_COUNTER = 1000000000
-local ACHIEVEMENTS = {
-	{ id = "first_round", name = "First chase", stat = "rounds", goal = 1 },
-	{ id = "first_win", name = "First victory", stat = "wins", goal = 1 },
-	{ id = "tag_10", name = "Tracker", stat = "tags", goal = 10 },
-	{ id = "survivor_600", name = "Untouchable", stat = "survived", goal = 600 },
-	{ id = "veteran_25", name = "City regular", stat = "rounds", goal = 25 },
-	{ id = "streak_3", name = "On a roll", stat = "bestStreak", goal = 3 },
-}
-
 local function clone(value)
 	if type(value) ~= "table" then return value end
 	local copy = {}
@@ -121,12 +112,15 @@ end
 function DataService:_Unlocks(record, notify)
 	local profile = record.profile
 	local changed = false
-	for _, definition in ipairs(ACHIEVEMENTS) do
+	for _, definition in ipairs(self.ctx.Achievements.List) do
 		local progress = profile.stats[definition.stat] or profile[definition.stat] or 0
 		if progress >= definition.goal and not profile.achievements[definition.id] then
 			profile.achievements[definition.id] = true
+			profile.coins = add(profile.coins, definition.coins or 0)
 			changed = true
-			if notify then self:_Notice(record.player, "Achievement: " .. definition.name, "unlock") end
+			if notify then
+				self:_Notice(record.player, "Achievement: " .. definition.name .. " · +" .. (definition.coins or 0) .. " coins", "unlock")
+			end
 		end
 	end
 	for id, item in pairs(self.ctx.Catalog.Items) do
@@ -248,6 +242,13 @@ function DataService:Snapshot(player)
 	snapshot.persistence = record.persistence
 	snapshot.saveMessage = record.saveMessage
 	snapshot.rank = self.ctx.Rules.Rank(snapshot.rating)
+	local login = snapshot.login
+	local nextStreak = self.ctx.Rules.NextLoginStreak(login, os.time())
+	local reward, day = self.ctx.Rules.LoginReward(nextStreak or login.streak)
+	snapshot.loginStatus = {
+		streak = login.streak, canClaim = nextStreak ~= nil, day = day, coins = reward.coins, xp = reward.xp,
+		cycle = self.ctx.Rules.LoginCycle,
+	}
 	snapshot.quests = {}
 	for _, quest in ipairs(self.ctx.Rules.DailyQuests(snapshot.daily.day)) do
 		table.insert(snapshot.quests, {
@@ -381,7 +382,7 @@ function DataService:UpdateSettings(player, settings)
 	if not self:Ready(player) or type(settings) ~= "table" then return false, "Profile is not ready." end
 	local record = self.records[player]
 	local changed = false
-	for _, key in ipairs({ "music", "sfx", "reducedMotion", "cameraShake" }) do
+	for _, key in ipairs({ "music", "sfx", "reducedMotion", "cameraShake", "tutorialDone" }) do
 		if type(settings[key]) == "boolean" and record.profile.settings[key] ~= settings[key] then
 			record.profile.settings[key] = settings[key]; changed = true
 		end
@@ -411,6 +412,25 @@ function DataService:ClaimQuest(player, id)
 		end
 	end
 	return false, "Unknown quest."
+end
+
+-- One reward per UTC day; the server decides streak, amount and eligibility.
+function DataService:ClaimLogin(player)
+	if not self:Ready(player) then return false, "Profile is not ready." end
+	local record = self.records[player]
+	local profile = record.profile
+	local streak = self.ctx.Rules.NextLoginStreak(profile.login, os.time())
+	if not streak then return false, "Today's reward is already claimed." end
+	local reward = self.ctx.Rules.LoginReward(streak)
+	local previousLevel = profile.level
+	profile.login = { streak = streak, lastClaim = self.ctx.Rules.DayKey(os.time()) }
+	profile.coins = add(profile.coins, reward.coins)
+	profile.xp = add(profile.xp, reward.xp)
+	self:_Dirty(record)
+	self:_AfterProgress(record, previousLevel)
+	self:_Notice(player, "Daily reward: +" .. reward.coins .. " coins · +" .. reward.xp .. " XP · day " .. streak, "unlock")
+	task.defer(function() self:Save(player) end)
+	return true
 end
 
 function DataService:_SaveRecord(record, release)
