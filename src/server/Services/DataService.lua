@@ -64,8 +64,21 @@ function DataService.new(ctx)
 	return self
 end
 
-function DataService:_Notice(player, text, kind)
-	if player.Parent == Players then self.ctx.Remotes.Notice:FireClient(player, { kind = kind or "toast", text = text }) end
+function DataService:_Notice(player, text, kind, extra)
+	if player.Parent ~= Players then return end
+	local payload = { kind = kind or "toast", text = text }
+	for key, value in pairs(extra or {}) do payload[key] = value end
+	self.ctx.Remotes.Notice:FireClient(player, payload)
+end
+
+-- The most exciting thing newly gained (Rare or better), so the client can celebrate it.
+local RARITY_RANK = { Common = 0, Rare = 1, Epic = 2, Legendary = 3 }
+function DataService:_Reveal(items)
+	local best
+	for _, item in ipairs(items) do
+		if (RARITY_RANK[item.rarity] or 0) > 0 and (not best or RARITY_RANK[item.rarity] > RARITY_RANK[best.rarity]) then best = item end
+	end
+	return best and { reveal = { id = best.id, name = best.name, rarity = best.rarity, category = best.category } } or nil
 end
 
 function DataService:_Sanitize(raw)
@@ -133,7 +146,7 @@ function DataService:_Unlocks(record, notify)
 					if self.ctx.Catalog.Get(grantedId) then profile.owned[grantedId] = true end
 				end
 				changed = true
-				if notify then self:_Notice(record.player, "Unlocked " .. item.name, "unlock") end
+				if notify then self:_Notice(record.player, "Unlocked " .. item.name, "unlock", self:_Reveal({ item })) end
 			end
 		end
 	end
@@ -329,13 +342,15 @@ function DataService:Grant(player, ids, source)
 	if type(ids) ~= "table" then return false, "Invalid grant." end
 	local record = self.records[player]
 	local changed = false
+	local fresh = {}
 	for _, id in ipairs(ids) do
 		local item = type(id) == "string" and self.ctx.Catalog.Get(id)
 		if item then
-			if not record.profile.owned[id] then record.profile.owned[id] = true; changed = true end
+			if not record.profile.owned[id] then record.profile.owned[id] = true; changed = true; table.insert(fresh, item) end
 			for _, grantedId in ipairs(item.grants or {}) do
-				if self.ctx.Catalog.Get(grantedId) and not record.profile.owned[grantedId] then
-					record.profile.owned[grantedId] = true; changed = true
+				local granted = self.ctx.Catalog.Get(grantedId)
+				if granted and not record.profile.owned[grantedId] then
+					record.profile.owned[grantedId] = true; changed = true; table.insert(fresh, granted)
 				end
 			end
 		end
@@ -343,7 +358,7 @@ function DataService:Grant(player, ids, source)
 	if changed then
 		self:_Dirty(record)
 		self:Send(player)
-		if source then self:_Notice(player, source, "unlock") end
+		if source then self:_Notice(player, source, "unlock", self:_Reveal(fresh)) end
 		task.defer(function() self:Save(player) end)
 	end
 	return true, changed and "Granted." or "Already owned."

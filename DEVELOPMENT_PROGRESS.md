@@ -1,68 +1,59 @@
 # DEVELOPMENT_PROGRESS.md — live tracker (read this first in every session)
 
-Older delivery history (0.2.x, verification detail): `PROGRESS.md`. Launch assessment: `docs/LAUNCH_READINESS.md`.
-Playtest script: `docs/TESTING.md` ("0.4.0 Catch Mall acceptance script").
+Older history: `PROGRESS.md`. Launch assessment: `docs/LAUNCH_READINESS.md`. Visual identity: `docs/ART_DIRECTION.md`.
+Playtest script: `docs/TESTING.md` ("0.5.0 acceptance script", including everything that needs two players).
 
 ## Ground rules for this effort
-- No Roblox Studio/engine exists in the cloud container. Verified = `./tools/check.sh` (compile, rebuild,
-  8 mocked-boundary suites, place deserialization). Anything about feel, rendering, audio, devices, real
-  DataStores and Robux is **UNVERIFIED until a human plays it in Studio**.
+- No Roblox Studio/engine exists in the cloud container. Verified = `./tools/check.sh` (compile, rebuild, 9 mocked-boundary
+  suites, place deserialization). Anything about feel, rendering, lighting, audio, devices, real DataStores and Robux is
+  **UNVERIFIED until a human plays it in Studio**. Software previews in `docs/previews` are not screenshots.
 - Never publish, spend money, or invent product/asset IDs. All `gamePassId` and `Products[n].productId` stay 0.
 - Never overwrite `dist/` by hand: always `./tools/build.sh` (check.sh does it).
-- Branch: `claude/launch-quality-overhaul` (not merged; no PR opened).
+- Branch: `claude/visual-overhaul-v2` (built on `claude/launch-quality-overhaul`, PR #1).
 
-## Version 0.4.0 — launch-quality overhaul (this session)
-All of the following are implemented, tested against mocks, and committed:
-- [x] **Characters** (`src/shared/Appearance.lua` v3): expressive face parts toggled by mood, hair, 8 outfits,
-      8 masks, free skin tone + hair color, preview rig, deferred mid-round look changes (`CosmeticService`).
-- [x] **Catch Mall** (`src/server/World/MallBuilder.lua` + `Mall/*`): 324×304 studs, 2 floors + service ring,
-      atrium, 8 escalators, 4 grand stairs, 2 skybridges, 8 drop gaps, corner ladders, food court, arcade,
-      cinema, restrooms, 24 stores/attractions, 106 hide cells, 55 coins, sealed lobby deck, bright lighting.
-- [x] **Hiding gameplay** (`HideService`): hide / search / scan / coins / close calls, rewards, reset per round.
-- [x] **UI** (`UIController`): bright theme, always-visible Shop/Locker dock (vertical, or horizontal on short
-      screens), objective card, hide meter, ability bar, rarity cards with thumbnails, results reward breakdown,
-      coin-pack tab, side-drawer menus during rounds (no pausing, no protection).
-- [x] **Client systems:** `HidingController` (role-based prompt labels, scan/reveal highlights, coin spin),
-      Scan binding + jump-to-unhide in `MovementController`, procedural mood poses sharing its single joint
-      writer, mall feedback sounds/banners in `EffectsController`, optional ambience loop slot.
-- [x] **Monetization:** developer-product coin packs, idempotent `ProcessReceipt` (granted only after save),
-      `BuyCoins` action; docs in `docs/MONETIZATION.md`.
-- [x] **Tests:** mall navigation suite (125k checks), enum-validity suite, new client/data/gameplay checks.
-- [x] **Docs:** README, LAUNCH_READINESS, TESTING, MONETIZATION updated; map previews `docs/Mall-*.png`
-      and character sheets `docs/*-lineup.png` regenerated (software renders, not Studio screenshots).
-
-## Final quality pass (done after the first 0.4.0 commit)
-Performance tiers + LOD, part trims, brighter premium skins, 2+ hide spots per store, ambient particles, touch-button
-layout, correct chat API, end-to-end integration test, docs/ratings, PR description (`docs/PULL_REQUEST.md`).
+## Version 0.5.0 — art-direction change ("Sunburst Mall")
+- [x] **Characters:** avatar-first. `LoadCharacterAppearance = true`; `Appearance.lua` v4 builds optional overlays only
+      (13 skins, 4 rarity tiers, auras, reversible hair-hide and gold tint, 8 masks). Mood poses removed from
+      `MovementController` (only the slide pose and a light lean remain). Previews use the player's `HumanoidDescription`.
+      Podium winners are real avatars. Tones/hair-color categories removed (legacy saves are sanitized, tested).
+- [x] **Art:** new palette (`Kit.P`), neon policy (`Kit.GlowNames`), ShadowMap lighting preset, tile floors, per-store themes
+      (`Mall/Style.lua`), storefront awnings and icon blade signs, pendant lamps, trim.
+- [x] **Hub:** compact plaza (`Mall/Exterior.lua`, `Mall/Decor.lua`), sunburst gate, live boards and kiosks (`HubService`).
+- [x] **Hiding:** 130 spots (air vents in back corridors, toy chest, shoe box, dog house added).
+- [x] **UI:** compact HUD, right-hand dock with More popover, mid-size Shop/Locker panel (drawer in rounds), small cards,
+      compact results and tutorial, banners clear of the dock, chat untouched, collection counters, rarity outlines.
+- [x] **Feel:** dust puffs, hunter proximity vignette, Epic/Legendary unlock banners and equip bursts.
+- [x] **Practice rewards:** wording unified; practice coins labelled "not saved" (server behavior was already correct).
+- [x] **Performance:** 6,479 parts (down from 6,731) with more detail; budgets tightened in tests.
+- [x] **Tooling:** `tools/render-view.py`, `export-ui.luau` + `render-ui.py`, updated character export; `tests/hub.spec.luau`.
 
 ## Test results (latest `./tools/check.sh`)
-rules 398 · data/shop/receipts 172 · gameplay + e2e 287 · appearance 283,138 · client 1,393 · legacy map 28,291 ·
-mall 118,049 · enums 867 refs — PASS. Mocked Roblox boundaries only. **Zero Studio/engine playtests have been run.**
+See the end of `docs/LAUNCH_READINESS.md`. All nine suites pass with mocked Roblox boundaries only.
+**Zero Studio/engine playtests have been run.**
 
 ## Known risks (ranked)
-1. **Mobile performance** — 6,731 parts, StreamingEnabled off by design, LOD/quality tiers built but unmeasured on a device.
-2. **Visual quality** — mall palette/lighting/UI never seen in the engine.
-3. **Mood pose rotation signs** (`MOOD_POSES` in `MovementController.lua`) are derived by hand; may need flipping.
-4. **Hide/search balance** numbers (`Config.Hide`) are guesses; fairness needs real players.
-5. **Stuck spots** — navigation checks are analytic, not physics.
-6. **No audio assets** — engine fallbacks only (`Config.Audio` slots exist for owner-supplied IDs).
+1. **Lighting/exposure** was retuned blind (ShadowMap, ambient 138/134/152). Check first in Studio.
+2. **Avatar overlays on real avatars** (clipping, R6, tall bundles) and the async `HumanoidDescription` preview path.
+3. **Mobile performance**: budgets enforced, nothing measured.
+4. **Slide/vault feel** without custom animations; hide/search balance numbers are guesses (`Config.Hide`).
+5. **Store layouts were restyled, not redesigned**; no new shortcut routes.
+6. No audio assets.
 
-## Exact next steps for whoever continues
+## Exact next steps
 1. `./tools/bootstrap.sh && ./tools/check.sh` to confirm the baseline is green.
-2. Open `dist/Catch-Me-If-You-Can-Final.rbxl` in Studio; run the 0.4.0 acceptance script in `docs/TESTING.md`.
-3. Fix what it finds, in this priority: crashes/errors in Output → stuck spots/exploits → HUD clipping on phone →
-   performance → look and feel. Tune `Config.Hide`, `applyLighting()`, palette `P`, `MOOD_POSES`.
-4. Create passes/products (see `docs/MONETIZATION.md`), paste IDs, rebuild, test on a private place.
-5. Add licensed audio IDs to `Config.Audio` and test.
-6. Only then publish. After each change: run check, update this file, commit.
+2. Open `dist/Catch-Me-If-You-Can-Final.rbxl`; run `docs/TESTING.md` sections A and B.
+3. Fix what it finds: Output errors, stuck spots, HUD clipping, performance, then look and feel.
+4. Create passes/products (`docs/MONETIZATION.md`), paste IDs, rebuild, test on a private place.
+5. Add licensed audio IDs to `Config.Audio`. Only then publish.
 
 ## Later ideas (not started)
-Global leaderboard (OrderedDataStore), jump pads / limited shortcuts, player voting on modifiers, seasonal store
-reskins, uploaded animations, streaming with `ReplicationFocus` if mobile memory demands it.
+Global leaderboard (OrderedDataStore), jump pads / limited shortcuts, new store layouts, voting on modifiers,
+seasonal store reskins, uploaded animations, streaming with `ReplicationFocus` if mobile memory demands it.
 
 ## Implementation decisions
-- Keep the existing architecture (Rojo + services + pure Rules). Extend, don't rebuild.
-- The server owns hide/search/scan, coins and rewards; the client only presents and sends intent.
-- Rewards stay cosmetic/currency only; no gameplay advantage is purchasable.
-- Mood poses share MovementController's joint writer to avoid two scripts fighting over C0.
-- Hide cells always show a closed door (occupancy is not visible); hunters get a search and a scan instead.
+- Players' own avatars are never repainted or replaced; cosmetics are reversible overlays.
+- The art direction lives in one place per concern: palette and neon policy in `Kit`, store themes in `Style`,
+  lighting in `MallBuilder.applyLighting`.
+- Server owns hide/search/scan, coins and rewards; the client presents and sends intent. Hub kiosks only ask a
+  client to open its own menu.
+- Chat is left in Roblox's default position; the HUD is arranged around it, not the other way round.

@@ -20,8 +20,8 @@ local function applyLighting()
 	Lighting.ClockTime = 15.4
 	Lighting.GeographicLatitude = 28
 	Lighting.Brightness = 2.1
-	Lighting.Ambient = Color3.fromRGB(118, 116, 134)
-	Lighting.OutdoorAmbient = Color3.fromRGB(132, 138, 160)
+	Lighting.Ambient = Color3.fromRGB(138, 134, 152)
+	Lighting.OutdoorAmbient = Color3.fromRGB(146, 152, 174)
 	Lighting.ColorShift_Top = Color3.fromRGB(255, 236, 205)
 	Lighting.ColorShift_Bottom = Color3.fromRGB(0, 0, 0)
 	Lighting.ExposureCompensation = -0.05

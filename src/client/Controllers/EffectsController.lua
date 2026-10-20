@@ -548,9 +548,18 @@ function EffectsController:OnNotice(notice)
 			end
 		end
 	elseif notice.kind == "level" or notice.kind == "unlock" then
-		self:_pulse(GOLD, 0.6)
-		self:_confetti(GOLD)
-		self:_sound("Level", 0.4)
+		local reveal = notice.reveal
+		local color = reveal and (reveal.rarity == "Legendary" and GOLD or reveal.rarity == "Epic" and Color3.fromRGB(200, 120, 255) or Color3.fromRGB(90, 180, 255)) or GOLD
+		self:_pulse(color, reveal and 0.8 or 0.6)
+		self:_confetti(color)
+		-- A new Rare, Epic or Legendary is an event: a big rarity banner and a second confetti burst.
+		if reveal and (reveal.rarity == "Epic" or reveal.rarity == "Legendary") then
+			self:_banner(string.upper(reveal.rarity) .. " UNLOCKED!", color, 1.6, true)
+			self:_confetti(WHITE)
+		elseif reveal then
+			self:_banner(string.upper(reveal.rarity) .. " UNLOCKED!", color, 1.1, false)
+		end
+		self:_sound("Level", reveal and 0.55 or 0.4)
 	elseif notice.kind == "purchase" and notice.success == true then
 		self:_pulse(CYAN, 0.45)
 		self:_sound("Purchase", 0.3)

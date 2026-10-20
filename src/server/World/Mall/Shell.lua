@@ -58,7 +58,7 @@ function Shell.build(kit, Layout)
 			end
 		end
 	end
-	kit.box(floors, "OutsideLot", 0, -3.2, 0, 900, 4, 900, Color3.fromRGB(112, 190, 92), Enum.Material.Grass, true)
+	kit.box(floors, "OutsideLot", 0, -3.2, 0, 1700, 4, 1700, Color3.fromRGB(112, 190, 92), Enum.Material.Grass, true)
 
 	-- Holes through the second-floor deck: the atrium void plus the head of every ramp/stair.
 	local holes = {Layout.Rect(-AX, AX, -AZ, AZ)}

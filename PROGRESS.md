@@ -1,6 +1,7 @@
 # Catch Me If You Can — preserved development state
 
-> **Superseded:** version 0.4.0 (Catch Mall overhaul) replaced the Neon Heights map and most of the UI. Read
+> **Superseded:** version 0.4.0 (Catch Mall overhaul) replaced the Neon Heights map, and 0.5.0 (art-direction change:
+> avatar-first characters, Sunburst palette, compact hub and UI) replaced most of the 0.4.0 presentation. Read
 > `DEVELOPMENT_PROGRESS.md` and `docs/LAUNCH_READINESS.md` first; the sections below are historical 0.2.x notes.
 
 

@@ -3,9 +3,9 @@
     <Properties>
       <string name="Name">Lighting</string>
       <Color3 name="Ambient">
-        <R>0.4627451</R>
-        <G>0.45490196</G>
-        <B>0.5254902</B>
+        <R>0.5411765</R>
+        <G>0.5254902</G>
+        <B>0.59607846</B>
       </Color3>
       <float name="Brightness">2.1</float>
       <float name="ClockTime">15.4</float>
@@ -25,9 +25,9 @@
       <float name="GeographicLatitude">28</float>
       <bool name="GlobalShadows">true</bool>
       <Color3 name="OutdoorAmbient">
-        <R>0.5176471</R>
-        <G>0.5411765</G>
-        <B>0.627451</B>
+        <R>0.57254905</R>
+        <G>0.59607846</G>
+        <B>0.68235296</B>
       </Color3>
       <float name="ShadowSoftness">0.25</float>
       <token name="Technology">3</token>
@@ -2045,8 +2045,21 @@ function DataService.new(ctx)
 	return self
 end
 
-function DataService:_Notice(player, text, kind)
-	if player.Parent == Players then self.ctx.Remotes.Notice:FireClient(player, { kind = kind or "toast", text = text }) end
+function DataService:_Notice(player, text, kind, extra)
+	if player.Parent ~= Players then return end
+	local payload = { kind = kind or "toast", text = text }
+	for key, value in pairs(extra or {}) do payload[key] = value end
+	self.ctx.Remotes.Notice:FireClient(player, payload)
+end
+
+-- The most exciting thing newly gained (Rare or better), so the client can celebrate it.
+local RARITY_RANK = { Common = 0, Rare = 1, Epic = 2, Legendary = 3 }
+function DataService:_Reveal(items)
+	local best
+	for _, item in ipairs(items) do
+		if (RARITY_RANK[item.rarity] or 0) > 0 and (not best or RARITY_RANK[item.rarity] > RARITY_RANK[best.rarity]) then best = item end
+	end
+	return best and { reveal = { id = best.id, name = best.name, rarity = best.rarity, category = best.category } } or nil
 end
 
 function DataService:_Sanitize(raw)
@@ -2114,7 +2127,7 @@ function DataService:_Unlocks(record, notify)
 					if self.ctx.Catalog.Get(grantedId) then profile.owned[grantedId] = true end
 				end
 				changed = true
-				if notify then self:_Notice(record.player, "Unlocked " .. item.name, "unlock") end
+				if notify then self:_Notice(record.player, "Unlocked " .. item.name, "unlock", self:_Reveal({ item })) end
 			end
 		end
 	end
@@ -2310,13 +2323,15 @@ function DataService:Grant(player, ids, source)
 	if type(ids) ~= "table" then return false, "Invalid grant." end
 	local record = self.records[player]
 	local changed = false
+	local fresh = {}
 	for _, id in ipairs(ids) do
 		local item = type(id) == "string" and self.ctx.Catalog.Get(id)
 		if item then
-			if not record.profile.owned[id] then record.profile.owned[id] = true; changed = true end
+			if not record.profile.owned[id] then record.profile.owned[id] = true; changed = true; table.insert(fresh, item) end
 			for _, grantedId in ipairs(item.grants or {}) do
-				if self.ctx.Catalog.Get(grantedId) and not record.profile.owned[grantedId] then
-					record.profile.owned[grantedId] = true; changed = true
+				local granted = self.ctx.Catalog.Get(grantedId)
+				if granted and not record.profile.owned[grantedId] then
+					record.profile.owned[grantedId] = true; changed = true; table.insert(fresh, granted)
 				end
 			end
 		end
@@ -2324,7 +2339,7 @@ function DataService:Grant(player, ids, source)
 	if changed then
 		self:_Dirty(record)
 		self:Send(player)
-		if source then self:_Notice(player, source, "unlock") end
+		if source then self:_Notice(player, source, "unlock", self:_Reveal(fresh)) end
 		task.defer(function() self:Save(player) end)
 	end
 	return true, changed and "Granted." or "Already owned."
@@ -5965,7 +5980,7 @@ function Shell.build(kit, Layout)
 			end
 		end
 	end
-	kit.box(floors, "OutsideLot", 0, -3.2, 0, 900, 4, 900, Color3.fromRGB(112, 190, 92), Enum.Material.Grass, true)
+	kit.box(floors, "OutsideLot", 0, -3.2, 0, 1700, 4, 1700, Color3.fromRGB(112, 190, 92), Enum.Material.Grass, true)
 
 	-- Holes through the second-floor deck: the atrium void plus the head of every ramp/stair.
 	local holes = {Layout.Rect(-AX, AX, -AZ, AZ)}
@@ -7369,8 +7384,8 @@ local function applyLighting()
 	Lighting.ClockTime = 15.4
 	Lighting.GeographicLatitude = 28
 	Lighting.Brightness = 2.1
-	Lighting.Ambient = Color3.fromRGB(118, 116, 134)
-	Lighting.OutdoorAmbient = Color3.fromRGB(132, 138, 160)
+	Lighting.Ambient = Color3.fromRGB(138, 134, 152)
+	Lighting.OutdoorAmbient = Color3.fromRGB(146, 152, 174)
 	Lighting.ColorShift_Top = Color3.fromRGB(255, 236, 205)
 	Lighting.ColorShift_Bottom = Color3.fromRGB(0, 0, 0)
 	Lighting.ExposureCompensation = -0.05
@@ -9014,9 +9029,18 @@ function EffectsController:OnNotice(notice)
 			end
 		end
 	elseif notice.kind == "level" or notice.kind == "unlock" then
-		self:_pulse(GOLD, 0.6)
-		self:_confetti(GOLD)
-		self:_sound("Level", 0.4)
+		local reveal = notice.reveal
+		local color = reveal and (reveal.rarity == "Legendary" and GOLD or reveal.rarity == "Epic" and Color3.fromRGB(200, 120, 255) or Color3.fromRGB(90, 180, 255)) or GOLD
+		self:_pulse(color, reveal and 0.8 or 0.6)
+		self:_confetti(color)
+		-- A new Rare, Epic or Legendary is an event: a big rarity banner and a second confetti burst.
+		if reveal and (reveal.rarity == "Epic" or reveal.rarity == "Legendary") then
+			self:_banner(string.upper(reveal.rarity) .. " UNLOCKED!", color, 1.6, true)
+			self:_confetti(WHITE)
+		elseif reveal then
+			self:_banner(string.upper(reveal.rarity) .. " UNLOCKED!", color, 1.1, false)
+		end
+		self:_sound("Level", reveal and 0.55 or 0.4)
 	elseif notice.kind == "purchase" and notice.success == true then
 		self:_pulse(CYAN, 0.45)
 		self:_sound("Purchase", 0.3)
@@ -10681,6 +10705,17 @@ function UIController:_responsive()
 		self.objective.AnchorPoint = Vector2.new(0.5, 0)
 		self.objective.Position = UDim2.new(0.5, 0, 0, 62)
 	end
+	-- Banners and toasts stay in the space left of the dock, so they can never cover Shop or Locker.
+	local bannerWidth = math.max(180, math.min(430, size.X - 12 - rightMargin - 8))
+	self.announcement.Size = UDim2.fromOffset(bannerWidth, 74)
+	self.toast.Size = UDim2.fromOffset(math.min(440, bannerWidth), 40)
+	if small then
+		self.announcement.AnchorPoint, self.announcement.Position = Vector2.zero, UDim2.fromOffset(12, 112)
+		self.toast.AnchorPoint, self.toast.Position = Vector2.zero, UDim2.fromOffset(12, 190)
+	else
+		self.announcement.AnchorPoint, self.announcement.Position = Vector2.new(0.5, 0), UDim2.new(0.5, 0, 0, 112)
+		self.toast.AnchorPoint, self.toast.Position = Vector2.new(0.5, 0), UDim2.new(0.5, 0, 0, 180)
+	end
 	self.hideMeter.Size = UDim2.fromOffset(math.max(180, math.min(240, size.X - 12 - rightMargin - 8)), 62)
 	self.hideMeter.AnchorPoint = small and Vector2.zero or Vector2.new(0.5, 0)
 	self.hideMeter.Position = small and UDim2.fromOffset(12, 108) or UDim2.new(0.5, 0, 0, 112)
@@ -10863,9 +10898,18 @@ function UIController:_renderShop()
 	list(categories, true, 6)
 	for index, category in ipairs(self.ctx.Catalog.Categories) do
 		local chosen = self.category == category.id
-		button(categories, (CATEGORY_ICON[category.id] or "") .. " " .. string.upper(category.label), function()
+		-- Collection progress (owned / total) gives every category a goal to complete.
+		local collected, total = 0, 0
+		if category.id ~= "bundles" and category.id ~= "vip" then
+			for _, entry in ipairs(self.ctx.Catalog.ForCategory(category.id)) do
+				total += 1
+				if owned[entry.id] then collected += 1 end
+			end
+		end
+		local progress = total > 1 and ("  " .. collected .. "/" .. total) or ""
+		button(categories, (CATEGORY_ICON[category.id] or "") .. " " .. string.upper(category.label) .. progress, function()
 			self.category = category.id self.gridScroll = 0 self:_renderMenu()
-		end, {Name = "Category_" .. category.id, Size = UDim2.fromOffset(math.max(86, #category.label * 8 + 44), 38), LayoutOrder = index, TextSize = 11,
+		end, {Name = "Category_" .. category.id, Size = UDim2.fromOffset(math.max(86, #category.label * 8 + 44 + (total > 1 and 40 or 0)), 38), LayoutOrder = index, TextSize = 11,
 			BackgroundColor3 = chosen and C.amber or C.card, TextColor3 = chosen and C.ink or C.text})
 	end
 	if not inventory then
@@ -15990,9 +16034,9 @@ end)
             <Color3uint8 name="Color3uint8">7388764</Color3uint8>
             <token name="Material">1280</token>
             <Vector3 name="size">
-              <X>900</X>
+              <X>1700</X>
               <Y>4</Y>
-              <Z>900</Z>
+              <Z>1700</Z>
             </Vector3>
             <token name="TopSurface">0</token>
           </Properties>

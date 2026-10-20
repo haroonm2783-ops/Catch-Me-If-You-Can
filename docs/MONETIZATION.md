@@ -33,21 +33,25 @@ fixed charge. Coin prices are enforced from the server's catalog.
 
 | Catalog ID | Cosmetic entitlement | Design price (Robux) |
 | --- | --- | ---: |
-| `skin_neonphantom` | Neon Phantom | 399 |
-| `skin_ninja` | Shadow Ninja | 349 |
-| `skin_midnight` | Midnight Menace | 449 |
+| `skin_neonphantom` | Phantom Prankster (Epic) | 399 |
+| `skin_ninja` | Shadow Ninja (Epic) | 349 |
+| `skin_midnight` | Midnight Magician (Epic) | 449 |
 | `skin_golden` | Golden Champion (Legendary) | 599 |
 | `mask_phantom` | Phantom Mask | 149 |
 | `mask_kitsune` | Kitsune Mask | 199 |
 | `mask_skull` | Gold Skull Mask (Legendary) | 349 |
-| `bundle_night` | Midnight Menace, Phantom Mask, Afterglow trail | 649 |
+| `bundle_night` | Midnight Magician, Phantom Mask, Afterglow trail | 649 |
 | `bundle_ninja` | Shadow Ninja, Shinobi Wrap, Sunset Circuit trail | 549 |
-| `vip_founder` | Streetwear Superstar, Jester Grin, Food Court Shuffle | 799 |
+| `vip_founder` | Streetwear Star, Jester Grin, Food Court Shuffle | 799 |
 
-Free and earned launch skins: **Mall Runner** (free), **Skate Kid** (level 5),
-**Cyber Runner** (25 wins), **Streetwear Superstar** (1,800 coins). Masks: Street Bandana
-(free), Prism Visor and Shinobi Wrap (coins), Jester Grin (coins), Pixel Visage (75 tags).
-Skin tone and hair color are free for everyone.
+Free and earnable skins (no Robux needed): **Original You** (free, your own avatar), **Skate Kid** (level 5),
+**Pizza Courier** (600 coins), **Bunny Hop** (900), **Bamboo Panda** (1,200), **Streetwear Star** (1,800),
+**Candy Pop** (2,600), **Jet Runner** (25 wins) and the Legendary **Dragon Racer** (60 wins). Masks: Street
+Bandana (free), Cool Shades, Shinobi Wrap and Jester Grin (coins), Pixel Visage (75 tags). Extra trails (Hot Foot,
+Candy Swirl) and tag effects (Star Pop, Party Pop at 40 wins) are earned or bought with coins.
+Skins are *overlays on the player's own Roblox avatar*; there are no skin-tone or hair-color items any more.
+Rarity tiers: Common (free), Rare (coins or a small milestone), Epic (a real goal or a premium purchase, adds an
+ambient aura), Legendary (showpieces). **Nothing here changes speed, tagging, hiding, XP or coins.**
 
 Skins and masks occupy independent equipment slots and can be combined. Bundles
 and VIP grant their listed inventory items; their collection entry is not an

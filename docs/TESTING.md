@@ -13,51 +13,68 @@ floor defects remained in 0.2.0. Begin the **0.2.1** regression pass with
 [the update checklist](UPDATE_0_2.md); do not count prior play as verification of
 the new slide, appearance, map decoration, or UI changes.
 
-## 0.4.0 Catch Mall acceptance script (start here)
+## 0.5.0 acceptance script (start here)
 
-Do these in order in Studio (**Test → Server & Clients, 2 clients**), then repeat items 1–4 on a
-real phone in a private published server. Nothing below has been run by the authors.
+Nothing below has been run by the authors: there is no Roblox Studio in the build environment. Open
+`dist/Catch-Me-If-You-Can-Final.rbxl`, press Play and confirm Output says `[Catch] CATCH MALL initialized. 0.5.0`
+with no red errors. Then work through A (solo) and B (needs two or more players). Write down device, client
+count and what you saw; a green automated check is not a pass.
 
-1. **Look.** Open the place before Play. The mall should read bright and colorful, not dark.
-   Walk both floors, the atrium, food court, arcade and cinema. Note anything washed out,
-   z-fighting, floating, or a collision snag. Tune `applyLighting()` and the palette `P` in
-   `src/server/World/MallBuilder.lua` / `Mall/Kit.lua`.
-2. **HUD.** In the lobby, in an active round as Runner and as Hunter, as a spectator and on the
-   results screen: **SHOP and LOCKER must be visible and clickable at all times.** Open each
-   during a round: the round must continue, you must still be taggable, and the panel must be a
-   right-hand drawer. Check 1440×900, a 390×844 phone portrait, an 844×390 phone landscape and a
-   320×568 small phone. Report clipped text.
-3. **Hide / search.** As Runner, hold E at a fitting room, locker and stall. You should step in,
-   see the HIDING meter, and be released after ≤7 s or by LEAVE / jump. As Hunter, hold E on an
-   occupied cell: the runner must be flushed out and highlighted for ~2.5 s. A hidden runner must
-   not be taggable. Try to exploit: hide in the same cell repeatedly (cooldown 12 s), walk out of
-   the cell, and tag through the door.
-4. **Coins and scan.** Collect coins (counter + ping sound + results rewards). As Hunter press Q:
-   runners within ~45 studs highlight; occupied cells show "?" markers; cooldown 25 s.
-5. **Escape routes.** Use the 8 escalators, 4 grand stairs, 2 skybridges, corner ladders and the
-   balcony drop gaps. Try to leave the map, reach the roof or squeeze into a wall. Report every
-   spot where you can get stuck, plus any hide cell a hunter cannot reach.
-6. **Cosmetics.** In the Locker equip every skin and mask, change skin tone and hair color, then
-   rejoin (needs a published test place with a separate DataStore). Equipping mid-round must say
-   it applies after the round. Faces should change (smile, determined, grin, scared, joy, sad).
-   Check hands raised on Win, slumped on Lose, glancing when Scared: **arm/head rotation signs are
-   unverified; if an arm bends the wrong way, flip the sign in `MOOD_POSES` in `MovementController.lua`.**
-7. **Round loop.** Play 5+ rounds with 2 and 7+ clients: roles, head start, results rewards
-   breakdown, XP/coins arriving, level-ups, quests, daily login, tutorial first-run.
-8. **Money (private test place only).** Create one game pass and one developer product, put the IDs
-   in `Catalog.lua`, then check cancel, success, rejoin (no double charge) and that coins arrive
-   exactly once and survive a rejoin.
-9. **Performance.** On a low-end phone, record FPS, memory and join time in the full mall. Watch the client
-   graphics tier: select your player in the Explorer (Play mode, client) and read the `CatchGraphicsTier` attribute
-   (1 HIGH, 2 MEDIUM, 3 LOW). It should start at 2 on a phone and only step down after ~12 s of sustained <38 FPS.
-   Try Settings > GRAPHICS on every option; far decoration should vanish and fountain/steam particles should halve (MEDIUM)
-   or stop (LOW). Compare Micro Profiler frame time on HIGH vs MEDIUM. If LOW is still unplayable, reduce the
-   `DETAIL_RADIUS`/`LIGHT_RADIUS` values or part counts; consider streaming only if memory (not FPS) is the problem.
-10. **Mobile HUD.** On a phone in portrait and landscape: nothing overlaps RUN/SLIDE/TAG/SCAN/jump; the dock is below
-    the Roblox topbar with SHOP and LOCKER always visible; opening chat does not cover the dock. On PC: chat sits
-    lower-left, does not overlap the dock or ability bar, and the player list is hidden (use CREW).
-11. **Cosmetic review.** Open the Locker and compare the real avatars against `docs/Character-lineup.png`: do the faces,
-    hair, outfits and masks read at normal camera distance and on a phone? Note anything muddy.
+### A. Solo Studio checks (one client is enough)
+
+1. **Lighting technology.** In the Explorer open `Lighting`. **Technology should read ShadowMap.** The saved place
+   sets it; if Studio shows Compatibility or Future, set ShadowMap and re-save. Then judge the look: warm and
+   colorful, not washed out and not murky. If interiors are too dark or too bright, tune `Ambient`,
+   `OutdoorAmbient` and `Brightness` in `applyLighting()` (`src/server/World/MallBuilder.lua`).
+2. **Your own avatar.** You must spawn as your own Roblox avatar: face, hair, clothes and the normal run, jump and
+   idle animations. Nothing should be recolored. Equip each skin in the Locker (left-hand `LOCKER` button): the
+   overlay should sit on your avatar without clipping through limbs. **Check hats against your own hair**: hat
+   skins hide your hair/hat accessories, back items never do. Try a tall or skinny bundle and an R6 avatar.
+3. **Golden Champion** turns your limbs gold and stashes your shirt and pants (restored when you switch). Confirm
+   your face stays visible and that un-equipping restores your exact colors and clothes.
+4. **Shop previews match.** The preview in the Shop and Locker should be *your* avatar wearing the item. If the
+   preview shows a plain blocky mannequin, `HumanoidDescription` previews failed: report the Output warning.
+5. **Hub.** After spawning: the sunburst entrance, chevron path, podium, two leaderboards and the Shop and Locker
+   kiosks are in front of you. Walk to a kiosk and press the prompt: the menu must open. The board above the
+   entrance should show a countdown. Check nothing is empty, floating or blocking the spawn.
+6. **HUD at every size.** Lobby, round (Runner and Hunter) and results at 1920x1080, 1280x720, a 390x844 phone
+   portrait, an 844x390 landscape phone and a 320x568 small phone. **SHOP and LOCKER (right side) must always be
+   visible and clickable**, including during a round and on the results card. Open each menu mid-round: the round
+   keeps going, you remain taggable, and big menus become a narrow drawer. **Chat must stay in its default
+   top-left corner and never overlap the HUD.** Report any clipped text.
+7. **Practice round.** Solo in Studio starts a practice round. The HUD should say *PRACTICE / NOTHING IS SAVED*, coins
+   you grab are labelled *Practice coins*, and the results card says nothing is saved. Your wallet must not change.
+8. **Hiding, search, scan** (use the practice round and a second client for the search side). Fitting rooms, lockers,
+   stalls, **air vents** (back corridors), toy chest, shoe box and dog house all work with E, last at most 7 s and
+   cannot be used again for 12 s.
+9. **Escape routes.** Escalators, grand stairs, skybridges, corner ladders, balcony drop gaps. Try to leave the map,
+   reach the roof or wedge into a wall. Report any stuck spot.
+10. **Performance.** On a low-end phone, record FPS, memory and join time in the full mall. The client graphics tier
+    is the `CatchGraphicsTier` attribute on your Player (1 HIGH, 2 MEDIUM, 3 LOW). Try Settings > GRAPHICS.
+
+### B. Needs two or more real players (cannot be proven by solo practice)
+
+| # | What to test | Why a second player is required |
+| ---: | --- | --- |
+| 1 | Roles, 5 s head start, hunter release, tagging, tag range and line of sight | Only a real hunter and runner exercise server-side tag validation |
+| 2 | A hunter searching a cell with a hidden runner inside; the reveal highlight; hidden runner not taggable | Needs one hider and one searcher |
+| 3 | The hunter proximity glow (red screen edges) as a hunter closes in, and its absence while hidden | Needs a hunter within 34 studs |
+| 4 | The other client sees your skin, mask, aura, trail and the hunter's red sash and outline | Replication to a second client |
+| 5 | Equipping mid-round (look changes after the round) and equip bursts for Rare+ skins | Observed from both sides |
+| 6 | **Real rewards and saving**: a competitive round grants XP and coins once; results card matches the wallet; rejoin keeps progress (published test place with its own DataStore) | Practice rounds never award anything |
+| 7 | Round results: podium shows the winners' real avatars wearing their skins, victory pose plays | Needs winners |
+| 8 | Hub leaderboards ordering with two accounts and live updates; kiosk opens the menu only for the presser | Needs two profiles |
+| 9 | Late join during a round (spectates), disconnect mid-round, hunter leaving gives a runner win | Lifecycle with two players |
+| 10 | 7 and 12 clients: spawn separation, two hunters, performance and network load | Scale |
+| 11 | Round modifiers (Infection needs 4+, Swarm 6+) and infected respawn | Minimum player counts |
+| 12 | Slide, vault and sprint as seen by *other* clients (slide pose is client-rendered per player) | Remote rendering |
+
+### C. Before launch (owner actions)
+
+1. **Money (private test place only).** Create game passes and developer products, put the IDs in `Catalog.lua`, then
+   check cancel, success, rejoin (no double charge) and that coins arrive exactly once and persist.
+2. **Audio.** Provide licensed asset IDs in `Config.Audio` if you want music; zero uses engine fallbacks or silence.
+3. Publish privately, set max players to 12 and avatar type R15, then rerun A and B on the published server.
 
 ## Reproduce automated checks
 
@@ -83,7 +100,9 @@ not the playable deliverable.
 | `data_service.spec.luau` | Production data/shop logic with mocked service boundaries, leases, retries, duplicate protection | Real DataStore quotas, availability, or paid settlement |
 | `gameplay.spec.luau` | Production round and movement logic under deterministic inputs | Roblox network ownership, collision feel, or lag fairness |
 | `map.spec.luau` | Generated geometry, spawns, routes, and analytic clearance checks | Engine navigation, visibility, streaming, or GPU performance |
-| `appearance.spec.luau` | Cosmetic combinations, instance properties, equipment and podium construction | Visual quality and animation clipping on real R15/R6 avatars |
+| `appearance.spec.luau` | Skin/mask/aura combinations on R15 and R6, reversible hair-hiding and gold tint, previews match live avatars, cosmetic service lifecycle | Visual quality and clipping on real avatars, real `HumanoidDescription` previews |
+| `mall.spec.luau` | Mall geometry, 130 hiding spots, doors, navigation of both floors, part and light budgets, hub footprint | Collision feel, lighting, real frame rate |
+| `hub.spec.luau` | Leaderboard sorting, status board text, kiosk menu requests and throttling | How the hub looks, real prompt interaction |
 | `client_controllers.spec.luau` | Menu construction, input/focus, cameras and settings with simulated boundaries | Actual device ergonomics, engine layout/rendering, or audio audibility |
 | Place serialization checks | Both final formats deserialize and contain required content | Studio loading and live gameplay |
 
@@ -95,7 +114,7 @@ assuming that the existence of a test means it passed on your current changes.
 1. Open the final place and inspect the baked Catch Mall map before pressing
    Play. Confirm `CatchShared`, `CatchServer`, and `CatchClient` exist in the
    services mapped by `default.project.json`.
-2. Open **Output** and run Play. Confirm the initialization message reads `[Catch] CATCH MALL initialized. 0.4.0`, no script
+2. Open **Output** and run Play. Confirm the initialization message reads `[Catch] CATCH MALL initialized. 0.5.0`, no script
    errors, one map instance, a loaded avatar, and a responsive HUD. Stop and Play
    again to check cleanup/reinitialization.
 3. Before published multiplayer testing, set the experience's maximum player

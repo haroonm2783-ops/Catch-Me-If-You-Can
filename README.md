@@ -5,19 +5,32 @@ shopping mall with a fountain atrium, escalators, a food court, an arcade, a cin
 24 themed stores. Runners grab spinning coins and duck into fitting rooms, lockers and
 stalls; hunters search the hiding spots, scan for movement and tag everyone they find.
 
-**Version 0.4.0 is a full overhaul:** new expressive characters with eight outfits and
-eight masks, the mall map (replacing Neon Heights), a hide / search / scan / coin system,
-a bright redesigned interface with **Shop and Locker always on screen**, procedural mood
-animation, a results screen with a reward breakdown, and developer-product coin packs.
-Live status and the next steps are in [DEVELOPMENT_PROGRESS.md](DEVELOPMENT_PROGRESS.md);
-the honest launch assessment is [docs/LAUNCH_READINESS.md](docs/LAUNCH_READINESS.md).
+**Version 0.5.0 is a deliberate art-direction change.** The game now aims to look and feel like a
+cheerful, colorful, popular Roblox experience rather than a tech demo:
 
-**Nothing in this version has been run in Roblox Studio.** Every check below uses
-deterministic mocks of the Roblox boundary. Feel, rendering, audio, phones, real
-DataStores and real Robux remain unverified; see the launch report for the playtest gate.
+- **You play as your own Roblox avatar**, with Roblox's normal animations. Skins are *optional* overlays
+  (hats, backpacks, capes, wings, tails, auras) and masks sit on your real face. No more custom blocky bodies.
+- **"Sunburst Mall"**: a bold, warm, saturated palette, themed storefronts with striped awnings and icon signs,
+  neon only for screens, bulbs and coins, and a gentler lighting setup that avoids washed-out surfaces.
+- **A compact spawn hub** with a sunburst mall entrance, chevron path, winners' podium, live leaderboards,
+  Shop and Locker kiosks and a status board.
+- **A simpler interface**: small timer and wallet chips, **Shop and Locker always visible**, one More button,
+  compact menus and results, chat left alone in its familiar corner.
 
-![Catch Mall ground floor — geometry preview, not a Studio screenshot](docs/Mall-floor1.png)
-![Catch Mall upper floor — geometry preview, not a Studio screenshot](docs/Mall-floor2.png)
+Live status and next steps are in [DEVELOPMENT_PROGRESS.md](DEVELOPMENT_PROGRESS.md), the visual identity is
+in [docs/ART_DIRECTION.md](docs/ART_DIRECTION.md) and the honest launch assessment is
+[docs/LAUNCH_READINESS.md](docs/LAUNCH_READINESS.md).
+
+**Nothing in this version has been run in Roblox Studio.** Every check below uses deterministic mocks of the
+Roblox boundary. Lighting, feel, rendering, audio, phones, real DataStores and real Robux remain unverified; the
+images below are **software geometry previews**, not screenshots. See the launch report and
+[the Studio acceptance script](docs/TESTING.md#050-acceptance-script-start-here), including the list of checks that
+need two or more real players.
+
+![Spawn hub and sunburst entrance. Software preview, not a Studio screenshot](docs/previews/hub-spawn.png)
+![Atrium. Software preview, not a Studio screenshot](docs/previews/atrium-ground.png)
+![Toy Kingdom interior. Software preview, not a Studio screenshot](docs/previews/store-toys.png)
+![Skins. Software preview on a stand-in avatar, not a Studio screenshot](docs/previews/Character-lineup.png)
 
 ## Open the game directly — no plugins required
 
@@ -28,7 +41,7 @@ DataStores and real Robux remain unverified; see the launch report for the playt
 2. In Roblox Studio, choose **File → Open from File** and select the downloaded
    place. Catch Mall is already present in the editor; it is not an empty place
    that requires pasting scripts. The map is reused at runtime.
-3. Press **Play**. Output should say `Catch Mall initialized. 0.4.0`; if it
+3. Press **Play**. Output should say `CATCH MALL initialized. 0.5.0`; if it
    shows an older version, download and open the updated file. A solo Studio
    session enters a clearly labeled practice round
    after the 16-second intermission and 5-second head start. Practice awards no
@@ -57,20 +70,22 @@ into the source tree.
   fountain atrium with a glass roof, 8 escalators, 4 grand stairs, 2 skybridges, balconies
   with 8 drop gaps, ladders, a food court, restrooms, an arcade, a cinema and 24 distinct,
   furnished stores whose interiors connect so chases loop through them. About 6,700 parts.
-- **Hiding and searching:** 111 hide cells (fitting rooms, stalls, lockers, booths, a vault,
-  a freezer and more). Hold E to hide for at most 7 seconds (12 s cooldown). Hidden runners
-  cannot be tagged, but hunters can search a cell (E) to flush the occupant out, and SCAN (Q,
-  25 s cooldown) shows movement and anonymous "occupied" markers within 45 studs.
+- **Hiding and searching:** 130 hide spots (fitting rooms, stalls, lockers, booths, vents, a toy chest, a
+  shoe box, a dog house and more). Hold E to hide for at most 7 seconds (12 s cooldown). Hidden runners
+  cannot be tagged, but hunters can search a spot (E) to flush the occupant out, and SCAN (Q, 25 s cooldown)
+  shows movement and anonymous "occupied" markers within 45 studs.
 - **Coins and close calls:** 55 spinning coins; each runner can pick up 25 per round
-  (+1 coin, +3 XP each); close calls with hunters pay XP; hunters earn XP for finds.
-- **Characters:** eight outfits and eight masks, free skin-tone and hair-color pickers, an
-  expressive face that changes with the situation, and procedural arm/head poses for
-  hunting, hiding, winning and losing. Cosmetic changes made mid-round apply after the round.
-- **Interface:** bright candy-style HUD with a left dock where **Shop and Locker are always
-  visible** (lobby, mall, active rounds, spectating, results; horizontal on short screens),
-  an objective card, hide meter, ability bar, rarity-styled shop with live thumbnails and a
-  3D fitting stage, daily missions, career, crew, settings, and a rewards screen. Menus never
-  pause the round or protect the player; in a round they become a side drawer.
+  (+1 coin, +3 XP each); close calls with hunters pay XP; hunters earn XP for finds. Practice rounds
+  collect *practice coins* that are clearly labelled as not saved.
+- **Characters and cosmetics:** your own avatar, plus 13 optional skins in four rarity tiers (Epic and Legendary
+  have ambient auras; Golden Champion turns you gold), 8 masks, 5 trails, 4 tag effects, emotes, nameplates and
+  collection counters. Equipping mid-round applies after the round. Nothing changes speed or any rule.
+- **Spawn hub:** compact plaza with the winners' podium, two live leaderboards (wins and tags in this server),
+  Shop and Locker kiosks, and a status board over the mall entrance.
+- **Interface:** a timer chip, wallet pill, one-line objective, and a dock on the right where **Shop and Locker are
+  always visible** (lobby, rounds, spectating, results) beside a More button for quests, career, crew and
+  settings. Shop and Locker open a mid-size panel (a narrow drawer during a round), everything else a small card.
+  Results are a compact card. Menus never pause the round or protect the player.
 - **Progression and economy:** XP/levels, coins, ratings, wins/streaks, daily missions, a
   7-day login streak, 20 achievements and milestone cosmetics. Coins buy cosmetics only.
 - **Persistence and shop:** server-owned inventory, DataStore retries with session leases,
@@ -95,8 +110,8 @@ Rank is a transparent win/loss rating (+24 / −14), not a matchmaking skill est
 | Tag as hunter | F | R2 | TAG |
 | Hide / search / leave a spot | Hold E (jump to step out) | Hold the prompt button | Tap the prompt |
 | Hunter scan | Q | X | SCAN |
-| Locker | On-screen menu | Y | On-screen menu |
-| Close menu | Close button / Escape | B | Close button |
+| Shop / Locker | On-screen buttons or the hub kiosks | Y opens the Locker | On-screen buttons |
+| Close menu / More | Close button / Escape | B | Close button |
 | Spectate | On-screen arrows | Select arrows with UI navigation | On-screen arrows |
 
 A vault request keeps normal jumping available when no suitable obstacle exists.
@@ -109,7 +124,7 @@ Linux x86_64 (Python 3, curl, unzip, and Git required):
 
 ```bash
 ./tools/bootstrap.sh       # Pinned official tools; SHA-256 verified
-./tools/check.sh           # Compile, rebuild, deserialize, and run all eight suites
+./tools/check.sh           # Compile, rebuild, deserialize, and run all nine suites
 ./tools/build.sh           # Rebuild just the two deliverable place files
 ```
 
@@ -159,16 +174,16 @@ map; `StreamingEnabled` is therefore left off, and weaker devices save work on t
 radius on MEDIUM/LOW, ambient particles are halved or stopped, sun rays/bloom/shadows are trimmed on
 LOW, and the quality steps down automatically after sustained low FPS. Phones start on MEDIUM; the
 player can pick AUTO/HIGH/MEDIUM/LOW in Settings > GRAPHICS. Budgets (enforced by tests): at most
-7,000 parts, 600 transparent parts, 70 lights, 24 emitters, 150 signs, 100 parts per avatar.
+6,600 parts, 600 transparent parts, 70 lights, 24 emitters, 150 signs, 130 parts per avatar.
 These are budgets, **not measured frame rates**: measure on a real low-end phone before launch.
 
 ## Source layout
 
 ```text
-src/shared/                   Configuration, catalog, pure rules, outfit geometry
+src/shared/                   Configuration, catalog, pure rules, cosmetic overlays (Appearance.lua)
 src/server/Main.server.lua    Remotes, rate limits, service wiring
-src/server/Services/          Rounds, movement, hiding, data, purchases, cosmetics
-src/server/World/MallBuilder.lua Catch Mall (src/server/World/Mall/*), legacy MapBuilder.lua kept
+src/server/Services/          Rounds, movement, hiding, data, purchases, cosmetics, hub boards and kiosks
+src/server/World/MallBuilder.lua Catch Mall (src/server/World/Mall/*: Kit palette, Style themes, Decor, Exterior hub), legacy MapBuilder.lua kept
 src/client/Main.client.lua    Snapshot/event synchronization and controllers
 src/client/Controllers/       UI, inputs/camera/poses, hiding, sound and visual feedback
 tests/                        Rules, services, client, appearance, mall, enum regressions
@@ -176,9 +191,10 @@ tools/                        Verified tool bootstrap, build, and validation
 dist/                         Direct-open Studio place files
 ```
 
-The optional map and character renderers (`tools/render-map.py`,
-`tools/export-characters.luau`, `tools/render-characters.py`) use Pillow and NumPy
-to inspect actual geometry. Their images are not Studio renders or playtests.
+Optional inspection tools (Pillow and NumPy, never game dependencies; none are Roblox renders):
+`tools/export-map.luau` + `tools/render-view.py` (eye-level perspective previews) and `tools/render-map.py` (plans),
+`tools/export-characters.luau` + `tools/render-characters.py` (skin and mask lineups) and
+`tools/export-ui.luau` + `tools/render-ui.py` (HUD layouts at any screen size, with the chat region marked).
 
 All map and costume geometry is original project code. No free-model scripts,
 external meshes, third-party asset packages, or paid movement advantages are used.

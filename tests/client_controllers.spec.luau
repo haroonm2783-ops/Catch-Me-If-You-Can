@@ -388,6 +388,19 @@ do
 	expect(#effects.worldEffects:GetChildren() == 0, "Reduced motion must suppress animated tag particles and dust")
 end
 
+-- Unlock reveals: Epic and Legendary unlocks get a big rarity banner; Rare a small one; plain unlocks none.
+do
+	local f = fixture(Vector2.new(1280, 720))
+	local effects = f.load("EffectsController"); effects:Start()
+	effects:OnNotice({kind = "unlock", text = "Unlocked X"})
+	expect(effects.banner == nil, "A plain unlock shows no rarity banner")
+	effects:OnNotice({kind = "unlock", text = "Unlocked Golden Champion", reveal = {id = "skin_golden", name = "Golden Champion", rarity = "Legendary"}})
+	expect(effects.banner and effects.banner.Text == "LEGENDARY UNLOCKED!", "A new Legendary gets a rarity banner")
+	effects:OnNotice({kind = "unlock", text = "Unlocked", reveal = {id = "skin_pizza", name = "Pizza Courier", rarity = "Rare"}})
+	expect(effects.banner and effects.banner.Text == "RARE UNLOCKED!", "A new Rare gets a smaller banner")
+	effects:Destroy()
+end
+
 -- Danger vignette: grows as a hunter closes in on a runner, fades with distance, hiding and reduced motion.
 do
 	local f = fixture(Vector2.new(1280, 720))
@@ -639,6 +652,12 @@ do
 					expect(ui.panel.Position.Y.Offset + ui.panel.Size.Y.Offset <= size.Y, "The " .. menu .. " menu must fit vertically at " .. where)
 					ui:CloseMenu()
 				end
+			end
+			-- Announcements and toasts never reach the dock.
+			for _, banner in ipairs({ui.announcement, ui.toast}) do
+				local left = banner.AnchorPoint.X > 0 and (size.X * banner.Position.X.Scale - banner.Size.X.Offset / 2) or banner.Position.X.Offset
+				local right = left + banner.Size.X.Offset
+				expect(right <= dockLeft - 4 or ui.dockHorizontal, banner.Name .. " must stay clear of the dock at " .. where)
 			end
 			ui:ToggleMore()
 			local moreRight = size.X + ui.moreMenu.Position.X.Offset

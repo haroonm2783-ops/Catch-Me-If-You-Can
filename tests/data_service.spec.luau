@@ -429,6 +429,37 @@ end
 -- A skin and mask remain independent across wardrobe changes and a new server.
 -- This exercises production serialization through the fake store; it is not a
 -- claim that a live Roblox DataStore or a paid purchase has been exercised.
+-- Saves from before the avatar-first change carry tone and hair-color items; they must load cleanly and be dropped.
+do
+	local f = fixture(false)
+	local legacy = f.ctx.Rules.NewProfile(1700000000)
+	legacy.owned.tone_sand, legacy.owned.hair_pink, legacy.owned.skin_ninja = true, true, true
+	legacy.equipped.tones, legacy.equipped.hairColors, legacy.equipped.skins = "tone_sand", "hair_pink", "skin_ninja"
+	local clean = f.data:_Sanitize(legacy)
+	expect(clean.equipped.tones == nil and clean.equipped.hairColors == nil, "Retired personalization categories are dropped from equipment")
+	expect(clean.owned.tone_sand == nil and clean.owned.hair_pink == nil, "Retired personalization items are dropped from inventory")
+	expect(clean.equipped.skins == "skin_ninja" and clean.owned.skin_ninja == true, "Owned skins from an old save are kept")
+	expect(clean.owned.skin_courier == true and clean.owned.mask_street == true, "Free defaults remain owned")
+end
+
+-- Unlock reveals: the server tells the client about the best newly gained item so it can celebrate.
+do
+	local f = fixture(false)
+	f.data:_Load(f.player)
+	f.data:Grant(f.player, {"skin_golden", "mask_street"}, "Purchase verified.")
+	local notice = f.notices[#f.notices]
+	expect(notice.kind == "unlock" and notice.reveal and notice.reveal.id == "skin_golden" and notice.reveal.rarity == "Legendary", "A new Legendary is revealed to the client")
+	expect(notice.reveal.name == "Golden Champion" and notice.reveal.category == "skins", "The reveal names the item and its category")
+	local count = #f.notices
+	f.data:Grant(f.player, {"skin_golden"}, "Again.")
+	expect(#f.notices == count, "Items that are already owned send no second celebration")
+	f.data:Grant(f.player, {"skin_pizza"}, "Added Pizza Courier.")
+	expect(f.notices[#f.notices].reveal and f.notices[#f.notices].reveal.rarity == "Rare", "Rare items are revealed too")
+	f.data:Grant(f.player, {"bundle_night"}, "Bundle.")
+	local bundle = f.notices[#f.notices].reveal
+	expect(bundle and bundle.id == "bundle_night" and bundle.rarity == "Legendary", "A collection is revealed as the best thing it newly grants")
+end
+
 do
 	local f = fixture(false)
 	f.data:_Load(f.player)

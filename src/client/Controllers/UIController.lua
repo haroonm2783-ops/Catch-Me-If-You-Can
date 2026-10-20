@@ -635,6 +635,17 @@ function UIController:_responsive()
 		self.objective.AnchorPoint = Vector2.new(0.5, 0)
 		self.objective.Position = UDim2.new(0.5, 0, 0, 62)
 	end
+	-- Banners and toasts stay in the space left of the dock, so they can never cover Shop or Locker.
+	local bannerWidth = math.max(180, math.min(430, size.X - 12 - rightMargin - 8))
+	self.announcement.Size = UDim2.fromOffset(bannerWidth, 74)
+	self.toast.Size = UDim2.fromOffset(math.min(440, bannerWidth), 40)
+	if small then
+		self.announcement.AnchorPoint, self.announcement.Position = Vector2.zero, UDim2.fromOffset(12, 112)
+		self.toast.AnchorPoint, self.toast.Position = Vector2.zero, UDim2.fromOffset(12, 190)
+	else
+		self.announcement.AnchorPoint, self.announcement.Position = Vector2.new(0.5, 0), UDim2.new(0.5, 0, 0, 112)
+		self.toast.AnchorPoint, self.toast.Position = Vector2.new(0.5, 0), UDim2.new(0.5, 0, 0, 180)
+	end
 	self.hideMeter.Size = UDim2.fromOffset(math.max(180, math.min(240, size.X - 12 - rightMargin - 8)), 62)
 	self.hideMeter.AnchorPoint = small and Vector2.zero or Vector2.new(0.5, 0)
 	self.hideMeter.Position = small and UDim2.fromOffset(12, 108) or UDim2.new(0.5, 0, 0, 112)
@@ -817,9 +828,18 @@ function UIController:_renderShop()
 	list(categories, true, 6)
 	for index, category in ipairs(self.ctx.Catalog.Categories) do
 		local chosen = self.category == category.id
-		button(categories, (CATEGORY_ICON[category.id] or "") .. " " .. string.upper(category.label), function()
+		-- Collection progress (owned / total) gives every category a goal to complete.
+		local collected, total = 0, 0
+		if category.id ~= "bundles" and category.id ~= "vip" then
+			for _, entry in ipairs(self.ctx.Catalog.ForCategory(category.id)) do
+				total += 1
+				if owned[entry.id] then collected += 1 end
+			end
+		end
+		local progress = total > 1 and ("  " .. collected .. "/" .. total) or ""
+		button(categories, (CATEGORY_ICON[category.id] or "") .. " " .. string.upper(category.label) .. progress, function()
 			self.category = category.id self.gridScroll = 0 self:_renderMenu()
-		end, {Name = "Category_" .. category.id, Size = UDim2.fromOffset(math.max(86, #category.label * 8 + 44), 38), LayoutOrder = index, TextSize = 11,
+		end, {Name = "Category_" .. category.id, Size = UDim2.fromOffset(math.max(86, #category.label * 8 + 44 + (total > 1 and 40 or 0)), 38), LayoutOrder = index, TextSize = 11,
 			BackgroundColor3 = chosen and C.amber or C.card, TextColor3 = chosen and C.ink or C.text})
 	end
 	if not inventory then
