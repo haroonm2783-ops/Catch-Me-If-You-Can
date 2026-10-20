@@ -46,6 +46,8 @@ local function fixture(studio, existingStore)
 	local queue, notices, snapshots = {}, {}, {}
 	local scheduler = {}
 	local players = { PlayerAdded = signal(), PlayerRemoving = signal(), GetPlayers = function() return {} end }
+	local roster = {}
+	function players:GetPlayerByUserId(id) return roster[id] end
 	local store = existingStore or { values = {}, calls = 0 }
 	function store:UpdateAsync(key, transform)
 		self.calls += 1
@@ -70,6 +72,11 @@ local function fixture(studio, existingStore)
 		if self.afterQuery then local hook = self.afterQuery; self.afterQuery = nil; hook() end
 		return self.owns[tostring(userId) .. ":" .. tostring(passId)] == true
 	end
+	function marketplace:PromptProductPurchase(_, productId)
+		self.productPrompts = (self.productPrompts or 0) + 1
+		self.lastProduct = productId
+		if self.failPrompt then error("simulated prompt failure") end
+	end
 	function marketplace:PromptGamePassPurchase(_, _passId)
 		self.prompts += 1
 		if self.failPrompt then error("simulated prompt failure") end
@@ -91,6 +98,7 @@ local function fixture(studio, existingStore)
 			spawn = function(fn) table.insert(queue, fn) end,
 		},
 		Instance = { new = instance },
+		Enum = { ProductPurchaseDecision = { PurchaseGranted = "Granted", NotProcessedYet = "NotYet" } },
 	}
 	local ctx = {
 		Config = {
@@ -115,6 +123,7 @@ local function fixture(studio, existingStore)
 	player.UserId = 42
 	player.Name = "TestRunner"
 	player.Parent = players
+	roster[42] = player
 	return {
 		data = data, shop = shop, player = player, store = store, ctx = ctx, queue = queue,
 		notices = notices, snapshots = snapshots, marketplace = marketplace, players = players, scheduler = scheduler,
@@ -139,11 +148,11 @@ do
 	local profile = f.data:Get(f.player)
 	profile.coins = 1000
 	expect(f.data:_PurchaseWithCoins(f.player, "mask_visor"), "Affordable cosmetic should purchase")
-	expect(profile.coins == 820 and profile.owned.mask_visor, "Server price must be debited with grant")
+	expect(profile.coins == 700 and profile.owned.mask_visor, "Server price must be debited with grant")
 	expect(not f.data:_PurchaseWithCoins(f.player, "mask_visor"), "Duplicate purchase must be rejected")
-	expect(profile.coins == 820, "Duplicate purchase must not debit again")
-	expect(not f.data:_PurchaseWithCoins(f.player, "skin_shadow"), "Premium item cannot use coin path")
-	expect(not f.data:Equip(f.player, "skins", "skin_shadow"), "Unowned cosmetic must not equip")
+	expect(profile.coins == 700, "Duplicate purchase must not debit again")
+	expect(not f.data:_PurchaseWithCoins(f.player, "skin_ninja"), "Premium item cannot use coin path")
+	expect(not f.data:Equip(f.player, "skins", "skin_ninja"), "Unowned cosmetic must not equip")
 	expect(not f.data:Equip(f.player, "skins", "mask_visor"), "Cosmetic cannot equip in wrong category")
 	expect(f.data:Equip(f.player, "masks", "mask_visor"), "Owned matching cosmetic should equip")
 	expect(f.applied() == 1, "Equipment change must call CosmeticService")
@@ -217,16 +226,16 @@ do
 	f.data:_Dirty(f.data.records[f.player])
 	f.store.beforeCommit = function() expect(f.data:_PurchaseWithCoins(f.player, "mask_visor"), "Mutation during in-flight save should work") end
 	expect(f.data:Save(f.player), "First snapshot should save")
-	expect(f.store.values.player_42.profile.coins == 1000 and profile.coins == 820, "In-flight snapshot must not overwrite newer live profile")
+	expect(f.store.values.player_42.profile.coins == 1000 and profile.coins == 700, "In-flight snapshot must not overwrite newer live profile")
 	expect(f.data:Snapshot(f.player).saveMessage == "Changes pending autosave.", "Newer edits must not be labeled saved")
 	expect(f.data:Save(f.player), "Follow-up should save newer changes")
-	expect(f.store.values.player_42.profile.coins == 820 and f.store.values.player_42.profile.owned.mask_visor, "Follow-up must persist atomic debit and grant")
+	expect(f.store.values.player_42.profile.coins == 700 and f.store.values.player_42.profile.owned.mask_visor, "Follow-up must persist atomic debit and grant")
 	f.store.failBefore = true
 	profile.coins = 700
 	f.data:_Dirty(f.data.records[f.player])
 	expect(not f.data:Save(f.player), "Storage outage must report failure")
 	expect(f.data:Snapshot(f.player).persistence == "unavailable", "Save failure must not report saved")
-	expect(f.store.values.player_42.profile.coins == 820, "Failed save must not alter durable data")
+	expect(f.store.values.player_42.profile.coins == 700, "Failed save must not alter durable data")
 	f.store.failBefore = false
 	expect(f.data:Save(f.player), "Later save should recover from temporary outage")
 	f.store.values.player_42.session.id = "replacement_server"
@@ -255,19 +264,19 @@ end
 do
 	local f = fixture(true)
 	f.data:_Load(f.player)
-	expect(not f.shop:Purchase(f.player, "skin_shadow") and f.marketplace.prompts == 0, "Unconfigured pass must not prompt")
+	expect(not f.shop:Purchase(f.player, "skin_ninja") and f.marketplace.prompts == 0, "Unconfigured pass must not prompt")
 	expect(f.notices[#f.notices].success == false, "Unconfigured purchase must not trigger celebration")
-	local item = Catalog.Get("skin_shadow")
+	local item = Catalog.Get("skin_ninja")
 	local previousId = item.gamePassId
 	item.gamePassId = 123456
-	expect(f.shop:Purchase(f.player, "skin_shadow") and f.marketplace.prompts == 1, "Configured unowned pass should prompt")
-	expect(not f.data:Get(f.player).owned.skin_shadow, "Opening prompt must not grant item")
-	expect(not f.shop:Purchase(f.player, "skin_shadow") and f.marketplace.prompts == 1, "Concurrent duplicate prompt should be blocked")
+	expect(f.shop:Purchase(f.player, "skin_ninja") and f.marketplace.prompts == 1, "Configured unowned pass should prompt")
+	expect(not f.data:Get(f.player).owned.skin_ninja, "Opening prompt must not grant item")
+	expect(not f.shop:Purchase(f.player, "skin_ninja") and f.marketplace.prompts == 1, "Concurrent duplicate prompt should be blocked")
 	expect(not f.shop:_Verify(f.player, item.gamePassId, true), "Unverified prompt success must not grant pass")
-	expect(not f.data:Get(f.player).owned.skin_shadow, "Failed ownership check must not grant cosmetic")
+	expect(not f.data:Get(f.player).owned.skin_ninja, "Failed ownership check must not grant cosmetic")
 	f.marketplace.owns["42:123456"] = true
 	expect(f.shop:_Verify(f.player, item.gamePassId, true), "Server-confirmed pass should grant cosmetic")
-	expect(f.data:Get(f.player).owned.skin_shadow, "Verified pass cosmetic should be owned")
+	expect(f.data:Get(f.player).owned.skin_ninja, "Verified pass cosmetic should be owned")
 	item.gamePassId = previousId
 	local bundle = Catalog.Get("bundle_night")
 	previousId = bundle.gamePassId
@@ -349,7 +358,7 @@ do
 	expect(coroutine.status(release) == "suspended" and f.store.calls == 2, "Concurrent release must wait without issuing a second write")
 	expect(coroutine.resume(first) and firstResult, "Initial save should complete")
 	expect(coroutine.resume(release) and releaseResult, "Departure save should complete after existing writer")
-	expect(f.store.values.player_42.profile.coins == 820 and f.store.values.player_42.profile.owned.mask_visor, "Departure must persist the newest atomic purchase")
+	expect(f.store.values.player_42.profile.coins == 700 and f.store.values.player_42.profile.owned.mask_visor, "Departure must persist the newest atomic purchase")
 	expect(f.store.values.player_42.session == nil and record.released, "Departure must release profile ownership")
 	expect(not f.data:_PurchaseWithCoins(f.player, "trail_cyan"), "Departing profiles must stop accepting mutations")
 end
@@ -423,17 +432,17 @@ end
 do
 	local f = fixture(false)
 	f.data:_Load(f.player)
-	expect(f.data:Grant(f.player, {"skin_shadow", "mask_phantom", "skin_neon"}), "Server entitlement grants populate the test wardrobe")
-	expect(f.data:Equip(f.player, "skins", "skin_shadow"), "Owned premium skin equips")
+	expect(f.data:Grant(f.player, {"skin_ninja", "mask_phantom", "skin_neonphantom"}), "Server entitlement grants populate the test wardrobe")
+	expect(f.data:Equip(f.player, "skins", "skin_ninja"), "Owned premium skin equips")
 	expect(f.data:Equip(f.player, "masks", "mask_phantom"), "Independent owned mask equips")
-	expect(f.data:Equip(f.player, "skins", "skin_neon"), "Switching an owned skin works")
+	expect(f.data:Equip(f.player, "skins", "skin_neonphantom"), "Switching an owned skin works")
 	expect(f.data:Get(f.player).equipped.masks == "mask_phantom", "Skin changes cannot remove the selected mask")
 	expect(f.data:_SaveRecord(f.data.records[f.player], true), "Outfit selection saves and releases the lease")
 	local nextServer = fixture(false, f.store)
 	nextServer.data:_Load(nextServer.player)
 	local restored = nextServer.data:Get(nextServer.player)
-	expect(restored.equipped.skins == "skin_neon" and restored.equipped.masks == "mask_phantom", "New server restores both selected slots")
-	expect(restored.owned.skin_shadow and restored.owned.skin_neon and restored.owned.mask_phantom, "Wardrobe ownership survives the same round trip")
+	expect(restored.equipped.skins == "skin_neonphantom" and restored.equipped.masks == "mask_phantom", "New server restores both selected slots")
+	expect(restored.owned.skin_ninja and restored.owned.skin_neonphantom and restored.owned.mask_phantom, "Wardrobe ownership survives the same round trip")
 	expect(nextServer.data:Equip(nextServer.player, "skins", ""), "Use default look resolves to the free courier")
 	expect(restored.equipped.skins == "skin_courier" and restored.equipped.masks == "mask_phantom", "Default-look action preserves the independent mask")
 	expect(nextServer.data:Equip(nextServer.player, "masks", ""), "Mask can be unequipped independently")
@@ -496,6 +505,54 @@ do
 	expect(profile.settings.tutorialDone == true and profile.settings.coins == nil, "Settings only accept known flags")
 	local normalized = Rules.NormalizeProfile({ login = { streak = -5, lastClaim = "'; drop" }, settings = { tutorialDone = "yes" } })
 	expect(normalized.login.streak == 0 and normalized.login.lastClaim == "" and normalized.settings.tutorialDone == false, "Login state and tutorial flag are sanitized")
+end
+
+
+-- Developer-product coin packs: configured IDs only, one grant per PurchaseId, durable before success.
+do
+	local original = Catalog.Products[1]
+	-- Unconfigured packs (productId 0) never prompt.
+	local f = fixture(false)
+	f.data:_Load(f.player)
+	expect(not f.shop:PurchaseProduct(f.player, original.id) and (f.marketplace.productPrompts or 0) == 0, "Unconfigured coin pack must not prompt")
+	expect(not f.shop:PurchaseProduct(f.player, "coins_nope") and not f.shop:PurchaseProduct(f.player, 12), "Unknown pack IDs are rejected")
+	-- Temporarily configure a pack for the receipt flow.
+	original.productId = 777
+	local ok, err = pcall(function()
+		expect(f.shop:PurchaseProduct(f.player, original.id) and f.marketplace.lastProduct == 777, "Configured pack prompts its developer product")
+		expect(not f.shop:PurchaseProduct(f.player, original.id), "Rapid re-prompts are throttled")
+		f.shop:Start()
+		expect(type(f.marketplace.ProcessReceipt) == "function", "ShopService must own ProcessReceipt")
+		local profile = f.data:Get(f.player)
+		local before = profile.coins
+		local receipt = { PlayerId = 42, ProductId = 777, PurchaseId = "abc-1" }
+		expect(f.marketplace.ProcessReceipt(receipt) == "Granted", "A verified receipt is granted")
+		expect(profile.coins == before + original.coins, "Coins are credited exactly once")
+		expect(f.store.values.player_42 ~= nil and f.store.values.player_42.profile.coins == before + original.coins, "Success is only reported after the balance is saved")
+		expect(f.marketplace.ProcessReceipt(receipt) == "Granted" and profile.coins == before + original.coins, "Replayed receipts do not pay twice")
+		expect(f.marketplace.ProcessReceipt({ PlayerId = 42, ProductId = 999, PurchaseId = "abc-2" }) == "NotYet", "Unknown products are not marked processed")
+		expect(f.marketplace.ProcessReceipt({ PlayerId = 7, ProductId = 777, PurchaseId = "abc-3" }) == "NotYet", "Players who left get the receipt again later")
+		expect(f.marketplace.ProcessReceipt("junk") == "NotYet" and f.marketplace.ProcessReceipt({ PlayerId = 42, ProductId = 777 }) == "NotYet", "Malformed receipts are never granted")
+		expect(profile.coins == before + original.coins, "Rejected receipts never change the balance")
+		-- A failed save must not report success, and a retry must not double-credit.
+		f.store.failBefore = true
+		local retry = { PlayerId = 42, ProductId = 777, PurchaseId = "abc-4" }
+		expect(f.marketplace.ProcessReceipt(retry) == "NotYet", "A receipt whose save failed is retried by Roblox")
+		expect(profile.coins == before + original.coins * 2, "The balance is already credited in memory")
+		f.store.failBefore = false
+		expect(f.marketplace.ProcessReceipt(retry) == "Granted", "The retry completes once storage recovers")
+		expect(profile.coins == before + original.coins * 2, "The retry must not credit a second time")
+		expect(f.store.values.player_42.profile.coins == before + original.coins * 2, "The retried grant is durable")
+		local snapshot = f.data:Snapshot(f.player)
+		expect(snapshot.coins == profile.coins, "The client sees the new balance")
+		-- Studio sessions are explicitly non-persistent, so a receipt there is grantable.
+		local studio = fixture(true)
+		studio.data:_Load(studio.player)
+		studio.shop:Start()
+		expect(studio.marketplace.ProcessReceipt({ PlayerId = 42, ProductId = 777, PurchaseId = "s-1" }) == "Granted", "Studio receipts grant into the session profile")
+	end)
+	original.productId = 0
+	expect(ok, tostring(err))
 end
 
 print("Data and shop service tests passed: " .. checks .. " checks")

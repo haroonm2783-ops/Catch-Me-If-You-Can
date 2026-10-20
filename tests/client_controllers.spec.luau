@@ -51,6 +51,7 @@ local function fixture(viewport, inputType)
 	methods.WaitForChild = methods.FindFirstChild
 	function methods:IsA(name)
 		return self.ClassName == name or name == "Instance"
+			or (name == "BasePart" and (self.ClassName == "Part" or self.ClassName == "MeshPart"))
 			or (name == "GuiButton" and (self.ClassName == "TextButton" or self.ClassName == "ImageButton"))
 	end
 	function methods:IsDescendantOf(parent)
@@ -92,6 +93,8 @@ local function fixture(viewport, inputType)
 		}}, {
 			__index = function(self, key)
 				if methods[key] then return methods[key] end
+				-- Real engine: only ScrollingFrame has CanvasPosition; reading it elsewhere throws.
+				if key == "CanvasPosition" and self.ClassName ~= "ScrollingFrame" then error("CanvasPosition is not a valid member of " .. self.ClassName) end
 				if key == "AbsoluteSize" then
 					if self.ClassName == "ScreenGui" or self.ClassName == "PlayerGui" then return viewport end
 					local parentSize = self.Parent and self.Parent.AbsoluteSize or viewport
@@ -183,14 +186,14 @@ local function fixture(viewport, inputType)
 	local services = {Players = players, TweenService = {Create = function(_, object, _, values) return {Play = function() for key, value in pairs(values) do object[key] = value end end} end},
 		RunService = runService, UserInputService = input, GuiService = guiService, ReplicatedStorage = replicated, ContextActionService = cas,
 		ContentProvider = {PreloadAsync = function(_, assets, callback) for _, asset in ipairs(assets) do callback(asset.SoundId, Enum.AssetFetchStatus.Success) end end},
-		SoundService = instance.new("SoundService"), Debris = {AddItem = function() end}}
+		SoundService = instance.new("SoundService"), Lighting = instance.new("Lighting"), Debris = {AddItem = function() end}}
 	local environment = {game = {GetService = function(_, name) return assert(services[name], name) end}, workspace = workspace,
 		Instance = instance, task = {spawn = function(fn) fn() end, defer = function(fn) fn() end, delay = function() end},
 		os = {clock = function() return monotonic end},
 		require = function(module) expect(module == appearanceModule, "UI must use shared Appearance"); return appearance end,
 		TweenInfo = {new = function() return {} end}, Random = {new = function() return {NextInteger = function(_, a, b) return math.floor((a + b) / 2) end, NextNumber = function(_, a, b) return (a + b) / 2 end} end},
 	}
-	for _, name in ipairs({"Enum", "Color3", "ColorSequence", "UDim", "UDim2", "Vector2", "Vector3", "CFrame"}) do environment[name] = roblox[name] end
+	for _, name in ipairs({"Enum", "Color3", "ColorSequence", "NumberSequence", "UDim", "UDim2", "Vector2", "Vector3", "CFrame"}) do environment[name] = roblox[name] end
 	local profile = Rules.NewProfile(1700000000); profile.loaded = true; profile.persistence = "session"; profile.quests = {}
 	local actions = {}
 	local ctx = {Config = Config, Catalog = Catalog, Rules = Rules, Achievements = Achievements, Profile = profile, State = {phase = "Waiting", roundId = 0, players = {}}, Controllers = {},
@@ -228,7 +231,7 @@ do
 	f.ctx.Profile.loginStatus = {streak = 2, canClaim = true, day = 3, coins = 40, xp = 30}
 	local ui = f.load("UIController"); f.ctx.Controllers.UIController = ui; ui:Start()
 	expect(ui.tutorial.Visible and ui.tutorialStep.Text == "HOW TO PLAY  /  1 OF 5", "First-time players must see the tutorial")
-	expect(ui.dock:FindFirstChild("Quests").Text == "QUESTS  !", "Claimable daily reward must flag the Quests button")
+	expect(ui.dock:FindFirstChild("Quests"):FindFirstChild("Badge").Visible, "Claimable daily reward must flag the Quests button")
 	for _ = 1, 4 do ui.tutorialNext.Activated:Fire() end
 	expect(ui.tutorialNext.Text == "LET'S RUN" and ui.tutorialTitle.Text:find("EARN"), "Final tutorial page should start the game")
 	ui.tutorialNext.Activated:Fire()
@@ -290,24 +293,24 @@ end
 -- Coin purchases must wait for ownership; a prompt or local preview never grants it.
 do
 	local f = fixture(Vector2.new(390, 760), Enum.UserInputType.Touch)
-	f.ctx.Profile.coins = 1000
+	f.ctx.Profile.coins = 2000
 	local ui = f.load("UIController"); ui:Start()
-	ui.category = "skins"; ui.selectedItem = "skin_gardener"; ui:OpenMenu("Shop")
+	ui.category = "skins"; ui.selectedItem = "skin_streetwear"; ui:OpenMenu("Shop")
 	local coins = f.ctx.Profile.coins
 	ui.panelContent:FindFirstChild("ItemAction", true).Activated:Fire()
-	expect(#f.actions == 1 and f.actions[1].action == "Buy" and f.actions[1].payload.id == "skin_gardener", "Coin checkout must send only the catalog item to the server")
-	expect(f.ctx.Profile.coins == coins and not f.ctx.Profile.owned.skin_gardener, "Client checkout cannot deduct coins or grant ownership")
+	expect(#f.actions == 1 and f.actions[1].action == "Buy" and f.actions[1].payload.id == "skin_streetwear", "Coin checkout must send only the catalog item to the server")
+	expect(f.ctx.Profile.coins == coins and not f.ctx.Profile.owned.skin_streetwear, "Client checkout cannot deduct coins or grant ownership")
 	expect(ui.panelContent:FindFirstChild("ItemAction", true).Text == "WAITING FOR SERVER...", "Checkout must show an acknowledgement state")
 	ui.panelContent:FindFirstChild("ItemAction", true).Activated:Fire()
 	expect(#f.actions == 1, "A pending checkout must not submit a second request")
 	-- Simulate the authoritative server profile after a successful coin transaction.
-	f.ctx.Profile.owned.skin_gardener = true; f.ctx.Profile.coins -= Catalog.Get("skin_gardener").price
+	f.ctx.Profile.owned.skin_streetwear = true; f.ctx.Profile.coins -= Catalog.Get("skin_streetwear").price
 	ui:OnProfile(f.ctx.Profile)
 	expect(ui.panelContent:FindFirstChild("ItemAction", true).Text == "EQUIP", "Confirmed ownership must offer the newly purchased outfit")
 	ui.panelContent:FindFirstChild("ItemAction", true).Activated:Fire()
-	expect(f.actions[2].action == "Equip" and f.actions[2].payload.id == "skin_gardener", "Purchased outfits must use the validated equip action")
+	expect(f.actions[2].action == "Equip" and f.actions[2].payload.id == "skin_streetwear", "Purchased outfits must use the validated equip action")
 	expect(f.ctx.Profile.equipped.skins == "skin_courier", "Equipping must await the server profile")
-	f.ctx.Profile.equipped.skins = "skin_gardener"; ui:OnProfile(f.ctx.Profile); ui:OpenMenu("Inventory")
+	f.ctx.Profile.equipped.skins = "skin_streetwear"; ui:OnProfile(f.ctx.Profile); ui:OpenMenu("Inventory")
 	local reset = ui.panelContent:FindFirstChild("ItemAction", true)
 	expect(reset.Text == "USE DEFAULT LOOK", "An equipped non-default outfit must expose a clear return to the free look")
 	-- An immediate acknowledgement must win over the local pending state as well.
@@ -384,11 +387,11 @@ do
 	local ui=f.load("UIController");ui:Start()
 	ui.category="bundles";ui.selectedItem="bundle_night";ui:OpenMenu("Shop")
 	local preview=f.previewCalls[#f.previewCalls]
-	expect(preview.skin=="skin_shadow" and preview.mask=="mask_phantom","Nightfall previews its included outfit and mask")
-	expect(preview.extra.trails=="trail_cyan","Nightfall preview includes its trail")
+	expect(preview.skin=="skin_midnight" and preview.mask=="mask_phantom","Midnight Collection previews its included outfit and mask")
+	expect(preview.extra.trails=="trail_cyan","Midnight Collection preview includes its trail")
 	ui.category="vip";ui.selectedItem="vip_founder";ui:_renderMenu()
 	preview=f.previewCalls[#f.previewCalls]
-	expect(preview.skin=="skin_neon" and preview.mask=="mask_visor","VIP previews the advertised collection")
+	expect(preview.skin=="skin_streetwear" and preview.mask=="mask_jester","VIP previews the advertised collection")
 	expect(f.ctx.Profile.equipped.skins=="skin_courier","Trying on a collection never changes equipped ownership")
 end
 
@@ -556,6 +559,355 @@ do
 	humanoid.StateChanged:Fire(Enum.HumanoidStateType.Freefall, Enum.HumanoidStateType.Landed)
 	expect(landings == 2, "Landing feedback must recover on the replacement humanoid")
 	effects:Destroy()
+end
+
+
+-- Shop and Locker are always reachable: every phase, role and screen size. Menus never close the round.
+do
+	local sizes = {Vector2.new(1440, 860), Vector2.new(1024, 768), Vector2.new(390, 760), Vector2.new(844, 350), Vector2.new(568, 320), Vector2.new(320, 500)}
+	local states = {
+		{phase = "Waiting", roundId = 0, players = {}},
+		{phase = "Intermission", roundId = 1, endsAt = 130, players = {}},
+		{phase = "HeadStart", roundId = 2, endsAt = 110, players = {{userId = 42, role = "Runner", alive = true}}},
+		{phase = "Active", roundId = 2, endsAt = 280, players = {{userId = 42, role = "Runner", alive = true}}, aliveRunners = 3},
+		{phase = "Active", roundId = 2, endsAt = 280, players = {{userId = 42, role = "Hunter", alive = true}}, aliveRunners = 3},
+		{phase = "Active", roundId = 2, endsAt = 280, players = {}},
+		{phase = "Results", roundId = 2, endsAt = 105, winners = {}, players = {}},
+	}
+	for _, size in ipairs(sizes) do
+		for _, state in ipairs(states) do
+			local f = fixture(size, Enum.UserInputType.Touch)
+			f.ctx.Profile.settings.tutorialDone = true
+			local ui = f.load("UIController"); f.ctx.Controllers.UIController = ui; ui:Start()
+			f.ctx.State = state; ui:OnState(state)
+			local where = tostring(size) .. " / " .. state.phase
+			expect(ui.dock.Visible and ui.root.Visible, "Dock must be visible at " .. where)
+			for index, name in ipairs({"Shop", "Inventory"}) do
+				local b = ui.dock:FindFirstChild(name)
+				expect(b and b.Visible and b.ClassName == "TextButton", name .. " button must exist and be visible at " .. where)
+				-- Extents of the n-th dock button must stay on screen.
+				local step = (b.Size.X.Offset + 6)
+				local x = ui.dock.Position.X.Offset + (ui.dockHorizontal and (index - 1) * step or 0)
+				local y = ui.dock.Position.Y.Offset + (ui.dockHorizontal and 0 or (index - 1) * (b.Size.Y.Offset + 6))
+				expect(x >= 0 and y >= 0 and x + b.Size.X.Offset <= size.X and y + b.Size.Y.Offset <= size.Y, name .. " button must fit on screen at " .. where)
+				expect(b.Size.X.Offset >= 40 and b.Size.Y.Offset >= 40, name .. " must keep a touch-sized hit area at " .. where)
+			end
+			if ui.dockHorizontal ~= true then
+				ui:OpenMenu("Shop")
+				expect(ui.panel.Position.X.Offset >= ui.dock.Position.X.Offset + ui.dock.Size.X.Offset, "The menu must not cover the dock at " .. where)
+				ui:CloseMenu()
+			end
+		end
+	end
+end
+
+-- Menus never pause the round, give protection or get closed by it; drawer layout keeps the world visible.
+do
+	local f = fixture(Vector2.new(1440, 860))
+	f.ctx.Profile.settings.tutorialDone = true
+	local ui = f.load("UIController"); f.ctx.Controllers.UIController = ui; ui:Start()
+	ui:OpenMenu("Inventory")
+	expect(ui.menu == "Inventory" and f.player:GetAttribute("CatchMenuOpen"), "Locker opens in the lobby")
+	f.ctx.State = {phase = "Active", roundId = 4, endsAt = 280, players = {{userId = 42, role = "Runner", alive = true}}, aliveRunners = 4}
+	ui:OnState(f.ctx.State)
+	expect(ui.menu == "Inventory", "A round starting must not close the locker")
+	expect(ui.panel.Size.X.Offset <= 540 and ui.panel.Position.X.Offset > 700, "During a round the menu becomes a right-hand drawer")
+	expect(string.find(ui.panelSubtitle.Text, "keeps going", 1, true), "The locker tells the player the round continues")
+	ui.category = "skins"; ui.selectedItem = "skin_rooftop"; f.ctx.Profile.owned.skin_rooftop = true; ui:_renderMenu()
+	expect(ui.panelContent:FindFirstChild("RoundHint", true) ~= nil, "Mid-round equips explain that they show after the round")
+	ui:CloseMenu()
+	local humanoid = f.humanoid
+	expect(humanoid.Health == 100 and not f.character().ForceField, "Opening menus must never heal or shield the player")
+end
+
+-- Objective, coin counter, hide meter and reward breakdown.
+do
+	local f = fixture(Vector2.new(1440, 860))
+	f.ctx.Profile.settings.tutorialDone = true
+	local ui = f.load("UIController"); f.ctx.Controllers.UIController = ui; ui:Start()
+	f.ctx.State = {phase = "Active", roundId = 7, endsAt = 280, pickupCap = 25, aliveRunners = 3, players = {{userId = 42, role = "Runner", alive = true, pickups = 2}}}
+	ui:OnState(f.ctx.State)
+	expect(ui.objective.Visible and string.find(ui.objectiveText.Text, "2/25", 1, true), "Runner objective shows the coin count")
+	ui:OnNotice({kind = "pickup", count = 5, cap = 25})
+	ui:_tick()
+	expect(string.find(ui.objectiveText.Text, "5/25", 1, true), "A pickup notice updates the counter immediately")
+	expect(not ui.hideMeter.Visible, "No hide meter while visible")
+	ui:OnNotice({kind = "hide", state = "in", endsAt = 103, duration = 7})
+	ui:_tick()
+	expect(ui.hideMeter.Visible and ui.hideFill.Size.X.Scale > 0.3 and ui.hideFill.Size.X.Scale < 0.5, "Hide meter shows the remaining hide time")
+	ui.leaveButton.Activated:Fire()
+	expect(f.actions[#f.actions].action == "Unhide", "Leave button asks the server to release the hide")
+	ui:OnNotice({kind = "hide", state = "out", reason = "manual", cooldown = 12})
+	expect(not ui.hideMeter.Visible, "Hide meter closes when the server says the hide ended")
+	expect(not ui.abilityLabels.Scan.box.Visible and not ui.abilityLabels.Tag.box.Visible, "Runners do not see hunter abilities")
+	f.ctx.State = {phase = "Active", roundId = 7, endsAt = 280, aliveRunners = 3, players = {{userId = 42, role = "Hunter", alive = true, finds = 1}}}
+	ui:OnState(f.ctx.State)
+	expect(ui.abilityLabels.Scan.box.Visible and ui.abilityLabels.Tag.box.Visible, "Hunters see Scan and Tag")
+	expect(string.find(ui.objectiveText.Text, "Found: 1", 1, true), "Hunter objective shows finds")
+	ui.abilityLabels.Scan.box.Activated:Fire()
+	expect(f.actions[#f.actions].action == "Scan", "The on-screen Scan pill requests a scan")
+	f.player:SetAttribute("CatchScanReadyAt", 110)
+	ui:_tick()
+	expect(string.find(ui.abilityLabels.Scan.status.Text, "10.0s", 1, true), "Scan shows its server cooldown")
+	-- Reward breakdown arrives with the results.
+	f.ctx.State = {phase = "Results", roundId = 7, endsAt = 105, winners = {42}, resultText = "The runners win!", players = {{userId = 42, role = "Runner", displayName = "Test Runner"}}}
+	ui:OnState(f.ctx.State)
+	expect(ui.menu == "Results" and not ui.panelContent:FindFirstChild("RewardBreakdown", true), "Results open before the reward arrives")
+	ui:OnNotice({kind = "reward", xp = 120, coins = 80, rating = 24, pickups = 12, closeCalls = 3, tags = 0, finds = 0, survived = 150})
+	local total = ui.panelContent:FindFirstChild("RewardTotal", true)
+	expect(total and string.find(total.Text, "+120 XP", 1, true) and string.find(total.Text, "+80 COINS", 1, true), "Results list exactly the server-granted rewards")
+	expect(ui.dock:FindFirstChild("Shop").Visible and ui.dock:FindFirstChild("Inventory").Visible, "Shop and Locker stay visible on the results screen")
+end
+
+-- Scan input, jump-to-leave and effect hooks.
+do
+	local f = fixture(Vector2.new(1280, 720))
+	local movement = f.load("MovementController"); movement:Start()
+	movement:OnState({phase = "Active", roundId = 1, players = {{userId = 42, role = "Runner", alive = true}}})
+	f.cas:Press(Enum.KeyCode.Q)
+	expect(#f.actions == 0, "Runners cannot send Scan")
+	movement:OnState({phase = "Active", roundId = 1, players = {{userId = 42, role = "Hunter", alive = true}}})
+	f.cas:Press(Enum.KeyCode.Q)
+	expect(f.actions[#f.actions].action == "Scan", "Q requests a hunter scan")
+	f.advance(0.3); f.cas:Touch("CatchScan")
+	expect(f.actions[#f.actions].action == "Scan", "The mobile SCAN control requests a scan")
+	movement:OnNotice({kind = "ability", action = "Scan", cooldown = 25})
+	expect(movement:GetCooldown("Scan") == 25, "Scan cooldown follows the server acknowledgement")
+	movement:OnState({phase = "Active", roundId = 1, players = {{userId = 42, role = "Runner", alive = true}}})
+	f.player.Character:SetAttribute("CatchHiding", true); f.advance(0.3); local count = #f.actions
+	f.cas:Press(Enum.KeyCode.Space)
+	expect(#f.actions == count + 1 and f.actions[#f.actions].action == "Unhide", "Jumping while hiding asks the server to step out")
+	local effects = f.load("EffectsController"); effects:Start()
+	local cues = {}
+	effects._sound = function(_, name) table.insert(cues, name) end
+	effects._banner = function(_, text) table.insert(cues, text) end
+	effects._pulse = function() end
+	effects._worldBurst = function() end
+	for _, notice in ipairs({{kind = "pickup", count = 3}, {kind = "closecall"}, {kind = "found"}, {kind = "reveal", userId = 42}, {kind = "hide", state = "in"}, {kind = "scan"}}) do effects:OnNotice(notice) end
+	expect(table.concat(cues, ","):find("Pickup") and table.concat(cues, ","):find("CLOSE CALL") and table.concat(cues, ","):find("YOU WERE FOUND") and table.concat(cues, ","):find("Hide") and table.concat(cues, ","):find("Scan"), "Every mall gameplay notice has audiovisual feedback")
+end
+
+-- Hiding controller relabels prompts by role and honors server-owned occupancy.
+do
+	local f = fixture(Vector2.new(1280, 720))
+	local mall = f.instance.new("Model"); mall.Name = "CatchMall"; mall.Parent = f.workspace
+	local cell = f.instance.new("Model"); cell.Name = "Cell"; cell.Parent = mall
+	cell:SetAttribute("CatchHideSpot", true)
+	local prompt = f.instance.new("ProximityPrompt"); prompt.Name = "HidePrompt"; prompt.ActionText = "Hide"; prompt.Parent = cell
+	local coin = f.instance.new("Part"); coin.Name = "MallCoin"; coin.Parent = (function() local d = f.instance.new("Folder"); d.Name = "MallCoins"; d.Parent = mall return d end)()
+	f.workspace.ChildAdded = signal()
+	local hiding = f.load("HidingController"); hiding:Start()
+	expect(prompt.ActionText == "Hide" and not prompt.Enabled, "Prompts are disabled in the lobby")
+	hiding:OnState({phase = "Active", players = {{userId = 42, role = "Hunter", alive = true}}})
+	expect(prompt.ActionText == "Search" and prompt.Enabled, "Hunters search")
+	hiding:OnState({phase = "Active", players = {{userId = 42, role = "Runner", alive = true}}})
+	expect(prompt.ActionText == "Hide" and prompt.Enabled, "Runners hide")
+	cell:SetAttribute("Occupied", true); cell:SetAttribute("OccupantUserId", 99); hiding:_refreshPrompts()
+	expect(prompt.ActionText == "Taken" and not prompt.Enabled, "Someone else's cell cannot be entered")
+	cell:SetAttribute("OccupantUserId", 42); hiding:_refreshPrompts()
+	expect(prompt.ActionText == "Leave" and prompt.Enabled, "The occupant can step out")
+	hiding:OnState({phase = "Results", players = {}})
+	expect(not prompt.Enabled, "Prompts close between rounds")
+	coin:SetAttribute("Collected", true); f.services.RunService.Heartbeat:Fire(0.1)
+	expect(coin.Transparency == 1, "Collected coins vanish on the client")
+	hiding:Destroy()
+end
+
+
+-- Moods pose the avatar through the same single joint writer as sliding, for local and remote avatars.
+do
+	local f = fixture(Vector2.new(1280, 720))
+	local function rig()
+		local model, humanoid = f.character()
+		local torso = f.instance.new("Part"); torso.Name = "UpperTorso"; torso.Parent = model
+		for _, name in ipairs({"Neck", "LeftShoulder", "RightShoulder", "LeftElbow", "RightElbow"}) do
+			local joint = f.instance.new("Motor6D"); joint.Name = name; joint.C0 = roblox.CFrame.new(0, 0.2, 0); joint.Parent = torso
+		end
+		return model, humanoid
+	end
+	local localRig = rig(); f.player.Character = localRig
+	local other = f.instance.new("Player"); other.UserId = 99; other.Character = rig(); table.insert(f.players.list, other)
+	local movement = f.load("MovementController"); movement:Start()
+	movement:OnState({phase = "Results", roundId = 3, players = {}})
+	local function joint(model, name) return model:FindFirstChild(name, true) end
+	local base = joint(localRig, "RightShoulder").C0
+	local otherBase = joint(other.Character, "RightShoulder").C0
+	movement:_feedback(0.1)
+	expect(joint(localRig, "Neck").C0 ~= roblox.CFrame.new(0, 0.2, 0), "Idle avatars breathe and sway their head")
+	expect(joint(localRig, "RightShoulder").C0 == base, "Idle does not move the shoulders")
+	localRig:SetAttribute("CatchMood", "Win"); other.Character:SetAttribute("CatchMood", "Win")
+	for _ = 1, 20 do movement:_feedback(0.1) end
+	expect(joint(localRig, "RightShoulder").C0 ~= base and joint(other.Character, "RightShoulder").C0 ~= otherBase, "A winning mood raises both avatars' arms")
+	expect(joint(localRig, "LeftElbow").C0 ~= roblox.CFrame.new(0, 0.2, 0), "Win bends the elbows")
+	localRig:SetAttribute("CatchMood", "Idle"); other.Character:SetAttribute("CatchMood", "Idle")
+	for _ = 1, 40 do movement:_feedback(0.1) end
+	expect((joint(localRig, "RightShoulder").C0.Position - base.Position).Magnitude < 0.001
+		and (joint(localRig, "RightShoulder").C0.LookVector - base.LookVector).Magnitude < 0.01, "Returning to idle lowers the arms")
+	expect(next(movement.remotePoses) == nil, "Finished remote moods release their joints")
+	f.ctx.Profile.settings.reducedMotion = true
+	other.Character:SetAttribute("CatchMood", "Scared"); movement:_feedback(0.1)
+	expect(next(movement.remotePoses) == nil and joint(other.Character, "RightShoulder").C0 == otherBase, "Reduced motion disables mood poses")
+	movement:Destroy()
+end
+
+
+-- Coin packs: visible in the Shop, inert until configured, and always routed through the server.
+do
+	local f = fixture(Vector2.new(1280, 720))
+	f.ctx.Profile.settings.tutorialDone = true
+	local ui = f.load("UIController"); ui:Start(); ui:OpenMenu("Shop")
+	local tab = ui.panelContent:FindFirstChild("Category_coins", true)
+	expect(tab ~= nil, "The shop offers a coins tab")
+	tab.Activated:Fire()
+	expect(ui.category == "coins" and ui.panelContent:FindFirstChild("Pack_coins_bag", true), "The coins tab lists the packs")
+	local buy = ui.panelContent:FindFirstChild("BuyPack_coins_bag", true)
+	expect(buy.Text == "COMING SOON", "Unconfigured packs say so")
+	local count = #f.actions; buy.Activated:Fire()
+	expect(#f.actions == count, "An unconfigured pack never contacts the server")
+	local pack = Catalog.Products[2]
+	pack.productId = 4242
+	ui:_renderMenu()
+	buy = ui.panelContent:FindFirstChild("BuyPack_coins_bag", true)
+	expect(string.find(buy.Text, "R$ 99", 1, true), "Configured packs show their Robux price")
+	buy.Activated:Fire()
+	pack.productId = 0
+	expect(f.actions[#f.actions].action == "BuyCoins" and f.actions[#f.actions].payload.id == "coins_bag", "A configured pack only sends its catalog ID")
+	ui:CloseMenu(); ui:OpenMenu("Inventory")
+	expect(ui.category == "skins" and not ui.panelContent:FindFirstChild("Category_coins", true), "The locker never shows coin packs")
+end
+
+
+-- UIGradient also tints the text of its parent, so no text object may carry one.
+do
+	local f = fixture(Vector2.new(1280, 720))
+	local ui = f.load("UIController"); ui:Start()
+	for _, menu in ipairs({"Shop", "Inventory", "Quests", "Progress", "Settings", "Leaderboard", "Results"}) do ui:OpenMenu(menu) end
+	local texts = 0
+	for _, node in ipairs(ui.root:GetDescendants()) do
+		if node.ClassName == "TextButton" or node.ClassName == "TextLabel" then
+			texts += 1
+			for _, child in ipairs(node:GetChildren()) do
+				expect(child.ClassName ~= "UIGradient", "Text objects must not carry a UIGradient (" .. node.Name .. ")")
+			end
+		end
+	end
+	expect(texts > 50, "The gradient guard must cover the real interface")
+end
+
+-- Short screens keep the objective card fully on screen (it sits under the dock row).
+do
+	for _, size in ipairs({Vector2.new(568, 320), Vector2.new(667, 375), Vector2.new(320, 500), Vector2.new(844, 350)}) do
+		local f = fixture(size, Enum.UserInputType.Touch)
+		f.ctx.Profile.settings.tutorialDone = true
+		local ui = f.load("UIController"); ui:Start()
+		f.ctx.State = {phase = "Active", roundId = 2, endsAt = 280, aliveRunners = 3, players = {{userId = 42, role = "Runner", alive = true}}}
+		ui:OnState(f.ctx.State)
+		local o = ui.objective
+		expect(o.Visible and o.Position.X.Offset >= 0 and o.Position.X.Offset + o.Size.X.Offset <= size.X, "Objective card must stay on screen at " .. tostring(size))
+		local header = ui.clock.Position.X.Offset + ui.clock.Size.X.Offset
+		expect(header <= size.X - ui.wallet.Size.X.Offset - 12 or ui.clock.AnchorPoint.X > 0, "Round card must not sit under the wallet at " .. tostring(size))
+	end
+end
+
+-- Performance tiers: distance LOD for decoration and lights, effect trimming, adaptive step-down.
+do
+	local function world(f)
+		local mall = f.instance.new("Model"); mall.Name = "CatchMall"; mall.Parent = f.workspace
+		local function part(name, x, detail)
+			local p = f.instance.new("Part"); p.Name = name; p.Position = Vector3.new(x, 0, 0); p.Parent = mall
+			if detail then p:SetAttribute("CatchDetail", true) end
+			return p
+		end
+		local near, far, wall = part("Near", 20, true), part("Far", 200, true), part("Wall", 300, false)
+		local lamp = part("Lamp", 250, false)
+		local light = f.instance.new("PointLight"); light.Enabled = true; light.Parent = lamp
+		local nearLight = f.instance.new("PointLight"); nearLight.Enabled = true; nearLight.Parent = near
+		local rays, bloom = f.instance.new("SunRaysEffect"), f.instance.new("BloomEffect")
+		rays.Enabled, bloom.Enabled = true, true
+		rays.Parent, bloom.Parent = f.services.Lighting, f.services.Lighting
+		f.services.Lighting.GlobalShadows = true
+		local steam = f.instance.new("ParticleEmitter"); steam.Rate = 10; steam.Enabled = true; steam.Parent = near
+		f.workspace.ChildAdded = signal()
+		return {steam = steam, near = near, far = far, wall = wall, light = light, nearLight = nearLight, rays = rays, bloom = bloom}
+	end
+	-- PC: everything stays on.
+	local f = fixture(Vector2.new(1440, 860), Enum.UserInputType.Keyboard)
+	f.input.KeyboardEnabled = true
+	local w = world(f)
+	local perf = f.load("PerformanceController"); f.ctx.Controllers.PerformanceController = perf; perf:Start()
+	expect(f.ctx.Perf.tier == 1 and (w.far.LocalTransparencyModifier or 0) == 0 and w.light.Enabled, "Desktop defaults to HIGH with nothing culled")
+	-- Manual MEDIUM: far detail and far lights go, near ones stay, sun rays off, bloom kept.
+	perf:SetPreference(2)
+	expect(w.far.LocalTransparencyModifier == 1 and (w.near.LocalTransparencyModifier or 0) == 0, "MEDIUM hides far decoration only")
+	expect(not w.light.Enabled and w.nearLight.Enabled, "MEDIUM turns off far lights only")
+	expect(not w.rays.Enabled and w.bloom.Enabled, "MEDIUM drops sun rays but keeps bloom")
+	expect((w.wall.LocalTransparencyModifier or 0) == 0, "Architecture is never culled")
+	expect(w.steam.Enabled and w.steam.Rate == 5, "MEDIUM halves ambient particle rates")
+	-- Hysteresis: a part just inside the radius stays hidden once hidden.
+	w.far.Position = Vector3.new(105, 0, 0); perf:_lod(false)
+	expect(w.far.LocalTransparencyModifier == 1, "LOD uses hysteresis so decoration does not flicker at the boundary")
+	w.far.Position = Vector3.new(90, 0, 0); perf:_lod(false)
+	expect(w.far.LocalTransparencyModifier == 0, "Decoration returns when comfortably inside the radius")
+	perf:SetPreference(3)
+	expect(not w.bloom.Enabled and not f.services.Lighting.GlobalShadows and not w.steam.Enabled, "LOW disables bloom, global shadows and ambient particles")
+	perf:SetPreference(nil)
+	expect(f.ctx.Perf.tier == 1 and w.bloom.Enabled and w.rays.Enabled and f.services.Lighting.GlobalShadows and w.light.Enabled, "AUTO restores every effect and light")
+	expect(w.steam.Rate == 10 and w.steam.Enabled, "AUTO restores particle rates")
+	-- Adaptive: sustained low FPS steps down (once per two slow windows), good FPS never does.
+	for _ = 1, 3000 do f.services.RunService.Heartbeat:Fire(1 / 60) end
+	expect(f.ctx.Perf.tier == 1, "A healthy frame rate must never lower quality")
+	for _ = 1, 40 do f.services.RunService.Heartbeat:Fire(1.5) end
+	expect(f.ctx.Perf.tier == 1, "Hitches and tab-outs are ignored")
+	for _ = 1, 700 do f.services.RunService.Heartbeat:Fire(1 / 20) end
+	expect(f.ctx.Perf.tier == 3 and not w.bloom.Enabled, "Sustained 20 FPS steps down to LOW")
+	expect(f.player:GetAttribute("CatchGraphicsTier") == 3, "The tier is visible to other client code")
+	perf:Destroy()
+	expect((w.far.LocalTransparencyModifier or 0) == 0 and w.bloom.Enabled and f.services.Lighting.GlobalShadows, "Destroying the controller restores the world")
+	-- Phone: MEDIUM by default; manual choices are never auto-lowered.
+	local g = fixture(Vector2.new(390, 760), Enum.UserInputType.Touch)
+	local wg = world(g)
+	local gp = g.load("PerformanceController"); g.ctx.Controllers.PerformanceController = gp; gp:Start()
+	expect(g.ctx.Perf.tier == 2 and wg.far.LocalTransparencyModifier == 1, "Phones default to MEDIUM")
+	gp:SetPreference(1)
+	for _ = 1, 600 do g.services.RunService.Heartbeat:Fire(1 / 15) end
+	expect(g.ctx.Perf.tier == 1, "A manual graphics choice is respected")
+	-- Settings row cycles AUTO -> HIGH -> MEDIUM -> LOW -> AUTO.
+	gp:SetPreference(nil)
+	local ui = g.load("UIController"); g.ctx.Controllers.UIController = ui; ui.ctx = g.ctx; g.ctx.Profile.settings.tutorialDone = true; ui:Start(); ui:OpenMenu("Settings")
+	local seen = {}
+	for _ = 1, 4 do
+		local row = ui.panelContent:FindFirstChild("Setting_graphics", true)
+		table.insert(seen, row.Text)
+		row.Activated:Fire()
+	end
+	expect(seen[1]:find("AUTO") and seen[2] == "HIGH" and seen[3] == "MEDIUM" and seen[4] == "LOW" and g.ctx.Perf.auto, "Graphics button cycles through every option back to AUTO")
+end
+
+-- Touch action buttons never overlap each other or Roblox's jump button (bottom right), portrait or landscape.
+do
+	for _, size in ipairs({Vector2.new(390, 844), Vector2.new(844, 390), Vector2.new(568, 320)}) do
+		local f = fixture(size, Enum.UserInputType.Touch)
+		f.workspace.CurrentCamera.ViewportSize = size
+		local movement = f.load("MovementController"); movement:Start()
+		movement:OnState({phase = "Active", roundId = 1, players = {{userId = 42, role = "Hunter", alive = true}}})
+		local rects = {}
+		for _, name in ipairs({"CatchSprint", "CatchSlide", "CatchTag", "CatchScan"}) do
+			local b = f.cas:GetButton(name)
+			local x, y = size.X + b.Position.X.Offset, size.Y + b.Position.Y.Offset
+			rects[name] = {x0 = x, y0 = y, x1 = x + b.Size.X.Offset, y1 = y + b.Size.Y.Offset}
+			expect(x >= 0 and y >= 90 and x + b.Size.X.Offset <= size.X and y + b.Size.Y.Offset <= size.Y, name .. " must be on screen and below the header at " .. tostring(size))
+		end
+		local jump = {x0 = size.X - 130, y0 = size.Y - 110, x1 = size.X - 50, y1 = size.Y - 30}
+		local names = {"CatchSprint", "CatchSlide", "CatchTag", "CatchScan"}
+		local function overlap(a, b) return a.x0 < b.x1 and b.x0 < a.x1 and a.y0 < b.y1 and b.y0 < a.y1 end
+		for i, a in ipairs(names) do
+			expect(not overlap(rects[a], jump), a .. " must not cover the jump button at " .. tostring(size))
+			for j = i + 1, #names do
+				expect(not overlap(rects[a], rects[names[j]]), a .. " and " .. names[j] .. " overlap at " .. tostring(size))
+			end
+		end
+		movement:Destroy()
+	end
 end
 
 print("Client controller integration: " .. checks .. " checks passed")

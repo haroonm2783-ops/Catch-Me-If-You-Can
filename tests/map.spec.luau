@@ -5,7 +5,11 @@ local process=require("@lune/process")
 local placePath=process.args[1] or "dist/CatchMeIfYouCan.rbxl"
 local place=roblox.deserializePlace(fs.readFile(placePath))
 local world=place:GetService("Workspace")
-local map=world:FindFirstChild("NeonHeights")
+-- The delivered place bakes the configured map (Catch Mall by default). Neon Heights remains a
+-- supported alternate map, so this suite builds it fresh and verifies the same safety rules.
+for _, child in ipairs(world:GetChildren()) do
+	if child.Name=="NeonHeights" or child.Name=="CatchMall" then child:Destroy() end
+end
 local checks=0
 local function expect(value,message) checks+=1; assert(value,message) end
 local function sameTransform(a,b)
@@ -17,8 +21,8 @@ local env={game=place,workspace=world}
 for _, k in ipairs({"Instance","CFrame","Vector3","Color3","UDim2","Enum","Font"}) do env[k]=roblox[k] end
 local builder=luau.load(fs.readFile("src/server/World/MapBuilder.lua"),{environment=env})()
 local result=builder.Build({Static=true})
-expect(map:GetAttribute("CatchMapVersion")==4,"Current map version (bright palette) is baked into the delivered map")
-expect(result.Model==map,"Baked map reused in place")
+local map=result.Model
+expect(map:GetAttribute("CatchMapVersion")==4,"Current map version (bright palette) is built")
 expect(builder.Build({Static=true})==result,"Repeat Build is idempotent")
 local sameName=0
 for _, child in ipairs(world:GetChildren()) do if child.Name=="NeonHeights" then sameName+=1 end end
@@ -224,7 +228,12 @@ expect(map.SocialDeck.ChampionHaloInset.CFrame.Position.Z>map.SocialDeck.Champio
 -- This models opening a stale source place with the newer MapBuilder module.
 local stalePlace=roblox.deserializePlace(fs.readFile(placePath))
 local staleWorld=stalePlace:GetService("Workspace")
-local staleMap=staleWorld.NeonHeights
+for _, child in ipairs(staleWorld:GetChildren()) do
+	if child.Name=="NeonHeights" or child.Name=="CatchMall" then child:Destroy() end
+end
+local oldEnv=table.clone(env)
+oldEnv.game=stalePlace; oldEnv.workspace=staleWorld
+local staleMap=luau.load(fs.readFile("src/server/World/MapBuilder.lua"),{environment=oldEnv})().Build({Static=true}).Model
 staleMap:SetAttribute("CatchMapVersion",2)
 local freshEnv=table.clone(env)
 freshEnv.game=stalePlace; freshEnv.workspace=staleWorld

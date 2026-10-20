@@ -25,15 +25,15 @@ equal(Rules.Rank(1800),"Skyline Elite","Elite boundary")
 local now = 1792022400
 local first = Rules.NewProfile(now)
 local second = Rules.NewProfile(now)
-first.owned.skin_shadow=true
+first.owned.skin_ninja=true
 first.settings.sfx=false
-equal(second.owned.skin_shadow,nil,"Independent ownership tables")
+equal(second.owned.skin_ninja,nil,"Independent ownership tables")
 equal(second.settings.sfx,true,"Independent settings")
 equal(second.equipped.skins,"skin_courier","Starter outfit")
 local clean=Rules.NormalizeProfile({
 	coins=-500,xp=500,level=999,rating=0/0,streak=3,bestStreak=1,
-	owned={skin_shadow=true,unknown=true,mask_skull="true"},
-	equipped={skins="skin_shadow",masks="mask_skull",trails="skin_shadow"},
+	owned={skin_ninja=true,unknown=true,mask_skull="true"},
+	equipped={skins="skin_ninja",masks="mask_skull",trails="skin_ninja"},
 	settings={music="false",sfx=false,reducedMotion=true,admin=true},
 	stats={wins=math.huge,tags=-1,rounds=4.9},
 	daily={day=Rules.DayKey(now),progress={rounds=999,tags=2},claimed={play_3=true,fake=true}},
@@ -44,7 +44,7 @@ equal(clean.rating,1000,"NaN rating rejected")
 equal(clean.bestStreak,3,"Best streak invariant")
 equal(clean.owned.unknown,nil,"Unknown item rejected")
 equal(clean.owned.mask_skull,nil,"Nonboolean ownership rejected")
-equal(clean.equipped.skins,"skin_shadow","Owned item restored")
+equal(clean.equipped.skins,"skin_ninja","Owned item restored")
 equal(clean.equipped.masks,"","Unowned item not equipped")
 equal(clean.equipped.trails,"","Cross-category equipment rejected")
 equal(clean.settings.music,true,"Nonboolean setting ignored")
@@ -95,6 +95,19 @@ for category,id in pairs(Catalog.DefaultEquipment) do
 end
 equal(Catalog.IsEquippable("bundles"),false,"Bundles cannot equip")
 equal(Catalog.IsEquippable("skins"),true,"Skins can equip")
-equal(#Catalog.ForCategory("skins"),7,"Seven distinct launch skins")
-equal(#Catalog.ForCategory("masks"),5,"Five launch masks")
+equal(#Catalog.ForCategory("skins"),8,"Eight distinct launch skins")
+equal(#Catalog.ForCategory("masks"),8,"Eight launch masks")
+equal(#Catalog.ForCategory("tones"),7,"Auto plus six skin tones")
+equal(#Catalog.ForCategory("hairColors"),9,"Auto plus eight hair colors")
+-- Every premium item is cosmetic: only an appearance category, never a gameplay stat.
+local rarities,free,earned,coins,robux={},0,0,0,0
+for _,item in pairs(Catalog.Items) do
+	rarities[item.rarity]=(rarities[item.rarity] or 0)+1
+	if item.currency=="Free" then free+=1 elseif item.currency=="Milestone" then earned+=1 elseif item.currency=="Coins" then coins+=1 elseif item.currency=="Robux" then robux+=1 end
+	equal(item.stat==nil and item.speed==nil and item.advantage==nil,true,"Catalog entries carry no gameplay modifiers: "..item.id)
+end
+equal(rarities.Common>=3 and rarities.Rare>=3 and rarities.Epic>=3 and rarities.Legendary>=2,true,"All four rarity tiers are populated")
+equal(earned>=8 and coins>=8 and free>=10,true,"Meaningful free and earnable cosmetics exist beside Robux items")
+equal(robux>=8 and robux<=14,true,"Robux items are a premium minority")
+for _,id in ipairs({"skin_courier","skin_rooftop","skin_streetwear","skin_cyber"}) do equal(Catalog.Get(id).currency~="Robux",true,"Skin can be earned without Robux: "..id) end
 print("PASS: "..assertions.." economy, profile, rank, quest and catalog assertions")

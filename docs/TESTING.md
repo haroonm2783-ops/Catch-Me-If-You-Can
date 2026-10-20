@@ -13,6 +13,52 @@ floor defects remained in 0.2.0. Begin the **0.2.1** regression pass with
 [the update checklist](UPDATE_0_2.md); do not count prior play as verification of
 the new slide, appearance, map decoration, or UI changes.
 
+## 0.4.0 Catch Mall acceptance script (start here)
+
+Do these in order in Studio (**Test → Server & Clients, 2 clients**), then repeat items 1–4 on a
+real phone in a private published server. Nothing below has been run by the authors.
+
+1. **Look.** Open the place before Play. The mall should read bright and colorful, not dark.
+   Walk both floors, the atrium, food court, arcade and cinema. Note anything washed out,
+   z-fighting, floating, or a collision snag. Tune `applyLighting()` and the palette `P` in
+   `src/server/World/MallBuilder.lua` / `Mall/Kit.lua`.
+2. **HUD.** In the lobby, in an active round as Runner and as Hunter, as a spectator and on the
+   results screen: **SHOP and LOCKER must be visible and clickable at all times.** Open each
+   during a round: the round must continue, you must still be taggable, and the panel must be a
+   right-hand drawer. Check 1440×900, a 390×844 phone portrait, an 844×390 phone landscape and a
+   320×568 small phone. Report clipped text.
+3. **Hide / search.** As Runner, hold E at a fitting room, locker and stall. You should step in,
+   see the HIDING meter, and be released after ≤7 s or by LEAVE / jump. As Hunter, hold E on an
+   occupied cell: the runner must be flushed out and highlighted for ~2.5 s. A hidden runner must
+   not be taggable. Try to exploit: hide in the same cell repeatedly (cooldown 12 s), walk out of
+   the cell, and tag through the door.
+4. **Coins and scan.** Collect coins (counter + ping sound + results rewards). As Hunter press Q:
+   runners within ~45 studs highlight; occupied cells show "?" markers; cooldown 25 s.
+5. **Escape routes.** Use the 8 escalators, 4 grand stairs, 2 skybridges, corner ladders and the
+   balcony drop gaps. Try to leave the map, reach the roof or squeeze into a wall. Report every
+   spot where you can get stuck, plus any hide cell a hunter cannot reach.
+6. **Cosmetics.** In the Locker equip every skin and mask, change skin tone and hair color, then
+   rejoin (needs a published test place with a separate DataStore). Equipping mid-round must say
+   it applies after the round. Faces should change (smile, determined, grin, scared, joy, sad).
+   Check hands raised on Win, slumped on Lose, glancing when Scared: **arm/head rotation signs are
+   unverified; if an arm bends the wrong way, flip the sign in `MOOD_POSES` in `MovementController.lua`.**
+7. **Round loop.** Play 5+ rounds with 2 and 7+ clients: roles, head start, results rewards
+   breakdown, XP/coins arriving, level-ups, quests, daily login, tutorial first-run.
+8. **Money (private test place only).** Create one game pass and one developer product, put the IDs
+   in `Catalog.lua`, then check cancel, success, rejoin (no double charge) and that coins arrive
+   exactly once and survive a rejoin.
+9. **Performance.** On a low-end phone, record FPS, memory and join time in the full mall. Watch the client
+   graphics tier: select your player in the Explorer (Play mode, client) and read the `CatchGraphicsTier` attribute
+   (1 HIGH, 2 MEDIUM, 3 LOW). It should start at 2 on a phone and only step down after ~12 s of sustained <38 FPS.
+   Try Settings > GRAPHICS on every option; far decoration should vanish and fountain/steam particles should halve (MEDIUM)
+   or stop (LOW). Compare Micro Profiler frame time on HIGH vs MEDIUM. If LOW is still unplayable, reduce the
+   `DETAIL_RADIUS`/`LIGHT_RADIUS` values or part counts; consider streaming only if memory (not FPS) is the problem.
+10. **Mobile HUD.** On a phone in portrait and landscape: nothing overlaps RUN/SLIDE/TAG/SCAN/jump; the dock is below
+    the Roblox topbar with SHOP and LOCKER always visible; opening chat does not cover the dock. On PC: chat sits
+    lower-left, does not overlap the dock or ability bar, and the player list is hidden (use CREW).
+11. **Cosmetic review.** Open the Locker and compare the real avatars against `docs/Character-lineup.png`: do the faces,
+    hair, outfits and masks read at normal camera distance and on a phone? Note anything muddy.
+
 ## Reproduce automated checks
 
 From the repository root:
@@ -46,10 +92,10 @@ assuming that the existence of a test means it passed on your current changes.
 
 ## First Studio open
 
-1. Open the final place and inspect the baked Neon Heights map before pressing
+1. Open the final place and inspect the baked Catch Mall map before pressing
    Play. Confirm `CatchShared`, `CatchServer`, and `CatchClient` exist in the
    services mapped by `default.project.json`.
-2. Open **Output** and run Play. Confirm the initialization message ends in **0.2.1**, no script
+2. Open **Output** and run Play. Confirm the initialization message reads `[Catch] CATCH MALL initialized. 0.4.0`, no script
    errors, one map instance, a loaded avatar, and a responsive HUD. Stop and Play
    again to check cleanup/reinitialization.
 3. Before published multiplayer testing, set the experience's maximum player

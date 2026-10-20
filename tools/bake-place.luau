@@ -23,8 +23,12 @@ end
 verifySources(place:GetService("ReplicatedStorage").CatchShared,"src/shared")
 verifySources(place:GetService("ServerScriptService").CatchServer,"src/server")
 verifySources(place:GetService("StarterPlayer").StarterPlayerScripts.CatchClient,"src/client")
-local builder=luau.load(fs.readFile("src/server/World/MapBuilder.lua"),{environment=env,debugName="MapBuilder"})()
+local Loader=require("./lib/loader")
 local config=luau.load(fs.readFile("src/shared/Config.lua"),{environment=env,debugName="Config"})()
+local isMall=config.Map~="NeonHeights"
+local mapName=isMall and "CatchMall" or "NeonHeights"
+local loaderEnv=Loader.environment({game=place,workspace=world})
+local builder=Loader.load(isMall and "src/server/World/MallBuilder.lua" or "src/server/World/MapBuilder.lua",loaderEnv)
 -- DataModel attributes are not retained by place serialization; Workspace is.
 world:SetAttribute("CatchGameVersion",config.Version)
 local map=builder.Build({Static=true})
@@ -50,15 +54,17 @@ for _, instance in ipairs(map.Model:GetDescendants()) do
 	elseif instance:IsA("SurfaceGui") then signs+=1 end
 end
 assert(count==map.Model:GetAttribute("StaticPartCount"),"Part budget metadata matches geometry")
-assert(count<1800,"Mobile map budget")
+assert(count<(isMall and 9000 or 1800),"Mobile map budget")
 assert(#map.RunnerSpawns>=10 and #map.HunterSpawns==2 and #map.Podiums==3,"Complete spawn roster")
-assert(routes>=12 and neon>=100 and signs>=20,"Map landmarks and connected routes present")
-assert(world:FindFirstChild("NeonHeights")~=nil,"Baked map is attached")
+assert(routes>=(isMall and 11 or 12) and neon>=100 and signs>=20,"Map landmarks and connected routes present")
+assert(world:FindFirstChild(mapName)~=nil,"Baked map is attached")
 -- Starting viewport: direct Studio open shows the city instead of an empty baseplate.
 local camera=world:FindFirstChildOfClass("Camera") or roblox.Instance.new("Camera")
 camera.Name="Camera"
-camera.CFrame=roblox.CFrame.lookAt(roblox.Vector3.new(240,185,325),roblox.Vector3.new(0,25,15))
-camera.Focus=roblox.CFrame.new(0,25,15)
+local viewFrom,viewAt=roblox.Vector3.new(240,185,325),roblox.Vector3.new(0,25,15)
+if isMall then viewFrom,viewAt=roblox.Vector3.new(190,110,-330),roblox.Vector3.new(0,12,-120) end
+camera.CFrame=roblox.CFrame.lookAt(viewFrom,viewAt)
+camera.Focus=roblox.CFrame.new(viewAt)
 camera.CameraType=roblox.Enum.CameraType.Custom
 camera.Parent=world
 world.CurrentCamera=camera
@@ -77,12 +83,12 @@ for path, contents in pairs(deliverables) do fs.writeFile(path,contents) end
 fs.writeFile("dist/map-geometry.json",serde.encode("json",{parts=parts,partCount=count,routes=routes,version=config.Version},true))
 local scripts=0
 for _, object in ipairs(place:GetDescendants()) do if object:IsA("LuaSourceContainer") then scripts+=1; assert(#object.Source>0,"No empty script") end end
-print(string.format("Baked Neon Heights: %d parts, %d neon accents, %d signs, %d lights, %d traversal routes, %d scripts.",count,neon,signs,lights,routes,scripts))
+print(string.format("Baked "..mapName..": %d parts, %d neon accents, %d signs, %d lights, %d traversal routes, %d scripts.",count,neon,signs,lights,routes,scripts))
 -- Deserialize both formats under both filenames; assert content, not extension.
 for path in pairs(deliverables) do
 	local reopened=roblox.deserializePlace(fs.readFile(path))
 	assert(reopened:GetService("Workspace"):GetAttribute("CatchGameVersion")==config.Version,"Game version identifies the updated artifact")
-	assert(reopened:GetService("Workspace"):FindFirstChild("NeonHeights"),"Missing baked city")
+	assert(reopened:GetService("Workspace"):FindFirstChild(mapName),"Missing baked map")
 	assert(reopened:GetService("Workspace").StreamingEnabled == false,"Whole arena remains available to spectators")
 	verifySources(reopened:GetService("ServerScriptService").CatchServer,"src/server")
 	verifySources(reopened:GetService("ReplicatedStorage").CatchShared,"src/shared")

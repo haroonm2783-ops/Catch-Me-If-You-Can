@@ -28,6 +28,12 @@ local BUILTIN_AUDIO = {
 	Countdown = { path = "electronicpingshort.wav", pitch = 1, gain = 0.45 },
 	Final = { path = "electronicpingshort.wav", pitch = 0.85, gain = 0.5 },
 	Purchase = { path = "electronicpingshort.wav", pitch = 1.3, gain = 0.45 },
+	Pickup = { path = "electronicpingshort.wav", pitch = 1.75, gain = 0.5 },
+	CloseCall = { path = "action_jump.mp3", pitch = 1.35, gain = 0.5 },
+	Found = { path = "electronicpingshort.wav", pitch = 0.95, gain = 0.6 },
+	Hide = { path = "action_footsteps_plastic.mp3", pitch = 0.55, gain = 0.3 },
+	Reveal = { path = "electronicpingshort.wav", pitch = 0.6, gain = 0.5 },
+	Scan = { path = "electronicpingshort.wav", pitch = 0.5, gain = 0.5 },
 }
 
 local function audioSpec(config, name)
@@ -102,7 +108,7 @@ function EffectsController:_settings()
 	return self.ctx.Profile.settings or {}
 end
 
-function EffectsController:_sound(name, volume)
+function EffectsController:_sound(name, volume, pitchScale)
 	if self:_settings().sfx == false then
 		return
 	end
@@ -113,7 +119,7 @@ function EffectsController:_sound(name, volume)
 	local sound = Instance.new("Sound")
 	sound.Name = "Catch" .. name
 	sound.SoundId = source
-	sound.PlaybackSpeed = pitch
+	sound.PlaybackSpeed = pitch * (pitchScale or 1)
 	sound.Volume = (volume or 0.4) * gain
 	sound.Parent = SoundService
 	self.sounds[sound] = true
@@ -128,30 +134,38 @@ function EffectsController:_sound(name, volume)
 	Debris:AddItem(sound, 15)
 end
 
-function EffectsController:_music()
-	if not self.music then
-		local id = tonumber((self.ctx.Config.Audio or {}).Music)
+-- Looping beds (soundtrack and mall ambience). Both follow the music preference and only play
+-- when a verified asset id is configured; nothing is invented here.
+function EffectsController:_loop(field, configKey, name, volume)
+	if not self[field] then
+		local id = tonumber((self.ctx.Config.Audio or {})[configKey])
 		if not id or id <= 0 or id == math.huge or id ~= math.floor(id) then
 			return
 		end
-		self.music = Instance.new("Sound")
-		self.music.Name = "CatchMusic"
-		self.music.SoundId = "rbxassetid://" .. tostring(id)
-		self.music.Looped = true
-		self.music.Volume = 0.18
-		self.music.Parent = SoundService
+		self[field] = Instance.new("Sound")
+		self[field].Name = name
+		self[field].SoundId = "rbxassetid://" .. tostring(id)
+		self[field].Looped = true
+		self[field].Volume = volume
+		self[field].Parent = SoundService
 	end
+	local sound = self[field]
 	if self:_settings().music == false then
-		self.music:Pause()
-	elseif not self.music.IsPlaying then
-		if self.music.TimePosition > 0 then
-			self.music:Resume()
+		sound:Pause()
+	elseif not sound.IsPlaying then
+		if sound.TimePosition > 0 then
+			sound:Resume()
 		else
 			-- Validate a configured soundtrack just like SFX. Music has its own
 			-- preference: muting footsteps must not mute an enabled soundtrack.
-			self:_play(self.music, nil, "music")
+			self:_play(sound, nil, "music")
 		end
 	end
+end
+
+function EffectsController:_music()
+	self:_loop("music", "Music", "CatchMusic", 0.18)
+	self:_loop("ambience", "Ambience", "CatchAmbience", 0.12)
 end
 
 function EffectsController:_sprintAudio()
@@ -224,7 +238,7 @@ function EffectsController:_banner(text, color, duration, large)
 	local label = Instance.new("TextLabel")
 	label.Name = "ChaseCue"
 	label.AnchorPoint = Vector2.new(0.5, 0.5)
-	label.Position = UDim2.fromScale(0.5, 0.32)
+	label.Position = UDim2.fromScale(0.5, 0.55)
 	label.Size = UDim2.new(0.85, 0, 0, large and 110 or 42)
 	label.BackgroundTransparency = 1
 	label.Text = text
@@ -458,6 +472,32 @@ function EffectsController:OnNotice(notice)
 		if notice.action == "Slide" or notice.action == "Vault" then
 			self:_sound(notice.action, 0.25)
 		end
+	elseif notice.kind == "pickup" then
+		-- The pitch climbs with the stack so a coin run feels like a combo.
+		local count = tonumber(notice.count) or 1
+		self:_sound("Pickup", 0.4, 1 + math.min(count, 25) * 0.015)
+		self:_worldBurst(notice.position, GOLD, true)
+	elseif notice.kind == "closecall" then
+		self:_banner("CLOSE CALL!", GOLD, 0.8, false)
+		self:_pulse(GOLD, 0.45)
+		self:_sound("CloseCall", 0.4)
+	elseif notice.kind == "found" then
+		self:_pulse(CORAL, 0.5)
+		self:_sound("Found", 0.5)
+	elseif notice.kind == "reveal" then
+		self:_sound("Reveal", 0.3)
+		if notice.userId == self.player.UserId then
+			self:_banner("YOU WERE FOUND!", CORAL, 0.9, false)
+			self:_pulse(CORAL, 0.6)
+		end
+	elseif notice.kind == "hide" then
+		if notice.state == "in" then
+			self:_sound("Hide", 0.25)
+			self:_pulse(GOLD, 0.2)
+		end
+	elseif notice.kind == "scan" then
+		self:_sound("Scan", 0.45)
+		self:_pulse(CYAN, 0.5)
 	end
 end
 
@@ -501,6 +541,9 @@ function EffectsController:Destroy()
 	table.clear(self.sounds)
 	if self.music then
 		self.music:Destroy()
+	end
+	if self.ambience then
+		self.ambience:Destroy()
 	end
 	if self.sprintSound then
 		self.sprintSound:Destroy()

@@ -108,6 +108,43 @@ function ShopService:Purchase(player, id)
 	return true
 end
 
+-- Coin packs. The prompt is only intent; coins are granted from ProcessReceipt below.
+function ShopService:PurchaseProduct(player, id)
+	local data = self.ctx.Services.DataService
+	if not data:Ready(player) then self:_Notice(player, "Your profile is still loading."); return false end
+	local product = type(id) == "string" and self.ctx.Catalog.Product(id)
+	if not product then self:_Notice(player, "This coin pack is unavailable."); return false end
+	if not validPass(product.productId) then
+		self:_Notice(player, "Coin packs are not configured for sale yet.")
+		return false
+	end
+	if os.clock() - (self.lastPrompt[player] or -100) < 3 then self:_Notice(player, "Please wait a moment before trying again."); return false end
+	self.lastPrompt[player] = os.clock()
+	local ok = pcall(function() MarketplaceService:PromptProductPurchase(player, product.productId) end)
+	if not ok then self:_Notice(player, "Roblox could not open the purchase prompt. Please try again later."); return false end
+	return true
+end
+
+function ShopService:ProcessReceipt(info)
+	local notYet = Enum.ProductPurchaseDecision.NotProcessedYet
+	if type(info) ~= "table" or type(info.PurchaseId) ~= "string" or info.PurchaseId == "" then return notYet end
+	local player = Players:GetPlayerByUserId(info.PlayerId)
+	-- A player who left gets the receipt again next join; Roblox keeps resending until it is granted.
+	if not player then return notYet end
+	local product = self.ctx.Catalog.ProductByRobloxId(info.ProductId)
+	if not product then
+		warn("[Catch] Receipt for unknown developer product " .. tostring(info.ProductId))
+		return notYet
+	end
+	local data = self.ctx.Services.DataService
+	local ok, granted = pcall(function()
+		return data:GrantProductCoins(player, info.PurchaseId, product.coins)
+	end)
+	if not ok or not granted then return notYet end
+	self:_Notice(player, "+" .. product.coins .. " coins added. Spend them on any cosmetic!", true)
+	return Enum.ProductPurchaseDecision.PurchaseGranted
+end
+
 function ShopService:_Refresh(player)
 	local data = self.ctx.Services.DataService
 	while player.Parent == Players and not data:Ready(player) do task.wait(0.2) end
@@ -137,6 +174,7 @@ function ShopService:Start()
 			if not verified then self:_Notice(player, "Purchase verification is delayed. Rejoin to restore owned passes; you do not need to buy again.") end
 		end)
 	end)
+	MarketplaceService.ProcessReceipt = function(info) return self:ProcessReceipt(info) end
 	Players.PlayerAdded:Connect(function(player) task.spawn(function() self:_Refresh(player) end) end)
 	Players.PlayerRemoving:Connect(function(player)
 		self.busy[player] = nil

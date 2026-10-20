@@ -8,11 +8,12 @@ local GuiService = game:GetService("GuiService")
 local MovementController = {}
 MovementController.__index = MovementController
 
-local ACTIONS = { "CatchSprint", "CatchSlide", "CatchVault", "CatchTag" }
+local ACTIONS = { "CatchSprint", "CatchSlide", "CatchVault", "CatchTag", "CatchScan" }
 local READY_ATTRIBUTES = {
 	Slide = "CatchSlideReadyAt",
 	Vault = "CatchVaultReadyAt",
 	Tag = "CatchTagReadyAt",
+	Scan = "CatchScanReadyAt",
 }
 
 -- Authored joint offsets provide a real slide silhouette without depending on
@@ -36,10 +37,57 @@ local SLIDE_POSE = {
 	["Right Shoulder"] = CFrame.Angles(-0.15, 0, 0.25),
 }
 
+-- Mood overlays share the slide pose's single writer so the two never fight over a joint.
+-- Rotations are R15 joint offsets in the parent's axes: shoulders raise on Z, elbows and necks pitch on X.
+-- Only the replicated CatchMood attribute (set by the server from round state) selects a mood.
+local function angles(x, y, z) return CFrame.Angles(x or 0, y or 0, z or 0) end
+local MOOD_POSES = {
+	Hunt = { Waist = angles(-0.14), Neck = angles(-0.12), LeftElbow = angles(0.75), RightElbow = angles(0.75), LeftShoulder = angles(0, 0, -0.12), RightShoulder = angles(0, 0, 0.12) },
+	Scared = { Neck = angles(-0.08), LeftShoulder = angles(0, 0, -0.4), RightShoulder = angles(0, 0, 0.4), LeftElbow = angles(1.05), RightElbow = angles(1.05) },
+	Win = { Neck = angles(0.18), LeftShoulder = angles(0, 0, -2.55), RightShoulder = angles(0, 0, 2.55), LeftElbow = angles(0.1), RightElbow = angles(0.1) },
+	Lose = { Waist = angles(-0.2), Neck = angles(-0.5), LeftShoulder = angles(0.1, 0, -0.08), RightShoulder = angles(0.1, 0, 0.08) },
+}
+MOOD_POSES.Hide = MOOD_POSES.Scared
+-- Joints a mood or the idle breathing may touch.
+local MOOD_JOINTS = { Waist = true, Neck = true, LeftElbow = true, RightElbow = true, LeftShoulder = true, RightShoulder = true }
+
+-- Time-varying detail layered over the static mood pose.
+local function moodMotion(name, mood, clock, blend)
+	if name == "Waist" then
+		return angles(math.sin(clock * 1.7) * 0.015)
+	elseif name == "Neck" then
+		if mood == "Scared" or mood == "Hide" then
+			return angles(0, math.sin(clock * 3.4) * 0.35 * blend, 0) -- glancing around
+		end
+		return angles(math.sin(clock * 1.2 + 1) * 0.02, math.sin(clock * 0.6) * 0.08, 0)
+	elseif mood == "Win" and (name == "LeftShoulder" or name == "RightShoulder") then
+		local sway = math.sin(clock * 9) * 0.1 * blend
+		return angles(0, 0, name == "LeftShoulder" and -sway or sway) -- cheering wave
+	end
+	return nil
+end
+
+local function moodOffset(name, mood, blend, clock)
+	local base = CFrame.new()
+	local target = MOOD_POSES[mood] and MOOD_POSES[mood][name]
+	local offset = target and base:Lerp(target, blend) or base
+	local motion = MOOD_JOINTS[name] and moodMotion(name, mood, clock, blend)
+	if motion then offset = offset * motion end
+	return offset
+end
+
+-- The engine can hand back a C0 that differs from what was written in the last float bits.
+local function sameCFrame(a, b)
+	if a == nil or b == nil then return a == b end
+	return (a.Position - b.Position).Magnitude < 1e-4
+		and (a.LookVector - b.LookVector).Magnitude < 1e-4
+		and (a.UpVector - b.UpVector).Magnitude < 1e-4
+end
+
 local function collectPose(character)
 	local pose = {}
 	for _, descendant in ipairs(character:GetDescendants()) do
-		if descendant:IsA("Motor6D") and SLIDE_POSE[descendant.Name] then
+		if descendant:IsA("Motor6D") and (SLIDE_POSE[descendant.Name] or MOOD_JOINTS[descendant.Name]) then
 			table.insert(pose, { joint = descendant, base = descendant.C0 })
 		end
 	end
@@ -48,19 +96,24 @@ end
 
 local function resetPose(pose)
 	for _, record in ipairs(pose) do
-		if record.joint.Parent and record.last and record.joint.C0 == record.last then
+		if record.joint.Parent and record.last and sameCFrame(record.joint.C0, record.last) then
 			record.joint.C0 = record.base
 		end
 		record.last = nil
 	end
 end
 
-local function applyPose(pose, blend, lean)
+local function applyPose(pose, blend, lean, mood, moodBlend, clock)
 	for _, record in ipairs(pose) do
 		local joint = record.joint
 		if joint.Parent then
-			if joint.C0 ~= record.last then record.base = joint.C0 end
-			local offset = CFrame.new():Lerp(SLIDE_POSE[joint.Name], blend)
+			if not sameCFrame(joint.C0, record.last) then record.base = joint.C0 end
+			local offset = CFrame.new():Lerp(SLIDE_POSE[joint.Name] or CFrame.new(), blend)
+			if MOOD_JOINTS[joint.Name] then
+				-- Fade the mood out as the slide pose takes over a shared joint, so nothing pops.
+				local share = SLIDE_POSE[joint.Name] and (1 - math.clamp(blend, 0, 1)) or 1
+				offset = offset * moodOffset(joint.Name, mood or "Idle", (moodBlend or 0) * share, clock or 0)
+			end
 			if joint.Name == "Waist" or joint.Name == "RootJoint" then
 				offset *= CFrame.Angles(lean.X, lean.Y, lean.Z)
 			end
@@ -87,6 +140,9 @@ function MovementController.new(ctx)
 		pose = {},
 		remotePoses = {},
 		slideBlend = 0,
+		moodBlend = 0,
+		mood = "Idle",
+		clock = 0,
 		sprintRequested = false,
 		lastVaultIntent = 0,
 		lastSlideIntent = 0,
@@ -126,7 +182,11 @@ function MovementController:_intent(action)
 	if not self:_canAct() then
 		return
 	end
-	if action == "Tag" and (self.role ~= "Hunter" or self.phase ~= "Active") then return end
+	if (action == "Tag" or action == "Scan") and (self.role ~= "Hunter" or self.phase ~= "Active") then return end
+	-- A jump while hiding is the "step out" gesture; the server owns the actual release.
+	if action == "Vault" and self.character and self.character:GetAttribute("CatchHiding") == true then
+		action = "Unhide"
+	end
 	-- This is only an input flood guard. The server decides whether the move is valid.
 	local field = "last" .. action .. "Intent"
 	local now = os.clock()
@@ -147,6 +207,7 @@ function MovementController:_resetPose()
 	resetPose(self.pose)
 	self.lean = Vector3.zero
 	self.slideBlend = 0
+	self.moodBlend = 0
 end
 
 -- Sliding is replicated by the server as an attribute. Each client renders the
@@ -164,19 +225,23 @@ function MovementController:_remoteFeedback(dt)
 				self.remotePoses[player], record = nil, nil
 			end
 			local humanoid = character and character:FindFirstChildOfClass("Humanoid")
-			local sliding = humanoid and humanoid.Health > 0 and character:GetAttribute("Sliding") == true
-				and not character:GetAttribute("CatchEmoting") and not self:_settings().reducedMotion
-			if sliding and not record then
-				record = { character = character, pose = collectPose(character), blend = 0 }
+			local alive = humanoid and humanoid.Health > 0 and not character:GetAttribute("CatchEmoting") and not self:_settings().reducedMotion
+			local sliding = alive and character:GetAttribute("Sliding") == true
+			local mood = alive and character:GetAttribute("CatchMood") or "Idle"
+			local moody = MOOD_POSES[mood] ~= nil
+			if (sliding or moody) and not record then
+				record = { character = character, pose = collectPose(character), blend = 0, moodBlend = 0, mood = mood }
 				self.remotePoses[player] = record
 			end
 			if record then
+				if moody then record.mood = mood end
 				record.blend += ((sliding and 1 or 0) - record.blend) * smoothing
-				if not sliding and record.blend < 0.001 then
+				record.moodBlend += ((moody and 1 or 0) - record.moodBlend) * smoothing
+				if not sliding and not moody and record.blend < 0.001 and record.moodBlend < 0.001 then
 					resetPose(record.pose)
 					self.remotePoses[player] = nil
 				else
-					applyPose(record.pose, record.blend, Vector3.zero)
+					applyPose(record.pose, record.blend, Vector3.zero, record.mood, record.moodBlend, self.clock)
 				end
 			end
 		end
@@ -241,6 +306,7 @@ end
 
 function MovementController:_feedback(dt)
 	dt = math.min(dt, 0.1)
+	self.clock += dt
 	self:_remoteFeedback(dt)
 	local humanoid, root, character = self.humanoid, self.root, self.character
 	local camera = workspace.CurrentCamera
@@ -295,11 +361,12 @@ function MovementController:_feedback(dt)
 		0, -direction.X * (sprinting and 0.075 or 0.045))
 	self.lean = self.lean:Lerp(targetLean, smoothing)
 	self.slideBlend += ((sliding and 1 or 0) - self.slideBlend) * (1 - math.exp(-18 * dt))
-	if moving or sliding or self.slideBlend > 0.001 or self.lean.Magnitude > 0.001 then
-		applyPose(self.pose, self.slideBlend, self.lean)
-	else
-		self:_resetPose()
-	end
+	local mood = character:GetAttribute("CatchMood") or "Idle"
+	local moody = MOOD_POSES[mood] ~= nil
+	if moody then self.mood = mood end
+	self.moodBlend += ((moody and 1 or 0) - self.moodBlend) * smoothing
+	-- Breathing and head sway run whenever the avatar is standing in the mall.
+	applyPose(self.pose, self.slideBlend, self.lean, self.mood, self.moodBlend, self.clock)
 end
 
 function MovementController:OnState(state)
@@ -318,12 +385,44 @@ function MovementController:OnState(state)
 	self:_touchControls()
 end
 
+-- Touch buttons form an arc around Roblox's jump button (bottom right) without overlapping it. Landscape
+-- phones use a tighter arc. Positions are reapplied on every state update so a resize or rotation recovers.
+function MovementController:_layoutTouchControls()
+	local ok, viewport = pcall(function() return workspace.CurrentCamera.ViewportSize end)
+	local short = ok and viewport and viewport.Y < 450
+	local slideX, runX = -96, -196
+	local slideY, runY, tagY, scanX, scanY = -190, -110, -186, -96, -262
+	if short then
+		-- Landscape phones: Scan moves to a third column instead of a fourth row.
+		slideX, slideY, runY, tagY, scanX, scanY = -90, -180, -100, -176, -270, -100
+	end
+	ContextActionService:SetPosition("CatchSlide", UDim2.new(1, slideX, 1, slideY))
+	ContextActionService:SetPosition("CatchSprint", UDim2.new(1, runX, 1, runY))
+	ContextActionService:SetPosition("CatchTag", UDim2.new(1, runX, 1, tagY))
+	ContextActionService:SetPosition("CatchScan", UDim2.new(1, scanX, 1, scanY))
+end
+
+-- Touch buttons can appear a frame after BindAction, so styling is reapplied on every state update.
+function MovementController:_styleTouchControls()
+	for _, action in ipairs(ACTIONS) do
+		local control = ContextActionService:GetButton(action)
+		if control and not control:GetAttribute("CatchStyled") then
+			control.Size = UDim2.fromOffset(64, 64)
+			control.ImageColor3 = Color3.fromRGB(86, 66, 190)
+			control:SetAttribute("CatchStyled", true)
+		end
+	end
+end
+
 function MovementController:_touchControls()
+	self:_styleTouchControls()
+	self:_layoutTouchControls()
 	local visible = self.role ~= "Spectator" and not self.player:GetAttribute("CatchMenuOpen")
 	for _, action in ipairs(ACTIONS) do
 		local control = ContextActionService:GetButton(action)
 		if control then
-			control.Visible = visible and (action ~= "CatchTag" or (self.role == "Hunter" and self.phase == "Active"))
+			local hunterOnly = action == "CatchTag" or action == "CatchScan"
+			control.Visible = visible and (not hunterOnly or (self.role == "Hunter" and self.phase == "Active"))
 		end
 	end
 end
@@ -384,19 +483,18 @@ function MovementController:Start()
 		end
 		return self:_canAct() and Enum.ContextActionResult.Sink or Enum.ContextActionResult.Pass
 	end, true, Enum.KeyCode.F, Enum.KeyCode.ButtonR2)
+	ContextActionService:BindAction("CatchScan", function(_, state)
+		if state == Enum.UserInputState.Begin then
+			self:_intent("Scan")
+		end
+		return self:_canAct() and Enum.ContextActionResult.Sink or Enum.ContextActionResult.Pass
+	end, true, Enum.KeyCode.Q, Enum.KeyCode.ButtonX)
 	ContextActionService:SetTitle("CatchSprint", "RUN")
 	ContextActionService:SetTitle("CatchSlide", "SLIDE")
 	ContextActionService:SetTitle("CatchTag", "TAG")
-	ContextActionService:SetPosition("CatchSprint", UDim2.new(1, -190, 1, -150))
-	ContextActionService:SetPosition("CatchSlide", UDim2.new(1, -110, 1, -150))
-	ContextActionService:SetPosition("CatchTag", UDim2.new(1, -190, 1, -225))
-	for _, action in ipairs(ACTIONS) do
-		local button = ContextActionService:GetButton(action)
-		if button then
-			button.Size = UDim2.fromOffset(64, 64)
-			button.ImageColor3 = Color3.fromRGB(31, 47, 65)
-		end
-	end
+	ContextActionService:SetTitle("CatchScan", "SCAN")
+	self:_layoutTouchControls()
+	self:_styleTouchControls()
 	table.insert(self.connections, UserInputService.JumpRequest:Connect(function()
 		if UserInputService.TouchEnabled then
 			self:_intent("Vault")

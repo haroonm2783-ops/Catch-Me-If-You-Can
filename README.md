@@ -1,21 +1,23 @@
 # Catch Me If You Can
 
-An original Roblox multiplayer parkour chase game set in **Neon Heights**: a
-mint-and-coral twilight city with rooftop gardens, a lantern restaurant, an arcade,
-a clock tower, interconnected rooftops, and a separate social deck.
+An original Roblox multiplayer chase game set in **Catch Mall**: a bright, two-floor
+shopping mall with a fountain atrium, escalators, a food court, an arcade, a cinema and
+24 themed stores. Runners grab spinning coins and duck into fitting rooms, lockers and
+stalls; hunters search the hiding spots, scan for movement and tag everyone they find.
 
-**Version 0.3.0** brightens the city, adds round types (Classic, Infection, Swarm,
-Slide Frenzy), first-time onboarding, a daily login streak and 16 achievements with
-earnable titles. It builds on 0.2.1's floor-flicker and R6 slide fixes. Live status
-and next steps are in [DEVELOPMENT_PROGRESS.md](DEVELOPMENT_PROGRESS.md); the older
-[update and first-play checklist](docs/UPDATE_0_2.md) still applies.
+**Version 0.4.0 is a full overhaul:** new expressive characters with eight outfits and
+eight masks, the mall map (replacing Neon Heights), a hide / search / scan / coin system,
+a bright redesigned interface with **Shop and Locker always on screen**, procedural mood
+animation, a results screen with a reward breakdown, and developer-product coin packs.
+Live status and the next steps are in [DEVELOPMENT_PROGRESS.md](DEVELOPMENT_PROGRESS.md);
+the honest launch assessment is [docs/LAUNCH_READINESS.md](docs/LAUNCH_READINESS.md).
 
-**Direct-open Studio places are included.** The user confirmed running, sprinting,
-and vaulting in the previous place, and reported that sliding failed. The new
-update passes the automated checks described below; its changed physics and
-presentation still require Studio verification. Real purchases, live saves, and
-mobile performance remain unverified. This is a development candidate, not a
-claim of launch readiness.
+**Nothing in this version has been run in Roblox Studio.** Every check below uses
+deterministic mocks of the Roblox boundary. Feel, rendering, audio, phones, real
+DataStores and real Robux remain unverified; see the launch report for the playtest gate.
+
+![Catch Mall ground floor — geometry preview, not a Studio screenshot](docs/Mall-floor1.png)
+![Catch Mall upper floor — geometry preview, not a Studio screenshot](docs/Mall-floor2.png)
 
 ## Open the game directly — no plugins required
 
@@ -24,9 +26,9 @@ claim of launch readiness.
    **[dist/Catch-Me-If-You-Can-Final.rbxlx](dist/Catch-Me-If-You-Can-Final.rbxlx)**; both contain the same
    game. Download one, not the GitHub HTML page.
 2. In Roblox Studio, choose **File → Open from File** and select the downloaded
-   place. Neon Heights is already present in the editor; it is not an empty place
+   place. Catch Mall is already present in the editor; it is not an empty place
    that requires pasting scripts. The map is reused at runtime.
-3. Press **Play**. Output should say `Neon Heights initialized. 0.3.0`; if it
+3. Press **Play**. Output should say `Catch Mall initialized. 0.4.0`; if it
    shows an older version, download and open the updated file. A solo Studio
    session enters a clearly labeled practice round
    after the 16-second intermission and 5-second head start. Practice awards no
@@ -49,38 +51,38 @@ into the source tree.
 
 - **Chase rounds:** up to 12 players, 1 hunter for 2–6 players and 2 for 7–12;
   180-second active rounds; 16-second intermissions; 5-second runner head starts;
-  10-second results; fair hunter rotation, late-join spectating, death/reset and
-  disconnect handling, last-runner presentation, and a final 30-second chase cue.
-- **Movement:** accelerated sprinting, a server-driven slide with eased propulsion and joint poses, geometry-checked vaulting,
-  native jumping, third-person camera feedback, and server cooldown, movement,
-  range, and line-of-sight validation. Hunters use the same parkour abilities.
-- **Neon Heights:** six recognizable rooftop districts with swept canopies, round landmark signs,
-  layered facades, varied skyline silhouettes and a framed lobby, twelve broad bridge/ramp
-  routes, six ladders, optional vault routes, two animated timing gates with
-  bypasses, signs, gardens, vents, storefronts, skyline, and a podium lobby.
-- **Custom presentation:** loading/lobby, live HUD, role announcements, collection
-  shop, locker, 3D previews, daily quests, career, settings, server leaderboard,
-  results, spectator cycling, touch controls, and controller focus navigation.
-- **Original cosmetics:** seven distinct geometric outfits with R15/R6 fitting and five independent
-  masks; coin/milestone/free unlocks; 42 skin/mask combinations including no mask;
-  layered streetwear, sneakers and independent Hunter signal cuffs; sprint trails,
-  tag effects, lobby emotes, animated victory podiums, and nameplates.
-- **Progression:** XP/levels, coins, performance rating ranks, wins/streaks, separate
-  hunter/runner statistics, UTC daily quests, achievements, and milestone cosmetics.
-- **Persistence and shop:** server-owned inventory and transactions, DataStore
-  retries and expiring session leases, truthful save status, and verified permanent
-  game-pass entitlements. Collections and VIP provide cosmetics only.
-- **Feedback:** original transient visual effects, camera lean/FOV, optional reduced
-  motion, and quiet Roblox engine-bundled SFX. Optional uploaded music and sound
-  overrides are configured in `Config.Audio`; no invented asset IDs are required.
+  10-second results; round modifiers (Classic, Infection, Swarm, Slide Frenzy); fair
+  hunter rotation, late-join spectating, death/reset and disconnect handling.
+- **Catch Mall:** 324 × 304 studs, two floors plus a back-of-house service ring, a
+  fountain atrium with a glass roof, 8 escalators, 4 grand stairs, 2 skybridges, balconies
+  with 8 drop gaps, ladders, a food court, restrooms, an arcade, a cinema and 24 distinct,
+  furnished stores whose interiors connect so chases loop through them. About 6,700 parts.
+- **Hiding and searching:** 111 hide cells (fitting rooms, stalls, lockers, booths, a vault,
+  a freezer and more). Hold E to hide for at most 7 seconds (12 s cooldown). Hidden runners
+  cannot be tagged, but hunters can search a cell (E) to flush the occupant out, and SCAN (Q,
+  25 s cooldown) shows movement and anonymous "occupied" markers within 45 studs.
+- **Coins and close calls:** 55 spinning coins; each runner can pick up 25 per round
+  (+1 coin, +3 XP each); close calls with hunters pay XP; hunters earn XP for finds.
+- **Characters:** eight outfits and eight masks, free skin-tone and hair-color pickers, an
+  expressive face that changes with the situation, and procedural arm/head poses for
+  hunting, hiding, winning and losing. Cosmetic changes made mid-round apply after the round.
+- **Interface:** bright candy-style HUD with a left dock where **Shop and Locker are always
+  visible** (lobby, mall, active rounds, spectating, results; horizontal on short screens),
+  an objective card, hide meter, ability bar, rarity-styled shop with live thumbnails and a
+  3D fitting stage, daily missions, career, crew, settings, and a rewards screen. Menus never
+  pause the round or protect the player; in a round they become a side drawer.
+- **Progression and economy:** XP/levels, coins, ratings, wins/streaks, daily missions, a
+  7-day login streak, 20 achievements and milestone cosmetics. Coins buy cosmetics only.
+- **Persistence and shop:** server-owned inventory, DataStore retries with session leases,
+  truthful save status, verified permanent game-pass entitlements, and developer-product
+  coin packs through an idempotent `ProcessReceipt`. All IDs are 0 until you create them.
+- **Feedback:** transient visual effects, camera lean, reduced-motion option, engine-bundled
+  SFX fallbacks for coins, hiding, scanning, close calls and finds. Optional music, ambience
+  and SFX overrides go in `Config.Audio`; no asset IDs are invented.
 
 The leaderboard ranks players in the **current server** using their persistent
 statistics. There is no global cross-server leaderboard or ranked matchmaking.
 Rank is a transparent win/loss rating (+24 / −14), not a matchmaking skill estimate.
-
-![Geometric map overview — not a Studio screenshot](docs/NeonHeights-overview.png)
-
-![Actual costume geometry — not a Studio screenshot](docs/Character-lineup.png)
 
 ## Controls
 
@@ -91,6 +93,8 @@ Rank is a transparent win/loss rating (+24 / −14), not a matchmaking skill est
 | Slide | C while moving | B while moving | SLIDE |
 | Jump / attempt vault | Space | A | Native jump button |
 | Tag as hunter | F | R2 | TAG |
+| Hide / search / leave a spot | Hold E (jump to step out) | Hold the prompt button | Tap the prompt |
+| Hunter scan | Q | X | SCAN |
 | Locker | On-screen menu | Y | On-screen menu |
 | Close menu | Close button / Escape | B | Close button |
 | Spectate | On-screen arrows | Select arrows with UI navigation | On-screen arrows |
@@ -105,7 +109,7 @@ Linux x86_64 (Python 3, curl, unzip, and Git required):
 
 ```bash
 ./tools/bootstrap.sh       # Pinned official tools; SHA-256 verified
-./tools/check.sh           # Compile, rebuild, deserialize, and run all six suites
+./tools/check.sh           # Compile, rebuild, deserialize, and run all eight suites
 ./tools/build.sh           # Rebuild just the two deliverable place files
 ```
 
@@ -133,8 +137,8 @@ at Play time, but the two-step build is required for the city to be visible in E
 
 For live source editing, `rojo serve default.project.json` can sync scripts through
 the Rojo Studio plugin. After map source changes, rebuild/reopen the place, or
-remove the generated `Workspace.NeonHeights` model before the next Play session so
-`MapBuilder` regenerates it. Existing baked map geometry is deliberately reused.
+remove the generated `Workspace.CatchMall` model before the next Play session so
+`MapBuilder` regenerates it. Existing baked map geometry is deliberately reused (`MAP_VERSION`).
 
 ## Configuration and release checks
 
@@ -148,26 +152,31 @@ remove the generated `Workspace.NeonHeights` model before the next Play session 
   and performance checks before launch.
 - [Progress and continuation](PROGRESS.md): verified results and remaining work.
 
-The bounded city intentionally loads as a whole so lobby spectators can follow
-any runner. Streaming is disabled; the authored map is limited to 1,646 parts,
-10 local lights without shadow casting, two moving gates, and at most 87 parts per
-avatar including Hunter accessories. These are geometry budgets, **not measured mobile frame rates**.
+**Performance design.** The mall is only 324 x 304 studs and the lobby sits about 90 studs outside it,
+so any streaming radius that keeps chases and spectating correct would still load nearly the whole
+map; `StreamingEnabled` is therefore left off, and weaker devices save work on the client instead
+(`PerformanceController`): about 1,500 small decoration parts and the 51 lights are hidden beyond a
+radius on MEDIUM/LOW, ambient particles are halved or stopped, sun rays/bloom/shadows are trimmed on
+LOW, and the quality steps down automatically after sustained low FPS. Phones start on MEDIUM; the
+player can pick AUTO/HIGH/MEDIUM/LOW in Settings > GRAPHICS. Budgets (enforced by tests): at most
+7,000 parts, 600 transparent parts, 70 lights, 24 emitters, 150 signs, 100 parts per avatar.
+These are budgets, **not measured frame rates**: measure on a real low-end phone before launch.
 
 ## Source layout
 
 ```text
 src/shared/                   Configuration, catalog, pure rules, outfit geometry
 src/server/Main.server.lua    Remotes, rate limits, service wiring
-src/server/Services/          Rounds, movement, data, purchases, cosmetics
-src/server/World/MapBuilder.lua Authored city and runtime timing gates
+src/server/Services/          Rounds, movement, hiding, data, purchases, cosmetics
+src/server/World/MallBuilder.lua Catch Mall (src/server/World/Mall/*), legacy MapBuilder.lua kept
 src/client/Main.client.lua    Snapshot/event synchronization and controllers
-src/client/Controllers/       UI, inputs/camera, sound and visual feedback
-tests/                        Rules, service, client, appearance, map regressions
+src/client/Controllers/       UI, inputs/camera/poses, hiding, sound and visual feedback
+tests/                        Rules, services, client, appearance, mall, enum regressions
 tools/                        Verified tool bootstrap, build, and validation
 dist/                         Direct-open Studio place files
 ```
 
-The optional map and character renderers (`tools/render-overview.py`,
+The optional map and character renderers (`tools/render-map.py`,
 `tools/export-characters.luau`, `tools/render-characters.py`) use Pillow and NumPy
 to inspect actual geometry. Their images are not Studio renders or playtests.
 

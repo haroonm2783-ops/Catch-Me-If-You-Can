@@ -7,7 +7,7 @@ local ctx = {
 	Remotes={}, State={}, Profile={}, Controllers={}, Signals={},
 }
 for _, name in ipairs({"State","Action","Profile","Notice","Query"}) do ctx.Remotes[name] = remoteFolder:WaitForChild(name) end
-for _, name in ipairs({"UIController","MovementController","EffectsController"}) do
+for _, name in ipairs({"PerformanceController","UIController","MovementController","EffectsController","HidingController"}) do
 	ctx.Controllers[name] = require(script.Parent.Controllers[name]).new(ctx)
 end
 local function deliver(method, value)
@@ -31,8 +31,9 @@ end)
 ctx.Remotes.Notice.OnClientEvent:Connect(function(notice)
 	if type(notice) == "table" then deliver("OnNotice",notice) end
 end)
-for _, name in ipairs({"UIController","MovementController","EffectsController"}) do
-	ctx.Controllers[name]:Start()
+for _, name in ipairs({"PerformanceController","UIController","MovementController","EffectsController","HidingController"}) do
+	local ok, err = pcall(function() ctx.Controllers[name]:Start() end)
+	if not ok then warn("[Catch] " .. name .. ".Start: " .. tostring(err)) end
 end
 Players.LocalPlayer.CharacterAdded:Connect(function(character) deliver("OnCharacter",character) end)
 if Players.LocalPlayer.Character then deliver("OnCharacter",Players.LocalPlayer.Character) end

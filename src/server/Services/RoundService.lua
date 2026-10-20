@@ -105,6 +105,8 @@ function RoundService:Snapshot()
 				displayName = player.DisplayName,
 				role = self:GetRole(player),
 				alive = entry ~= nil and entry.alive and self:_playingPhase(),
+				pickups = entry and entry.pickups or 0,
+				finds = entry and entry.finds or 0,
 			})
 		end
 	end
@@ -121,9 +123,10 @@ function RoundService:Snapshot()
 		aliveRunners = runners,
 		players = list,
 		winners = table.clone(self.winners),
+		pickupCap = self.ctx.Config.Hide.PickupCap,
 		resultText = self.resultText,
 		modifier = self.ctx.Modifiers.Public(self.modifier),
-		mapName = "NEON HEIGHTS",
+		mapName = self.ctx.World.Model and self.ctx.World.Model:GetAttribute("MapName") or "CATCH MALL",
 	}
 end
 
@@ -312,6 +315,10 @@ function RoundService:_startRound(eligible)
 		end
 		return aTurns < bTurns
 	end)
+	local hide = self.ctx.Services.HideService
+	if hide then
+		hide:ResetRound()
+	end
 	local hunters = self.practice and 0
 		or self.ctx.Modifiers.HunterCount(self.modifier, #eligible, self.ctx.Rules.HunterCount(#eligible))
 	local runnerIndex, hunterIndex = 0, 0
@@ -332,6 +339,9 @@ function RoundService:_startRound(eligible)
 			role = role,
 			alive = true,
 			tags = 0,
+			pickups = 0,
+			closeCalls = 0,
+			finds = 0,
 			joinedAt = self.startedAt,
 			spawn = spawn,
 		}
@@ -392,17 +402,24 @@ function RoundService:_endRound(winningRole, reason)
 				win = won,
 				tags = entry.tags,
 				survived = survived,
+				pickups = entry.pickups,
+				closeCalls = entry.closeCalls,
+				finds = entry.finds,
 				practice = self.practice,
 				roundId = self.roundId,
-			}
-			task.spawn(function()
-				local ok, err = pcall(function()
-					self.ctx.Services.DataService:AwardRound(player, summary)
+				}
+				task.spawn(function()
+				local ok, awarded, reward = pcall(function()
+					return self.ctx.Services.DataService:AwardRound(player, summary)
 				end)
 				if not ok then
-					warn("[Catch] Round award failed: " .. tostring(err))
+					warn("[Catch] Round award failed: " .. tostring(awarded))
+				elseif awarded == true and type(reward) == "table" then
+					-- The results screen shows exactly what the server granted.
+					reward.kind = "reward"
+					self:_notice(player, reward)
 				end
-			end)
+				end)
 		end
 	end
 	table.sort(self.winners)
@@ -501,6 +518,10 @@ function RoundService:TryTag(player)
 	for _, entry in pairs(self.roster) do
 		if entry.role == "Runner" and entry.alive and not self.departing[entry.player] then
 			local targetCharacter, _, targetRoot = liveCharacter(entry.player)
+			-- A hiding runner can only be found with Search or Scan, never tagged through the door.
+			if targetCharacter and targetCharacter:GetAttribute("CatchHiding") == true then
+				targetCharacter = nil
+			end
 			if targetCharacter and (not movement or movement:ValidatePosition(entry.player)) then
 				local delta = targetRoot.Position - root.Position
 				local distance = delta.Magnitude
@@ -574,6 +595,56 @@ function RoundService:_infect(entry)
 	if self:_playingPhase() then
 		self:_broadcast()
 	end
+end
+
+-- Face mood for a player: purely presentational, derived from facts the server already owns.
+function RoundService:MoodFor(player)
+	if self.phase == "Results" then
+		if table.find(self.winners, player.UserId) then return "Win" end
+		return self.roster[player.UserId] and "Lose" or "Idle"
+	end
+	if not self:_playingPhase() then return "Idle" end
+	local entry = self.roster[player.UserId]
+	if not entry or not entry.alive then return "Idle" end
+	if entry.role == "Hunter" then return "Hunt" end
+	local character, _, root = liveCharacter(player)
+	if not character then return "Idle" end
+	if character:GetAttribute("CatchHiding") == true then return "Hide" end
+	for _, other in pairs(self.roster) do
+		if other.role == "Hunter" and other.alive and not self.departing[other.player] then
+			local _, _, hunterRoot = liveCharacter(other.player)
+			if hunterRoot and (hunterRoot.Position - root.Position).Magnitude <= self.ctx.Config.Round.ScareDistance then
+				return "Scared"
+			end
+		end
+	end
+	return "Run"
+end
+
+-- Objectives. Both return the new running count, or nil when nothing was credited.
+function RoundService:AddPickup(player)
+	local entry = self.roster[player.UserId]
+	if self.phase ~= "Active" or not entry or entry.role ~= "Runner" or not entry.alive then
+		return nil
+	end
+	if entry.pickups >= self.ctx.Config.Hide.PickupCap then
+		return nil
+	end
+	entry.pickups += 1
+	return entry.pickups
+end
+
+function RoundService:AddCloseCall(player)
+	local entry = self.roster[player.UserId]
+	if self.phase ~= "Active" or not entry or entry.role ~= "Runner" or not entry.alive then
+		return nil
+	end
+	if entry.closeCalls >= self.ctx.Config.Hide.CloseCallMax then
+		return nil
+	end
+	entry.closeCalls += 1
+	self:_notice(player, {kind = "closecall", count = entry.closeCalls})
+	return entry.closeCalls
 end
 
 function RoundService:_step()
