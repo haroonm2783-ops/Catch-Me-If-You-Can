@@ -17,7 +17,7 @@ local env={game=place,workspace=world}
 for _, k in ipairs({"Instance","CFrame","Vector3","Color3","UDim2","Enum","Font"}) do env[k]=roblox[k] end
 local builder=luau.load(fs.readFile("src/server/World/MapBuilder.lua"),{environment=env})()
 local result=builder.Build({Static=true})
-expect(map:GetAttribute("CatchMapVersion")==3,"Roof surface fix is baked into the delivered map")
+expect(map:GetAttribute("CatchMapVersion")==4,"Current map version (bright palette) is baked into the delivered map")
 expect(result.Model==map,"Baked map reused in place")
 expect(builder.Build({Static=true})==result,"Repeat Build is idempotent")
 local sameName=0
@@ -231,7 +231,7 @@ freshEnv.game=stalePlace; freshEnv.workspace=staleWorld
 local reloaded=luau.load(fs.readFile("src/server/World/MapBuilder.lua"),{environment=freshEnv})()
 local rebuilt=reloaded.Build({Static=true})
 expect(staleMap.Parent==nil and rebuilt.Model~=staleMap,"Previous baked map is replaced without duplicate geometry")
-expect(rebuilt.Model:GetAttribute("CatchMapVersion")==3,"Replacement uses fixed roof geometry")
+expect(rebuilt.Model:GetAttribute("CatchMapVersion")==4,"Replacement uses current map version")
 expect(reloaded.Build({Static=true})==rebuilt,"Replacement is reused on repeated builds")
 expect(sameTransform(rebuilt.LobbySpawn,result.LobbySpawn),"Version migration preserves lobby spawn")
 for _,kind in ipairs({"RunnerSpawns","HunterSpawns","Podiums"}) do

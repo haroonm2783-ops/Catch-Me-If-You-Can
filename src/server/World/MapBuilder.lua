@@ -6,62 +6,69 @@ local TweenService = game:GetService("TweenService")
 
 local MapBuilder = {}
 local built
-local MAP_VERSION = 3
+local MAP_VERSION = 4
 local P = {
-	ink = Color3.fromRGB(19, 29, 48),
-	navy = Color3.fromRGB(30, 48, 70),
-	steel = Color3.fromRGB(68, 88, 105),
-	concrete = Color3.fromRGB(128, 143, 153),
+	ink = Color3.fromRGB(38, 52, 82),
+	navy = Color3.fromRGB(62, 96, 148),
+	steel = Color3.fromRGB(108, 138, 168),
+	concrete = Color3.fromRGB(176, 188, 194),
 	cream = Color3.fromRGB(240, 222, 186),
-	white = Color3.fromRGB(228, 238, 233),
-	teal = Color3.fromRGB(53, 161, 165),
+	white = Color3.fromRGB(240, 246, 242),
+	teal = Color3.fromRGB(44, 192, 196),
 	cyan = Color3.fromRGB(77, 239, 229),
-	coral = Color3.fromRGB(232, 115, 117),
+	coral = Color3.fromRGB(255, 120, 112),
 	pink = Color3.fromRGB(250, 113, 174),
 	gold = Color3.fromRGB(255, 198, 100),
-	purple = Color3.fromRGB(114, 104, 168),
-	green = Color3.fromRGB(83, 150, 121),
-	leaf = Color3.fromRGB(123, 184, 133),
+	purple = Color3.fromRGB(150, 124, 224),
+	green = Color3.fromRGB(70, 190, 130),
+	leaf = Color3.fromRGB(128, 214, 120),
 	soil = Color3.fromRGB(57, 59, 61),
-	road = Color3.fromRGB(36, 46, 62),
-	glass = Color3.fromRGB(46, 86, 105),
+	road = Color3.fromRGB(80, 90, 110),
+	glass = Color3.fromRGB(84, 168, 204),
 }
 
 local function applyLighting()
-	Lighting.ClockTime = 18.35
-	Lighting.Brightness = 2.5
-	Lighting.Ambient = Color3.fromRGB(86, 91, 119)
-	Lighting.OutdoorAmbient = Color3.fromRGB(121, 125, 151)
-	Lighting.ExposureCompensation = 0.08
+	-- Warm, bright late afternoon: readable routes first, neon as an accent.
+	Lighting.ClockTime = 15.2
+	Lighting.Brightness = 3.2
+	Lighting.Ambient = Color3.fromRGB(138, 148, 172)
+	Lighting.OutdoorAmbient = Color3.fromRGB(176, 184, 204)
+	Lighting.ColorShift_Top = Color3.fromRGB(255, 236, 200)
+	Lighting.ExposureCompensation = 0.2
 	Lighting.GlobalShadows = true
-	Lighting.ShadowSoftness = 0.4
-	Lighting.EnvironmentDiffuseScale = 0.55
-	Lighting.EnvironmentSpecularScale = 0.65
-	for _, name in ipairs({ "CatchAtmosphere", "CatchBloom", "CatchColor" }) do
+	Lighting.ShadowSoftness = 0.3
+	Lighting.EnvironmentDiffuseScale = 0.7
+	Lighting.EnvironmentSpecularScale = 0.6
+	for _, name in ipairs({ "CatchAtmosphere", "CatchBloom", "CatchColor", "CatchSunRays" }) do
 		local old = Lighting:FindFirstChild(name)
 		if old then old:Destroy() end
 	end
 	local atmosphere = Instance.new("Atmosphere")
 	atmosphere.Name = "CatchAtmosphere"
-	atmosphere.Density = 0.32
-	atmosphere.Offset = 0.12
-	atmosphere.Color = Color3.fromRGB(205, 196, 223)
-	atmosphere.Decay = Color3.fromRGB(119, 101, 142)
-	atmosphere.Glare = 0.12
-	atmosphere.Haze = 1.35
+	atmosphere.Density = 0.22
+	atmosphere.Offset = 0.2
+	atmosphere.Color = Color3.fromRGB(190, 220, 255)
+	atmosphere.Decay = Color3.fromRGB(255, 190, 150)
+	atmosphere.Glare = 0.2
+	atmosphere.Haze = 0.8
 	atmosphere.Parent = Lighting
 	local bloom = Instance.new("BloomEffect")
 	bloom.Name = "CatchBloom"
-	bloom.Intensity = 0.25
-	bloom.Size = 28
-	bloom.Threshold = 1.3
+	bloom.Intensity = 0.2
+	bloom.Size = 24
+	bloom.Threshold = 1.5
 	bloom.Parent = Lighting
 	local color = Instance.new("ColorCorrectionEffect")
 	color.Name = "CatchColor"
-	color.Contrast = 0.1
-	color.Saturation = 0.06
-	color.TintColor = Color3.fromRGB(255, 244, 232)
+	color.Contrast = 0.08
+	color.Saturation = 0.22
+	color.TintColor = Color3.fromRGB(255, 248, 238)
 	color.Parent = Lighting
+	local rays = Instance.new("SunRaysEffect")
+	rays.Name = "CatchSunRays"
+	rays.Intensity = 0.06
+	rays.Spread = 0.6
+	rays.Parent = Lighting
 end
 
 local function activateObstacles(model)
