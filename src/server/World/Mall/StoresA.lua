@@ -116,6 +116,10 @@ function StoresA.defs(P, Fixtures)
 					end})
 			end
 			Fx.hangBanner(ctx, 0, 20, 8, 7, P.orange)
+				-- A giant shoe box: orange lid, white base.
+				Fx.hideCell(ctx, {id = "sneaker_box", kind = "Giant Shoe Box", lx = 36, lz = 44, yaw = 0, w = 7, d = 6, h = 6,
+					wall = P.white, accent = P.orange, door = P.orange, carpet = P.orange, doorGap = 0.4,
+					decor = function(g, w, d, h) g.b("BoxLabel", 0, h - 2.6, -d / 2 - 0.2, 3.4, 1.1, 0.2, P.white, Enum.Material.SmoothPlastic, false) end})
 		end})
 
 	-- S1 ------------------------------------------------------------------------------------
@@ -228,6 +232,10 @@ function StoresA.defs(P, Fixtures)
 					interior = function(g, w, d) g.ball("TentPillow", 0, 0, d / 2 - 1, 2.4, 1.4, 1.6, P.white, Enum.Material.Fabric, false) end})
 			end
 			Fx.hangBanner(ctx, 20, 18, 10, 6, P.sun)
+				-- A toy chest big enough to crawl into, with a gold clasp.
+				Fx.hideCell(ctx, {id = "toy_chest", kind = "Toy Chest", lx = -42, lz = 44, yaw = 0, w = 6, d = 5, h = 5.8,
+					wall = P.red, accent = P.sun, door = P.darkwood, doorMaterial = Enum.Material.Wood, carpet = P.sun, doorGap = 0.4,
+					decor = function(g, w, d, h) g.b("ChestClasp", 0, 2.2, -d / 2 - 0.2, 0.9, 1.0, 0.2, P.gold, Enum.Material.Metal, false) end})
 		end})
 
 	return list

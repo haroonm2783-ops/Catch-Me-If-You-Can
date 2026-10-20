@@ -33,7 +33,7 @@ local function audit(rig, anchored)
 			end
 		end
 	end
-	expect(partCount(rig) <= 150, "Preview and costume stay within the 150-part avatar budget")
+	expect(partCount(rig) <= 130, "Preview and costume stay within the 130-part avatar budget")
 	expect(#rig:GetDescendants() <= 420, "Avatar descendants remain bounded")
 	-- This exercises Roblox serializer reflection in addition to Luau's constructor API.
 	local serialized = roblox.serializeModel({rig})
@@ -48,10 +48,14 @@ for _, item in ipairs(Catalog.ForCategory("skins")) do expect(Appearance.HasSkin
 for _, item in ipairs(Catalog.ForCategory("masks")) do expect(Appearance.HasMask(item.id), "Catalog mask has geometry: "..item.id) end
 for _, id in ipairs(Appearance.SkinOrder) do expect(Catalog.Get(id) and Catalog.Get(id).category == "skins", "Appearance skin is sold: "..id) end
 for _, id in ipairs(Appearance.MaskOrder) do expect(Catalog.Get(id) and Catalog.Get(id).category == "masks", "Appearance mask is sold: "..id) end
-for _, id in ipairs(Appearance.ToneOrder) do expect(Catalog.Get(id) and Catalog.Get(id).category == "tones", "Tone is selectable: "..id) end
-for _, id in ipairs(Appearance.HairOrder) do expect(Catalog.Get(id) and Catalog.Get(id).category == "hairColors", "Hair color is selectable: "..id) end
+expect(Catalog.ForCategory("tones")[1] == nil and Catalog.ForCategory("hairColors")[1] == nil, "Players keep their own skin tone and hair: no tone or hair categories")
 local skins, masks = Catalog.ForCategory("skins"), {""}
 for _, item in ipairs(Catalog.ForCategory("masks")) do table.insert(masks,item.id) end
+-- Rarity ladder: every tier exists and the default is a free, untouched avatar.
+local tiers = {Common=0,Rare=0,Epic=0,Legendary=0}
+for _, skin in ipairs(skins) do tiers[skin.rarity] += 1 end
+expect(tiers.Common >= 1 and tiers.Rare >= 3 and tiers.Epic >= 4 and tiers.Legendary >= 2, "Skins span all four rarity tiers")
+expect(Catalog.DefaultEquipment.skins == "skin_courier" and Catalog.Get("skin_courier").currency == "Free", "Default skin is the free, untouched avatar")
 local signatures, combinations, maximum = {}, 0, 0
 for _, skin in ipairs(skins) do
 	for _, mask in ipairs(masks) do
@@ -61,18 +65,23 @@ for _, skin in ipairs(skins) do
 		combinations += 1
 		if mask == "" then
 			local names = {}
-			for _, part in ipairs(rig.CatchAppearance:GetChildren()) do if part:IsA("BasePart") then table.insert(names,part.Name) end end
+			for _, part in ipairs(rig.CatchAppearance:GetChildren()) do if part:IsA("BasePart") and part.Name ~= "TrailMount" and part.Name ~= "AuraMount" then table.insert(names,part.Name) end end
 			table.sort(names)
 			local signature = table.concat(names,"|")
-			expect(not signatures[signature],"Each skin has a distinct geometry silhouette")
-			signatures[signature] = true
+			if skin.id == "skin_courier" then
+				expect(#names == 0, "Original You adds no geometry: the player's own avatar")
+			else
+				expect(#names >= 8, "Every collectible skin is a substantial overlay: "..skin.id)
+				expect(not signatures[signature],"Each skin has a distinct geometry silhouette")
+				signatures[signature] = true
+			end
 		end
 		local motorCount = 0
 		for _, item in ipairs(rig:GetDescendants()) do if item:IsA("Motor6D") then motorCount += 1 end end
 		local initial = partCount(rig)
 		Appearance.Apply(rig,skin.id,mask,{trails="trail_sunset"})
 		local afterFirst = partCount(rig)
-		expect(afterFirst == initial,"Reapplying preserves preview face and total geometry")
+		expect(afterFirst == initial,"Reapplying preserves total geometry")
 		local firstFolder = rig.CatchAppearance
 		Appearance.Apply(rig,skin.id,mask,{trails="trail_sunset"})
 		expect(firstFolder.Parent == nil,"Reapplying disposes the old outfit")
@@ -103,6 +112,7 @@ for _, skin in ipairs(skins) do
 		for _, item in ipairs(roleFolder:GetChildren()) do
 			if item:IsA("BasePart") then
 				expect(not item.Anchored and item.Massless and not item.CanQuery and not item.CanCollide,"Hunter identity cannot freeze or block live movement")
+				expect(item.Material ~= roblox.Enum.Material.Neon,"Hunter identity is bold, not neon")
 			end
 		end
 		Appearance.ApplyRole(rig,"Hunter")
@@ -112,7 +122,26 @@ for _, skin in ipairs(skins) do
 		rig:Destroy()
 	end
 end
-expect(combinations == #skins*#masks and #skins >= 8 and #masks >= 9,"Every launch skin with every mask and no mask was instantiated")
+expect(combinations == #skins*#masks and #skins >= 13 and #masks >= 9,"Every skin with every mask and no mask was instantiated")
+
+-- Art direction: restrained glow. No skin or mask is built from glowing neon material.
+for _, skin in ipairs(skins) do
+	for _, mask in ipairs(masks) do
+		local rig = Appearance.BuildPreview(skin.id,mask,{})
+		for _, part in ipairs(rig.CatchAppearance:GetChildren()) do
+			if part:IsA("BasePart") then expect(part.Material ~= roblox.Enum.Material.Neon,"No neon in cosmetics: "..skin.id.."/"..mask.."/"..part.Name) end
+		end
+		rig:Destroy()
+	end
+end
+-- Epic and Legendary showpieces with auras: aura emitters exist and stay light.
+for _, id in ipairs({"skin_cyber","skin_neonphantom","skin_midnight","skin_candy","skin_golden","skin_dragon"}) do
+	local rig = Appearance.BuildPreview(id,"",{})
+	local emitter
+	for _, item in ipairs(rig:GetDescendants()) do if item:IsA("ParticleEmitter") then emitter = item end end
+	expect(emitter ~= nil and emitter.Rate <= 16 and emitter.Name:match("^Aura_"),"Showpiece skin has a light ambient aura: "..id)
+	rig:Destroy()
+end
 
 local function buildR6()
 	local rig = roblox.Instance.new("Model")
@@ -149,14 +178,18 @@ for _, skin in ipairs(skins) do
 		audit(rig,false)
 		maximum = math.max(maximum,partCount(rig))
 		expect(rig:GetAttribute("CatchAppearanceRig")=="R6","R6 fallback is diagnosable in Studio attributes")
-		expect(rig.CatchAppearance.ShoeSole_Left:FindFirstChildOfClass("WeldConstraint").Part0==rig["Left Leg"],"R6 shoes weld to the actual left leg")
-		expect(rig.CatchAppearance.ShoeSole_Left.CFrame.Position.Y < -2.7,"R6 sneakers sit at foot level rather than leg center")
-		expect(rig.CatchRoleAppearance.HunterSignalCuff:FindFirstChildOfClass("WeldConstraint").Part0.Name:match(" Arm$"),"Hunter cuffs adapt to R6 limbs")
+		expect(rig.CatchRoleAppearance.HunterCuff:FindFirstChildOfClass("WeldConstraint").Part0.Name:match(" Arm$"),"Hunter cuffs adapt to R6 limbs")
 		r6Combinations += 1
 		rig:Destroy()
 	end
 end
 expect(r6Combinations==#skins*#masks,"Every skin and mask also serializes on live R6 rigs")
+do
+	local rig = buildR6()
+	Appearance.Apply(rig,"skin_ninja","")
+	expect(rig.CatchAppearance.ShinWrap_Left:FindFirstChildOfClass("WeldConstraint").Part0==rig["Left Leg"],"R6 leg wraps weld to the actual left leg")
+	rig:Destroy()
+end
 
 do
 	local rig = Appearance.BuildPreview("skin_courier","")
@@ -170,7 +203,7 @@ do
 	rig:Destroy()
 end
 
--- Representative scaled live avatar: its body, joints, and accessories must survive.
+-- The player's OWN avatar survives: face, clothes, hair and color are only changed reversibly.
 do
 	local rig = Appearance.BuildPreview("skin_courier","")
 	rig:SetAttribute("CatchPreview",false)
@@ -180,81 +213,65 @@ do
 			part.Size = roblox.Vector3.new(part.Size.X*0.8,part.Size.Y*1.2,part.Size.Z*0.9)
 		end
 	end
-	local accessory = roblox.Instance.new("Accessory")
-	accessory.Name,accessory.Parent = "PlayerAccessory",rig
-	local handle = roblox.Instance.new("Part")
-	handle.Name,handle.Parent = "Handle",accessory
-	handle.Transparency = 0.25
+	local hair = roblox.Instance.new("Accessory")
+	hair.Name,hair.AccessoryType,hair.Parent = "PlayerHair",roblox.Enum.AccessoryType.Hair,rig
+	local hairHandle = roblox.Instance.new("Part")
+	hairHandle.Name,hairHandle.Parent = "Handle",hair
+	hairHandle.Transparency = 0.25
+	local backpack = roblox.Instance.new("Accessory")
+	backpack.Name,backpack.AccessoryType,backpack.Parent = "PlayerBack",roblox.Enum.AccessoryType.Back,rig
+	local backHandle = roblox.Instance.new("Part")
+	backHandle.Name,backHandle.Parent = "Handle",backpack
+	local shirt = roblox.Instance.new("Shirt")
+	shirt.Parent = rig
+	local decal = rig.Head:FindFirstChild("face")
+	expect(decal ~= nil and decal.Transparency == 0,"Mannequin has the stock face")
+	local headColor, headMaterial = rig.Head.Color, rig.Head.Material
 	rig.HumanoidRootPart.Anchored = true -- HeadStart/vault server hold.
+	-- A plain overlay changes nothing about the player's own look.
 	Appearance.Apply(rig,"skin_ninja","mask_kitsune",{trails="trail_sunset"})
 	audit(rig,false)
 	expect(not rig.CatchAppearance.TrailMount.Anchored,"Equipping a trail during a server hold cannot anchor the avatar")
-	rig.HumanoidRootPart.Anchored = false
-	expect(accessory.Parent == rig and handle.Transparency == 1,"Player accessories are hidden without deletion")
-	Appearance.Apply(rig,"skin_golden","mask_skull",{trails=""})
-	expect(handle:GetAttribute("CatchOriginalTransparency") == 0.25,"Repeated appearance changes preserve original accessory metadata")
-	expect(rig.Head.Color == Appearance.Tones.tone_porcelain,"Switching outfits keeps the stable identity skin tone")
+	expect(hairHandle.Transparency == 0.25 and rig.Head.Color == headColor and decal.Transparency == 0 and shirt.Parent == rig,"Ninja keeps the player's hair, color, face and shirt")
+	-- Hat looks hide hair/hat accessories (never back items); everything is restored on the next apply.
+	Appearance.Apply(rig,"skin_pizza","",{})
+	expect(hairHandle.Transparency == 1 and hairHandle:GetAttribute("CatchOriginalTransparency") == 0.25,"Hat looks hide hair without deleting it")
+	expect(backHandle.Transparency == 0 and hair.Parent == rig,"Back items are never hidden")
+	Appearance.Apply(rig,"skin_courier","",{})
+	expect(hairHandle.Transparency == 0.25 and hairHandle:GetAttribute("CatchOriginalTransparency") == nil,"Switching back restores the player's hair exactly")
+	-- The gold statue tints limbs and stashes clothes, then restores both.
+	Appearance.Apply(rig,"skin_golden","mask_skull",{})
+	expect(rig.Head.Color ~= headColor and rig.Head.Material == roblox.Enum.Material.Metal,"Golden Champion tints the body")
+	expect(shirt.Parent ~= rig and rig:FindFirstChild("CatchStash") ~= nil,"Golden Champion stashes clothing instead of destroying it")
+	expect(decal.Transparency == 0,"The player's own face is still visible on the gold statue")
+	Appearance.Apply(rig,"skin_courier","",{})
+	expect(rig.Head.Color == headColor and rig.Head.Material == headMaterial and shirt.Parent == rig and rig:FindFirstChild("CatchStash") == nil,"Un-equipping restores color, material and clothing")
 	expect(rig:FindFirstChildOfClass("Humanoid") ~= nil,"Character humanoid survives")
 	Appearance.Apply(rig,"unknown_skin","unknown_mask")
-	expect(rig.CatchAppearance:FindFirstChild("CapCrown") ~= nil,"Unknown skins use safe courier fallback")
+	expect(rig.CatchAppearance:GetAttribute("SkinId") == "skin_courier" and #rig.CatchAppearance:GetChildren() == 0,"Unknown skins fall back to the untouched avatar")
 	expect(rig.Head.Parent == rig,"Unknown masks preserve the live avatar head")
 	expect(Appearance.CreatePreviewPose(rig,"victory_wave") == nil,"Podium poses reject live unanchored body parts")
 	expect(Appearance.Apply(nil,"skin_shadow","") == nil,"Missing rig is rejected")
 	rig:Destroy()
 end
 
--- Faces, moods and personalization.
+-- Previews: the player's real avatar (when available) is cloned, never modified, and wears the same cosmetics.
 do
-	local rig = Appearance.BuildPreview("skin_courier","",{hairColors="hair_pink",tones="tone_cocoa"},{userId=7})
-	local folder = rig.CatchAppearance
-	local expressions, visibleBefore = {}, 0
-	for _, part in ipairs(folder:GetChildren()) do
-		local expr = part:IsA("BasePart") and part:GetAttribute("CatchExpr")
-		if expr then expressions[expr] = (expressions[expr] or 0) + 1 end
+	expect(Appearance.BuildAvatar(nil) == nil,"No description means no real-avatar preview")
+	local base = Appearance.BuildMannequin({userId=9})
+	local look = Appearance.BuildPreview("skin_dragon","mask_street",{trails=""},{userId=9},base)
+	expect(look ~= base and base:FindFirstChild("CatchAppearance") == nil,"Preview clones the base avatar and leaves it untouched")
+	expect(look.CatchAppearance:GetAttribute("SkinId") == "skin_dragon" and look:GetAttribute("CatchPreview") == true,"Preview applies the chosen skin to the avatar clone")
+	local live = Appearance.BuildPreview("skin_dragon","mask_street",{trails=""},{userId=9})
+	local function names(model)
+		local list = {}
+		for _, part in ipairs(model.CatchAppearance:GetChildren()) do table.insert(list,part.Name) end
+		table.sort(list)
+		return table.concat(list,"|")
 	end
-	for _, name in ipairs({"smile","determined","grin","scared","joy","sad"}) do expect(expressions[name] and expressions[name] >= 1,"Expression geometry exists: "..name) end
-	expect(folder.EyeWhite_Left ~= nil and folder.EyeIris_Right ~= nil,"Characters have real eyes")
-	expect(rig.Head.Color == Appearance.Tones.tone_cocoa,"Chosen skin tone applies to the head")
-	expect(folder.BackHair.Color == Appearance.HairColors.hair_pink,"Chosen hair color overrides outfit hair")
-	for _, mood in ipairs({"Idle","Run","Hunt","Scared","Hide","Win","Lose"}) do
-		expect(Appearance.SetMood(rig,mood),"Mood is accepted: "..mood)
-		local wanted = Appearance.Moods[mood]
-		local shown = 0
-		for _, part in ipairs(folder:GetChildren()) do
-			local expr = part:IsA("BasePart") and part:GetAttribute("CatchExpr")
-			if expr then
-				expect((part.Transparency == 0) == (expr == wanted),"Only the "..wanted.." expression is visible in mood "..mood)
-				if part.Transparency == 0 then shown += 1 end
-			end
-		end
-		expect(shown >= 1,"Each mood shows face geometry")
-	end
-	-- Reapplying keeps the current mood instead of resetting the face.
-	Appearance.SetMood(rig,"Scared")
-	Appearance.Apply(rig,"skin_courier","",{},{userId=7})
-	expect(rig.CatchAppearance:GetAttribute("CatchMood") == "Scared","Outfit changes preserve the current mood")
-	-- Masks hide only the face they cover.
-	local function faceParts(maskId)
-		local r = Appearance.BuildPreview("skin_courier",maskId,{},{userId=7})
-		local f = r.CatchAppearance
-		local result = {eyes = f:FindFirstChild("EyeWhite_Left") ~= nil, mouth = f:FindFirstChild("Mouth_smile") ~= nil}
-		r:Destroy()
-		return result
-	end
-	expect(faceParts("").eyes and faceParts("").mouth,"No mask shows the whole face")
-	expect(faceParts("mask_street").eyes and not faceParts("mask_street").mouth,"Lower-face masks keep eyes and hide the mouth")
-	expect(not faceParts("mask_visor").eyes and faceParts("mask_visor").mouth,"Visors hide eyes but keep the mouth")
-	expect(not faceParts("mask_phantom").eyes and not faceParts("mask_phantom").mouth,"Full masks replace the face")
-	-- The stock decal face is hidden but never destroyed.
-	local live = Appearance.BuildPreview("skin_courier","")
-	live:SetAttribute("CatchPreview",false)
-	for _, part in ipairs(live:GetChildren()) do if part:IsA("BasePart") then part.Anchored = false end end
-	local decal = roblox.Instance.new("Decal")
-	decal.Name,decal.Transparency,decal.Parent = "face",0,live.Head
-	Appearance.Apply(live,"skin_cyber","")
-	expect(decal.Parent == live.Head and decal.Transparency == 1 and decal:GetAttribute("CatchOriginalTransparency") == 0,"Stock face decal is hidden, not deleted")
-	live:Destroy()
-	rig:Destroy()
+	expect(names(look) == names(live),"Preview geometry matches what a live character receives")
+	expect(Appearance.SetMood(look,"Scared") and look:GetAttribute("CatchMood") == "Scared","Mood is a plain attribute and no face is replaced")
+	look:Destroy() live:Destroy() base:Destroy()
 end
 
 -- Model PivotTo is an engine operation, so the harness supplies its geometric
@@ -288,6 +305,7 @@ local function event(instance,name)
 end
 roblox.implementMethod("Instance","GetAttributeChangedSignal",function(instance,name) return event(instance,"Attribute_"..name) end)
 roblox.implementProperty("Instance","ChildAdded",function(instance) return event(instance,"ChildAdded") end)
+roblox.implementMethod("ParticleEmitter","Emit",function() end)
 for _, name in ipairs({"CharacterAdded","CharacterRemoving","CharacterAppearanceLoaded"}) do
 	roblox.implementProperty("Player",name,function(instance) return event(instance,name) end)
 end
@@ -299,7 +317,7 @@ do
 	local module = {}
 	local shared = {WaitForChild=function(_,name) expect(name=="Appearance","Service loads shared appearance module") return module end}
 	local services = {
-		Players = {}, RunService = {Heartbeat=heartbeat},
+		Players = {}, RunService = {Heartbeat=heartbeat}, Debris = {AddItem=function() end},
 		ReplicatedStorage = {WaitForChild=function(_,name) expect(name=="CatchShared","Service loads correct shared folder") return shared end},
 	}
 	local env = table.clone(environment)
@@ -335,9 +353,9 @@ do
 	local service = CosmeticService.new(ctx)
 	profile.equipped.skins = "skin_ninja"
 	expect(service:Apply(player),"Profile applies to live R15 character")
-	expect(rig.CatchAppearance:FindFirstChild("CapCrown") ~= nil,"Unowned skin cannot render on live avatar")
+	expect(rig.CatchAppearance:FindFirstChild("Headband") == nil and rig.CatchAppearance:GetAttribute("SkinId") == "skin_courier","Unowned skin cannot render on live avatar")
 	profile.owned.skin_ninja = true
-	expect(service:Apply(player) and rig.CatchAppearance:FindFirstChild("Topknot"),"Verified skin renders original geometry")
+	expect(service:Apply(player) and rig.CatchAppearance:FindFirstChild("Headband"),"Verified skin renders original geometry")
 	expect(rig.CatchAppearance:FindFirstChild("CatchNameplate") ~= nil,"Live avatar gets chosen nameplate")
 		expect(rig.CatchAppearance.CatchNameplate:FindFirstChild("IdentityBar") ~= nil,"Nameplate carries a per-player identity bar")
 		-- A skin chosen mid-round is saved immediately but only applied once the player is out of the round.
@@ -351,7 +369,7 @@ do
 		expect(rig.CatchAppearance == beforeLook,"Pending look waits while the round is active")
 		inRound = false
 		service:_flushPending()
-		expect(rig.CatchAppearance ~= beforeLook and rig.CatchAppearance:FindFirstChild("CoreGlow") and not service.pendingLook[player],"Pending look applies as soon as the round is over")
+		expect(rig.CatchAppearance ~= beforeLook and rig.CatchAppearance:FindFirstChild("JetBody") and not service.pendingLook[player],"Pending look applies as soon as the round is over")
 		profile.equipped.skins = "skin_ninja"
 		service:Apply(player)
 	profile.equipped.nameplates = ""
@@ -399,7 +417,7 @@ do
 	local savedProfile = profile
 	profile = nil
 	rig.CatchAppearance:Destroy()
-	expect(not service:Apply(player) and rig.CatchAppearance:FindFirstChild("CapCrown"),"Slow profile loads show the free outfit without granting premium ownership")
+	expect(not service:Apply(player) and rig.CatchAppearance:FindFirstChild("Headband") == nil and rig.CatchAppearance:GetAttribute("SkinId") == "skin_courier","Slow profile loads show the free look without granting premium ownership")
 	local loadingOutfit = rig.CatchAppearance
 	service:Apply(player)
 	expect(rig.CatchAppearance==loadingOutfit,"Loading retry preserves the existing free outfit")
@@ -409,9 +427,9 @@ do
 	local colors = roblox.Instance.new("BodyColors")
 	colors.Parent = rig
 	service:Apply(player,true)
-	expect(handle.Transparency==1 and colors.HeadColor3==rig.Head.Color,"Late accessories and BodyColors refresh even while profile loading")
+	expect(handle.Transparency==0,"Late accessories refresh and the avatar keeps its own accessories while the profile loads")
 	profile = savedProfile
-	expect(service:Apply(player) and rig.CatchAppearance:FindFirstChild("Topknot"),"Verified saved outfit replaces temporary free outfit")
+	expect(service:Apply(player) and rig.CatchAppearance:FindFirstChild("Headband"),"Verified saved outfit replaces temporary free outfit")
 	local shoulder = rig.UpperTorso:FindFirstChild("RightShoulder")
 	local rest = shoulder.C0
 	expect(service:Emote(player,"emote_wave"),"Owned equipped emote starts in lobby")
@@ -436,7 +454,9 @@ do
 	for _, victory in ipairs({"victory_wave","victory_spin"}) do
 		profile.owned[victory],profile.equipped.victories = true,victory
 		service:ShowWinners({player,player})
-		expect(#service.podiums:GetChildren()==1,"Winner count is bounded by available podiums")
+		expect(#spawns==1,"Winner count is bounded by available podiums")
+		table.remove(spawns,1)()
+		expect(#service.podiums:GetChildren()==1,"Winner appears on the podium once built")
 		local winner = service.podiums:GetChildren()[1]
 		expect(winner.HumanoidRootPart.CFrame.Position == ctx.World.Podiums[1].Position,"Winner stands on the configured podium")
 		expect(winner.RightHand.CFrame.Position.Y>winner.UpperTorso.CFrame.Position.Y,"Victory pose visibly raises arm")
@@ -486,10 +506,10 @@ do
 	r6.ChildAdded:Fire(lateColors)
 	expect(#deferred==1,"One deferred refresh coalesces late spawn instances")
 	table.remove(deferred,1)()
-	expect(r6:FindFirstChild("CatchAppearance") and r6.CatchAppearance:FindFirstChild("CapCrown"),"Humanoid arriving after deadline restores free outfit while data remains pending")
+	expect(r6:FindFirstChild("CatchAppearance") and r6.CatchAppearance:FindFirstChild("Headband") == nil,"Humanoid arriving after deadline restores the free look while data remains pending")
 	profile = savedProfile
 	service:Apply(player)
-	expect(r6.CatchAppearance:FindFirstChild("Topknot")~=nil,"Late profile restores owned equipment after spawn recovery")
+	expect(r6.CatchAppearance:FindFirstChild("Headband")~=nil,"Late profile restores owned equipment after spawn recovery")
 	player:SetAttribute("RoundRole","Hunter")
 	player:GetAttributeChangedSignal("RoundRole"):Fire()
 	expect(r6:FindFirstChild("CatchRoleAppearance")~=nil,"Actual subscribed role signal applies Hunter identity")
@@ -507,7 +527,7 @@ do
 	table.remove(deferred,1)()
 	expect(r6.CatchAppearance==priorOutfit,"A queued refresh cannot modify a previous character after respawn")
 	table.remove(spawns,1)()
-	expect(replacement.CatchAppearance:FindFirstChild("Topknot") and replacement:FindFirstChild("CatchRoleAppearance"),"Respawn reapplies owned skin and current role to the new avatar")
+	expect(replacement.CatchAppearance:FindFirstChild("Headband") and replacement:FindFirstChild("CatchRoleAppearance"),"Respawn reapplies owned skin and current role to the new avatar")
 	services.Players.PlayerAdded,services.Players.PlayerRemoving = signal(),signal()
 	service:Start()
 	expect(player.CharacterAdded:Count()==1 and replacement.ChildAdded:Count()==1,"Starting twice cannot duplicate player and character watchers")

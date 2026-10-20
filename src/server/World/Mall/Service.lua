@@ -63,6 +63,24 @@ function Service.build(kit, Layout, Fx)
 			end
 		end
 	end
+	-- Air vents: big duct housings with a slatted grate. A creative hiding spot along the back corridors.
+	local function ventDecor(g, w, d, h, doorY)
+		for i = 1, 4 do g.b("VentSlat", 0, doorY + 0.8 + i * 1.0, -d / 2 - 0.15, w - 1.2, 0.3, 0.2, P.dark, Enum.Material.Metal, false) end
+		g.b("VentFrame", 0, doorY + 0.4, -d / 2 - 0.1, w - 0.4, 0.3, 0.2, P.sky, Enum.Material.Metal, false)
+	end
+	for level = 1, 2 do
+		local y = Layout.FloorY[level]
+		local vents = {
+			{-30, SZ - 2.6, 0, "N1"}, {40, SZ - 2.6, 0, "N2"}, {30, -SZ + 2.6, 180, "S1"}, {-40, -SZ + 2.6, 180, "S2"},
+			{SX - 2.6, -70, 90, "E1"}, {SX - 2.6, 95, 90, "E2"}, {-SX + 2.6, 70, -90, "W1"}, {-SX + 2.6, -95, -90, "W2"},
+		}
+		local ctx = {P = P, kit = kit, parent = folder, floor = level, name = "Back of House"}
+		function ctx.sub(wx, wz, yawDeg, par) return kit.frame(par or folder, Vector3.new(wx, y, wz), math.rad(yawDeg or 0), y) end
+		for _, v in ipairs(vents) do
+			Fx.hideCell(ctx, {id = string.format("vent_l%d_%s", level, v[4]), kind = "Air Vent", lx = v[1], lz = v[2], yaw = v[3], w = 5, d = 5, h = 6.8,
+				wall = P.steel, accent = P.sky, door = P.steel, doorMaterial = Enum.Material.Metal, carpet = P.dark, doorGap = 0.5, decor = ventDecor})
+		end
+	end
 	-- Loading-dock roll-up doors (decor) at the four corners of the ground floor.
 	for _, c in ipairs({{SX - 0.4, SZ - 6, -1, 0}, {-SX + 0.4, SZ - 6, 1, 0}, {SX - 0.4, -SZ + 6, -1, 0}, {-SX + 0.4, -SZ + 6, 1, 0}}) do
 		kit.box(folder, "DockDoor", c[1], 6, c[2], 0.6, 10, 10, P.steel, Enum.Material.Metal, false)

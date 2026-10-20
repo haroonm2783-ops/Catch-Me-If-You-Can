@@ -293,7 +293,7 @@ function RoundService:_startRound(eligible)
 	self.startedAt = now()
 	self.phase = "HeadStart"
 	self.endsAt = now() + self.ctx.Config.Round.HeadStart
-	self.resultText = self.practice and "STUDIO PRACTICE · no rewards"
+	self.resultText = self.practice and "PRACTICE · nothing is saved"
 		or (self.modifier.id == "classic" and "Runners, find your route!" or (self.modifier.name .. " · " .. self.modifier.tagline))
 	local cosmetic = self.ctx.Services.CosmeticService
 	if cosmetic then
@@ -359,7 +359,7 @@ function RoundService:_activate()
 	self.phase = "Active"
 	self.startedAt = now()
 	self.endsAt = self.startedAt + self.modifier.duration
-	self.resultText = self.practice and "Explore NEON HEIGHTS · practice awards no XP or coins" or (self.modifier.id == "classic" and "The chase is on!" or (self.modifier.name .. " · " .. self.modifier.tagline))
+	self.resultText = self.practice and "Practice round · nothing is saved: no XP, coins or rating" or (self.modifier.id == "classic" and "The chase is on!" or (self.modifier.name .. " · " .. self.modifier.tagline))
 	for _, entry in pairs(self.roster) do
 		entry.joinedAt = self.startedAt
 		if entry.alive and entry.role == "Hunter" and entry.player.Character then
@@ -380,7 +380,7 @@ function RoundService:_endRound(winningRole, reason)
 	self.phase = "Results" -- Guard reentry before touching avatars or awarding data.
 	self.endsAt = endedAt + self.ctx.Config.Round.ResultsDuration
 	self.winners = {}
-	self.resultText = self.practice and (reason or "Practice complete · no progression awarded")
+	self.resultText = self.practice and (reason or "Practice complete · nothing was saved")
 		or (reason or (winningRole == "Hunter" and "Hunters caught every runner!" or "Runners escaped!"))
 	local winningPlayers = {}
 	for _, entry in pairs(self.roster) do
@@ -447,7 +447,7 @@ function RoundService:_checkWin()
 	end
 	local runners, hunters = self:_counts()
 	if self.phase == "Active" and now() >= self.endsAt then
-		self:_endRound("Runner", self.practice and "Practice complete · no XP or coins awarded" or "Time is up · runners escaped!")
+		self:_endRound("Runner", self.practice and "Practice complete · nothing was saved" or "Time is up · runners escaped!")
 	elseif runners == 0 then
 		self:_endRound("Hunter", self.practice and "Practice ended · try another route next round" or "Hunters caught every runner!")
 	elseif not self.practice and hunters == 0 then
@@ -655,7 +655,7 @@ function RoundService:_step()
 			self.endsAt = now() + self.ctx.Config.Round.Intermission
 			self.practice = #eligible == 1
 			self:_pickModifier(#eligible)
-			self.resultText = self.practice and "Studio solo practice starts soon · no rewards" or "Next chase starts soon"
+			self.resultText = self.practice and "Practice round starts soon · nothing is saved" or "Next chase starts soon"
 			self:_broadcast()
 		end
 	elseif self.phase == "Intermission" then

@@ -4,14 +4,27 @@
 local Kit = {}
 
 local C = Color3.fromRGB
+-- ART DIRECTION: "Sunburst Mall". Cheerful, saturated, toy-like colors with warm neutrals. Large surfaces
+-- (floors, walls) stay mid-tone so nothing blows out; whites are warm; glow is reserved for screens and bulbs.
 Kit.P = {
-	cream = C(250, 242, 228), white = C(250, 250, 252), ink = C(44, 46, 70), stone = C(236, 226, 208),
-	coral = C(255, 107, 107), teal = C(38, 198, 192), sun = C(255, 205, 60), violet = C(150, 110, 235),
-	pink = C(255, 125, 190), sky = C(90, 170, 255), mint = C(110, 225, 170), orange = C(255, 150, 60),
-	navy = C(50, 70, 130), red = C(232, 64, 76), lime = C(150, 215, 80), wood = C(196, 140, 86),
-	darkwood = C(126, 84, 54), steel = C(176, 188, 206), grey = C(200, 204, 214), dark = C(60, 64, 88),
-	glass = C(170, 220, 245), leaf = C(86, 190, 100), soil = C(88, 66, 54), gold = C(255, 200, 70),
-	black = C(30, 30, 38), blush = C(255, 214, 220), peach = C(255, 214, 180), lilac = C(214, 196, 250),
+	cream = C(247, 230, 196), white = C(250, 246, 238), ink = C(40, 44, 78), stone = C(228, 202, 160),
+	coral = C(255, 94, 84), teal = C(0, 175, 180), sun = C(255, 196, 30), violet = C(128, 88, 230),
+	pink = C(255, 100, 170), sky = C(50, 150, 255), mint = C(70, 210, 140), orange = C(255, 138, 30),
+	navy = C(36, 62, 140), red = C(226, 48, 62), lime = C(140, 210, 50), wood = C(200, 140, 84),
+	darkwood = C(120, 78, 50), steel = C(160, 172, 190), grey = C(190, 194, 206), dark = C(54, 58, 84),
+	glass = C(150, 215, 245), leaf = C(70, 185, 90), soil = C(96, 70, 54), gold = C(255, 196, 60),
+	black = C(32, 32, 42), blush = C(255, 205, 215), peach = C(255, 208, 170), lilac = C(206, 190, 250),
+	-- Deeper tones for large store walls and floors.
+	deepTeal = C(18, 120, 130), deepCoral = C(214, 70, 70), deepViolet = C(92, 62, 170), deepBlue = C(30, 70, 160),
+	sand = C(236, 214, 170), terracotta = C(214, 120, 90), butter = C(255, 232, 140), seafoam = C(160, 230, 200), honey = C(222, 188, 128),
+}
+
+-- Parts allowed to keep the Neon material. Everything else that asks for Neon is built as plain colored
+-- plastic, so the mall reads as cheerful and solid rather than glowing. Screens, bulbs and coins glow.
+Kit.GlowNames = {
+	MallCoin = true, CoinInner = true, Lamp = true, TVScreen = true, CabinetScreen = true, CabinetMarquee = true,
+	ScreenWall = true, RegisterScreen = true, FridgeGlass = true, ConsoleScreen = true, MarqueeBulb = true,
+	DanceTile = true, StatusBoard = true,
 }
 
 -- Parts that must never be culled: gameplay markers and light sources.
@@ -33,6 +46,7 @@ function Kit.new(model)
 	-- Core part factory. `opts`: shape (Ball|Cylinder|Can|Wedge), transparency, shadow, cover, attrs.
 	function kit.part(parent, name, size, cf, color, material, collide, opts)
 		opts = opts or {}
+		if material == Enum.Material.Neon and not (opts.glow or Kit.GlowNames[name]) then material = Enum.Material.SmoothPlastic end
 		local shape = opts.shape
 		if typeof(cf) == "Vector3" then cf = CFrame.new(cf) end
 		local part = Instance.new(shape == "Wedge" and "WedgePart" or "Part")
@@ -119,7 +133,9 @@ function Kit.new(model)
 		label.Text = text
 		label.TextColor3 = textColor or Kit.P.white
 		label.TextScaled = true
-		label.FontFace = Font.fromEnum(opts.font or Enum.Font.GothamBlack)
+		label.FontFace = Font.fromEnum(opts.font or Enum.Font.FredokaOne)
+		label.TextStrokeColor3 = opts.stroke or Kit.P.ink
+		label.TextStrokeTransparency = opts.noStroke and 1 or 0.35
 		label.Parent = gui
 		kit.signs += 1
 		return backing

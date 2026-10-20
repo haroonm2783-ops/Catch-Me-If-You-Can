@@ -29,7 +29,7 @@ local function railing(kit, parent, a, b, y, color, height)
 	-- Glass is solid so nobody slides through it, but low enough to be jumped.
 	kit.part(parent, "RailGlass", Vector3.new(0.3, height - 0.6, length), cf * CFrame.Angles(0, math.pi / 2, 0) * CFrame.Angles(0, -math.pi / 2, 0) * CFrame.new(0, -0.3, 0), kit.P.glass, Enum.Material.Glass, true, {transparency = 0.55, shadow = false})
 	kit.part(parent, "RailTop", Vector3.new(0.6, 0.3, length), cf * CFrame.new(0, height / 2 - 0.15, 0), color, Enum.Material.SmoothPlastic, false)
-	local posts = math.max(2, math.floor(length / 10) + 1)
+	local posts = math.max(2, math.floor(length / 16) + 1)
 	for i = 0, posts - 1 do
 		local p = a + delta * (i / (posts - 1))
 		kit.box(parent, "RailPost", p.X, y + height / 2, p.Y, 0.5, height, 0.5, color, Enum.Material.Metal, false)
@@ -49,8 +49,16 @@ function Shell.build(kit, Layout)
 	local Y2 = Layout.FloorY[2]
 
 	-- Foundation: the whole ground floor is one marble slab; carpets and lanes are inlays.
-	kit.box(floors, "GroundSlab", 0, -1.5, 0, SX * 2, 3, SZ * 2, P.stone, Enum.Material.Marble, true)
-	kit.box(floors, "OutsideLot", 0, -3.2, 0, 900, 4, 900, Color3.fromRGB(120, 126, 142), Enum.Material.Asphalt, true)
+	kit.box(floors, "GroundSlab", 0, -1.5, 0, SX * 2, 3, SZ * 2, P.stone, Enum.Material.Slate, true)
+	-- Bold checker over the public ground floor (visual only): 20-stud tiles so it reads at any distance.
+	for ix = -4, 3 do
+		for iz = -4, 3 do
+			if (ix + iz) % 2 == 0 then
+				kit.box(floors, "FloorTile", ix * 20 + 10, 0.025, iz * 20 + 10, 19.6, 0.05, 19.6, P.terracotta, Enum.Material.Slate, false, {shadow = false})
+			end
+		end
+	end
+	kit.box(floors, "OutsideLot", 0, -3.2, 0, 900, 4, 900, Color3.fromRGB(112, 190, 92), Enum.Material.Grass, true)
 
 	-- Holes through the second-floor deck: the atrium void plus the head of every ramp/stair.
 	local holes = {Layout.Rect(-AX, AX, -AZ, AZ)}
@@ -79,7 +87,7 @@ function Shell.build(kit, Layout)
 	end
 	local slabBase = Layout.Rect(-SX, SX, -SZ, SZ)
 	for _, r in ipairs(Layout.Subtract(slabBase, holes)) do
-		kit.span(structure, "UpperDeck", r.x0, r.x1, Layout.SlabBottom, Layout.SlabTop, r.z0, r.z1, P.stone, Enum.Material.Marble, true)
+		kit.span(structure, "UpperDeck", r.x0, r.x1, Layout.SlabBottom, Layout.SlabTop, r.z0, r.z1, P.honey, Enum.Material.Slate, true)
 	end
 
 	-- Roof with skylight strips; the atrium gets a tall glass clerestory and roof.
@@ -128,14 +136,12 @@ function Shell.build(kit, Layout)
 			local s = z > 0 and 1 or -1
 			for x = -SX + 20, SX - 20, 26 do
 				kit.box(details, "ShellWindow", x, y + 11, z + s * (T + 0.1), 16, 8, 0.2, P.sky, Enum.Material.Glass, false, {transparency = 0.3})
-				kit.box(details, "ShellWindowInside", x, y + 11, z - s * 0.1, 16, 8, 0.2, P.sky, Enum.Material.Glass, false, {transparency = 0.3})
 			end
 		end
 		for _, x in ipairs({-SX, SX}) do
 			local s = x > 0 and 1 or -1
 			for z = -SZ + 20, SZ - 20, 26 do
 				kit.box(details, "ShellWindow", x + s * (T + 0.1), y + 11, z, 0.2, 8, 16, P.sky, Enum.Material.Glass, false, {transparency = 0.3})
-				kit.box(details, "ShellWindowInside", x - s * 0.1, y + 11, z, 0.2, 8, 16, P.sky, Enum.Material.Glass, false, {transparency = 0.3})
 			end
 		end
 	end
@@ -150,8 +156,8 @@ function Shell.build(kit, Layout)
 		local deck = kit.part(routes, "Escalator_" .. e.id, Vector3.new(width, 1, length), cf * CFrame.new(0, -0.5, 0), P.steel, Enum.Material.Metal, true, {attrs = {TraversalRoute = true}})
 		deck:SetAttribute("TraversalRoute", true)
 		-- Treads: thin ridges, visual only.
-		for i = 1, math.floor(length / 3.4) do
-			kit.part(routes, "Tread", Vector3.new(width - 0.6, 0.12, 0.25), cf * CFrame.new(0, 0.07, -length / 2 + i * 3.4), P.dark, Enum.Material.SmoothPlastic, false)
+		for i = 1, math.floor(length / 6.8) do
+			kit.part(routes, "Tread", Vector3.new(width - 0.6, 0.12, 0.3), cf * CFrame.new(0, 0.07, -length / 2 + i * 6.8), P.dark, Enum.Material.SmoothPlastic, false)
 		end
 		local dir = (b3 - a3) * Vector3.new(1, 0, 1)
 		local dirUnit = dir.Unit
@@ -159,14 +165,14 @@ function Shell.build(kit, Layout)
 		for _, side in ipairs({-1, 1}) do
 			local right = Vector3.new(-dirUnit.Z, 0, dirUnit.X) * side * (width / 2 + 0.3)
 			local wedgeCF = CFrame.lookAt(Vector3.new(mid.X + right.X, Y2 / 2, mid.Z + right.Z), Vector3.new(mid.X + right.X - dirUnit.X, Y2 / 2, mid.Z + right.Z - dirUnit.Z))
-			kit.part(routes, "EscalatorSkirt", Vector3.new(0.6, Y2, dir.Magnitude), wedgeCF, P.white, Enum.Material.SmoothPlastic, true, {shape = "Wedge"})
+			kit.part(routes, "EscalatorSkirt", Vector3.new(0.6, Y2, dir.Magnitude), wedgeCF, P.steel, Enum.Material.SmoothPlastic, true, {shape = "Wedge"})
 			-- Handrail above the skirt, following the slope.
 			local railA = a3 + right + Vector3.new(0, 3.2, 0)
 			local railB = b3 + right + Vector3.new(0, 3.2, 0)
 			kit.beam(routes, "EscalatorHandrail", railA, railB, 0.4, e.id:find("A") and P.teal or P.coral, Enum.Material.Metal, false)
 		end
 		local frontPoint = a3 + (b3 - a3) * 0.24
-		kit.part(routes, "EscalatorFront", Vector3.new(width + 1.4, 5.8, 0.6), CFrame.lookAt(Vector3.new(frontPoint.X, 2.9, frontPoint.Z), Vector3.new(frontPoint.X + dirUnit.X, 2.9, frontPoint.Z + dirUnit.Z)), P.white, Enum.Material.SmoothPlastic, true)
+		kit.part(routes, "EscalatorFront", Vector3.new(width + 1.4, 5.8, 0.6), CFrame.lookAt(Vector3.new(frontPoint.X, 2.9, frontPoint.Z), Vector3.new(frontPoint.X + dirUnit.X, 2.9, frontPoint.Z + dirUnit.Z)), e.id:find("A") and P.teal or P.coral, Enum.Material.SmoothPlastic, true)
 		-- Guard on the open edges of the deck hole so nobody falls into the notch.
 		local headStart = a3 + (b3 - a3) * 0.6
 		for _, side in ipairs({-1, 1}) do
@@ -183,7 +189,7 @@ function Shell.build(kit, Layout)
 		{from = Vector2.new(-22, -17), to = Vector2.new(-AX, -17), color = P.violet},
 	}
 	for i, g in ipairs(grand) do
-		stairs(kit, routes, "GrandStair" .. i, g.from, g.to, 14, Y2, P.white, 0)
+		stairs(kit, routes, "GrandStair" .. i, g.from, g.to, 14, Y2, P.cream, 0)
 		local dir = (g.to - g.from).Unit
 		local perp = Vector2.new(-dir.Y, dir.X)
 		for _, side in ipairs({-1, 1}) do
@@ -212,7 +218,7 @@ function Shell.build(kit, Layout)
 	end
 	-- Two skybridges cross the void; the second is split around the crossing.
 	local function bridge(name, x0, x1, z0, z1)
-		kit.span(routes, name, x0, x1, Y2 - 1.5, Y2, z0, z1, P.white, Enum.Material.Marble, true, {attrs = {TraversalRoute = true}})
+		kit.span(routes, name, x0, x1, Y2 - 1.5, Y2, z0, z1, P.cream, Enum.Material.Slate, true, {attrs = {TraversalRoute = true}})
 		kit.span(routes, name .. "Underglow", x0 + 0.5, x1 - 0.5, Y2 - 1.6, Y2 - 1.45, z0 + 0.5, z1 - 0.5, P.sky, Enum.Material.Neon, false)
 	end
 	bridge("SkybridgeEW", -AX, AX, -7, 7)
@@ -282,9 +288,9 @@ function Shell.build(kit, Layout)
 		local color = colors[(index % #colors) + 1]
 		for _, level in ipairs({1, 2}) do
 			local y = Layout.FloorY[level]
-			kit.can(structure, "Column", x, y + 11, z, 3, 22, P.white, Enum.Material.Marble, true, {cover = "Full"})
-			kit.can(details, "ColumnBand", x, y + 4, z, 3.4, 1.2, color, Enum.Material.SmoothPlastic, false)
-			kit.can(details, "ColumnCollar", x, y + 21, z, 3.6, 1, color, Enum.Material.SmoothPlastic, false)
+			kit.can(structure, "Column", x, y + 11, z, 3.4, 22, P.cream, Enum.Material.Concrete, true, {cover = "Full"})
+			kit.can(details, "ColumnBand", x, y + 4, z, 3.8, 3.2, color, Enum.Material.SmoothPlastic, false)
+			kit.can(details, "ColumnCollar", x, y + 20.5, z, 4.0, 2, color, Enum.Material.SmoothPlastic, false)
 		end
 	end
 	for _, z in ipairs({-45, -22, 22, 45}) do column(-AX - 6, z) column(AX + 6, z) end

@@ -295,7 +295,7 @@ function EffectsController:_confetti(color)
 	end
 end
 
-function EffectsController:_worldBurst(position, color, bloom)
+function EffectsController:_worldBurst(position, color, bloom, palette)
 	if typeof(position) ~= "Vector3" or self:_settings().reducedMotion or not self.worldEffects then
 		return
 	end
@@ -312,7 +312,7 @@ function EffectsController:_worldBurst(position, color, bloom)
 		spark.Size = bloom and Vector3.new(0.22, 0.22, 0.22) or Vector3.new(0.13, 0.45, 0.13)
 		spark.Shape = bloom and Enum.PartType.Ball or Enum.PartType.Block
 		spark.Material = Enum.Material.Neon
-		spark.Color = index % 3 == 0 and WHITE or color
+		spark.Color = palette and palette[(index % #palette) + 1] or (index % 3 == 0 and WHITE or color)
 		spark.CanCollide = false
 		spark.CanTouch = false
 		spark.CanQuery = false
@@ -326,6 +326,87 @@ function EffectsController:_worldBurst(position, color, bloom)
 			Size = Vector3.new(0.03, 0.03, 0.03),
 		})
 		Debris:AddItem(spark, 0.55)
+	end
+end
+
+-- A small ring of dust puffs at the feet: slides, vaults and hard landings. Cosmetic and short-lived.
+function EffectsController:_dust(strong)
+	local character = self.player.Character
+	local root = character and character:FindFirstChild("HumanoidRootPart")
+	if not root or not self.worldEffects or self:_settings().reducedMotion then return end
+	local base = root.Position - Vector3.new(0, 2.6, 0)
+	local count = strong and 6 or 4
+	for index = 1, count do
+		local angle = index / count * math.pi * 2 + self.random:NextNumber(-0.3, 0.3)
+		local dx, dz = math.cos(angle), math.sin(angle)
+		local puff = Instance.new("Part")
+		puff.Name = "DustPuff"
+		puff.Shape = Enum.PartType.Ball
+		puff.Size = Vector3.new(0.8, 0.8, 0.8)
+		puff.Material = Enum.Material.SmoothPlastic
+		puff.Color = Color3.fromRGB(236, 228, 214)
+		puff.Transparency = 0.3
+		puff.Anchored, puff.CanCollide, puff.CanTouch, puff.CanQuery, puff.CastShadow = true, false, false, false, false
+		puff.Position = base + Vector3.new(dx * 0.8, 0.2, dz * 0.8)
+		puff.Parent = self.worldEffects
+		tween(puff, 0.5, {Position = base + Vector3.new(dx * 2.6, 0.9, dz * 2.6), Size = Vector3.new(2.4, 2.4, 2.4), Transparency = 1})
+		Debris:AddItem(puff, 0.6)
+	end
+end
+
+-- Danger vignette: red glows at the screen edges that grow as a hunter closes in on a runner.
+function EffectsController:_buildDanger()
+	self.dangerFrames = {}
+	self.danger = 0
+	local specs = {
+		{UDim2.new(1, 0, 0, 120), UDim2.fromScale(0, 0), 90}, {UDim2.new(1, 0, 0, 120), UDim2.new(0, 0, 1, -120), 270},
+		{UDim2.new(0, 120, 1, 0), UDim2.fromScale(0, 0), 0}, {UDim2.new(0, 120, 1, 0), UDim2.new(1, -120, 0, 0), 180},
+	}
+	for _, spec in ipairs(specs) do
+		local frame = Instance.new("Frame")
+		frame.Name = "DangerEdge"
+		frame.Size, frame.Position = spec[1], spec[2]
+		frame.BackgroundColor3 = CORAL
+		frame.BackgroundTransparency = 1
+		frame.BorderSizePixel = 0
+		frame.Visible = false
+		frame.Active = false
+		local gradient = Instance.new("UIGradient")
+		gradient.Rotation = spec[3]
+		gradient.Transparency = NumberSequence.new(0, 1)
+		gradient.Parent = frame
+		frame.Parent = self.gui
+		table.insert(self.dangerFrames, frame)
+	end
+end
+
+function EffectsController:_dangerTick()
+	local state = self.ctx.State
+	local target = 0
+	local character = self.player.Character
+	local root = character and character:FindFirstChild("HumanoidRootPart")
+	if state.phase == "Active" and root and not self:_settings().reducedMotion and character:GetAttribute("CatchHiding") ~= true then
+		local runner = false
+		for _, entry in ipairs(state.players or {}) do
+			if entry.userId == self.player.UserId then runner = entry.role == "Runner" and entry.alive ~= false end
+		end
+		if runner then
+			local range = (self.ctx.Config.Round or {}).ScareDistance or 34
+			local nearest = math.huge
+			for _, entry in ipairs(state.players or {}) do
+				if entry.role == "Hunter" and entry.alive ~= false then
+					local other = Players:GetPlayerByUserId(entry.userId)
+					local otherRoot = other and other.Character and other.Character:FindFirstChild("HumanoidRootPart")
+					if otherRoot then nearest = math.min(nearest, (otherRoot.Position - root.Position).Magnitude) end
+				end
+			end
+			if nearest < range then target = 1 - nearest / range end
+		end
+	end
+	self.danger = (self.danger or 0) + (target - (self.danger or 0)) * 0.4
+	for _, frame in ipairs(self.dangerFrames or {}) do
+		frame.Visible = self.danger > 0.03
+		frame.BackgroundTransparency = 1 - math.min(0.7, self.danger * 0.75)
 	end
 end
 
@@ -412,6 +493,7 @@ function EffectsController:OnCharacter(character)
 				self.airborneAt = nil
 				if duration >= 0.2 and humanoid.Health > 0 and not character:GetAttribute("Vaulting") then
 					self:_sound("Land", math.min(0.28, 0.12 + duration * 0.06))
+					if duration >= 0.35 then self:_dust(duration >= 0.7) end
 					if not self:_settings().reducedMotion and self:_settings().cameraShake ~= false then self:_pulse(WHITE, 0.12) end
 				end
 			elseif nextState == Enum.HumanoidStateType.Dead or nextState == Enum.HumanoidStateType.Seated then
@@ -448,6 +530,10 @@ function EffectsController:OnNotice(notice)
 		local bloom = notice.action == "tag_bloom"
 		if notice.action == "tag_spark" or bloom then
 			self:_worldBurst(notice.position, bloom and CORAL or CYAN, bloom)
+		elseif notice.action == "tag_star" then
+			self:_worldBurst(notice.position, GOLD, true)
+		elseif notice.action == "tag_confetti" then
+			self:_worldBurst(notice.position, GOLD, true, {GOLD, CORAL, CYAN, WHITE, Color3.fromRGB(150, 110, 255), Color3.fromRGB(110, 235, 150)})
 		end
 		if notice.userId == self.player.UserId then
 			self:_pulse(CYAN, 0.65)
@@ -471,6 +557,7 @@ function EffectsController:OnNotice(notice)
 	elseif notice.kind == "ability" and notice.success ~= false then
 		if notice.action == "Slide" or notice.action == "Vault" then
 			self:_sound(notice.action, 0.25)
+			self:_dust(true)
 		end
 	elseif notice.kind == "pickup" then
 		-- The pitch climbs with the stack so a coin run feels like a combo.
@@ -513,6 +600,7 @@ function EffectsController:Start()
 	self.gui.DisplayOrder = 25
 	self.gui.ZIndexBehavior = Enum.ZIndexBehavior.Sibling
 	self.gui.Parent = self.player:WaitForChild("PlayerGui")
+	self:_buildDanger()
 	self.worldEffects = Instance.new("Folder")
 	self.worldEffects.Name = "CatchLocalEffects_" .. self.player.UserId
 	self.worldEffects.Parent = workspace
@@ -522,6 +610,7 @@ function EffectsController:Start()
 			self.elapsed = 0
 			self:_countdown()
 			self:_sprintAudio()
+			self:_dangerTick()
 		end
 	end))
 	self:_music()

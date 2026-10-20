@@ -20,7 +20,8 @@ function Fx.gondola(ctx, lx, lz, len, vertical, bodyColor, itemColors, height)
 	f.b("GondolaBody", lx, 0, lz, sx, height, sz, bodyColor, Enum.Material.SmoothPlastic, true, {cover = "Full"})
 	f.b("GondolaCap", lx, height, lz, sx + 0.2, 0.4, sz + 0.2, P.white, Enum.Material.SmoothPlastic, false)
 	-- Merchandise on both faces: three tiers of coloured product blocks.
-	local count = math.max(2, math.floor(len / 4.4))
+	-- Wider product blocks (fewer parts) still read as stocked shelves in three colored tiers.
+	local count = math.max(2, math.floor(len / 9))
 	for tier = 1, 3 do
 		local y0 = 0.9 + (tier - 1) * 2.1
 		for i = 1, count do
@@ -119,14 +120,14 @@ function Fx.bookcase(ctx, lx, lz, len, vertical, color, bookColors)
 	local f, P = ctx.f, ctx.P
 	local sx, sz = dims(len, 1.8, vertical)
 	f.b("BookcaseBody", lx, 0, lz, sx, 9, sz, color, Enum.Material.Wood, true, {cover = "Full"})
-	local rows = 4
-	local count = math.max(3, math.floor(len / 3))
+	local rows = 3
+	local count = math.max(3, math.floor(len / 4.6))
 	for r = 1, rows do
 		for i = 1, count do
 			local along = -len / 2 + (i - 0.5) * len / count
 			for _, face in ipairs({-1, 1}) do
 				local px, pz = lx + (vertical and face * 0.95 or along), lz + (vertical and along or face * 0.95)
-				f.b("Books", px, 0.5 + (r - 1) * 2.1, pz, vertical and 0.3 or len / count - 0.3, 1.6, vertical and len / count - 0.3 or 0.3, pick(bookColors, i + r), Enum.Material.SmoothPlastic, false)
+				f.b("Books", px, 0.7 + (r - 1) * 2.7, pz, vertical and 0.3 or len / count - 0.3, 1.6, vertical and len / count - 0.3 or 0.3, pick(bookColors, i + r), Enum.Material.SmoothPlastic, false)
 			end
 		end
 	end
@@ -159,16 +160,15 @@ function Fx.hideCell(ctx, opts)
 	g.b("CellLeft", -w / 2 + 0.25, 0, 0, 0.5, h, d, wall, Enum.Material.SmoothPlastic, true)
 	g.b("CellRight", w / 2 - 0.25, 0, 0, 0.5, h, d, wall, Enum.Material.SmoothPlastic, true)
 	g.b("CellRoof", 0, h - 0.4, 0, w, 0.4, d, opts.roof or wall, Enum.Material.SmoothPlastic, true)
-	g.b("CellTrim", 0, h - 1.2, -d / 2 + 0.1, w, 0.8, 0.3, opts.accent or P.pink, Enum.Material.SmoothPlastic, false)
-	g.b("CellFloorMat", 0, 0.02, 0, w - 0.8, 0.05, d - 0.8, opts.carpet or opts.floor or P.lilac, Enum.Material.Fabric, false)
 	if opts.interior then opts.interior(g, w, d, h) end
+	local decorate = opts.decor
 	-- The door is always closed and solid. Whether someone hides inside is deliberately not visible
 	-- from the door itself: hunters get tells (feet under the gap, a scan pulse) and a fair Search.
 	local doorY = opts.doorGap or 1.2
 	local door = g.b("Door", 0, doorY, -d / 2 + 0.2, w - 0.6, h - doorY - 1.4, 0.3, opts.door or P.pink, opts.doorMaterial or Enum.Material.Fabric, true)
 	door:SetAttribute("HideDoor", true)
-	g.b("DoorRail", 0, h - 1.5, -d / 2 + 0.2, w - 0.4, 0.2, 0.2, P.steel, Enum.Material.Metal, false)
 	g.b("DoorHandle", w / 2 - 1, doorY + 2.4, -d / 2 - 0.1, 0.3, 0.9, 0.2, P.steel, Enum.Material.Metal, false)
+	if decorate then decorate(g, w, d, h, doorY) end
 	local promptPart = g.b("PromptPart", 0, 2.2, -d / 2 - 0.4, 3, 3, 0.3, P.white, Enum.Material.SmoothPlastic, false)
 	promptPart.Transparency = 1
 	local prompt = Instance.new("ProximityPrompt")

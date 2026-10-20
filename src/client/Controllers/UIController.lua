@@ -12,12 +12,12 @@ local UIController = {}
 UIController.__index = UIController
 
 local C = {
-	background = Color3.fromRGB(38, 28, 96), panel = Color3.fromRGB(56, 42, 130),
-	card = Color3.fromRGB(78, 62, 162), line = Color3.fromRGB(118, 98, 214),
-	text = Color3.fromRGB(255, 255, 255), muted = Color3.fromRGB(205, 196, 246),
-	cyan = Color3.fromRGB(52, 220, 255), coral = Color3.fromRGB(255, 92, 110),
-	amber = Color3.fromRGB(255, 208, 64), green = Color3.fromRGB(86, 232, 142),
-	pink = Color3.fromRGB(255, 96, 184), ink = Color3.fromRGB(28, 20, 76),
+	background = Color3.fromRGB(34, 40, 76), panel = Color3.fromRGB(46, 54, 100),
+	card = Color3.fromRGB(64, 76, 136), line = Color3.fromRGB(112, 128, 205),
+	text = Color3.fromRGB(255, 255, 255), muted = Color3.fromRGB(200, 210, 238),
+	cyan = Color3.fromRGB(44, 214, 204), coral = Color3.fromRGB(255, 96, 84),
+	amber = Color3.fromRGB(255, 198, 40), green = Color3.fromRGB(84, 220, 128),
+	pink = Color3.fromRGB(255, 100, 170), blue = Color3.fromRGB(60, 160, 255), ink = Color3.fromRGB(22, 26, 52),
 }
 local RARITY = {
 	Common = Color3.fromRGB(190, 200, 224), Rare = Color3.fromRGB(70, 168, 255),
@@ -25,7 +25,7 @@ local RARITY = {
 }
 local F = {regular = Enum.Font.Gotham, medium = Enum.Font.GothamMedium, bold = Enum.Font.GothamBold,
 	black = Enum.Font.GothamBlack, title = Enum.Font.FredokaOne}
-local CATEGORY_ICON = {skins = "👕", masks = "🎭", trails = "✨", victories = "🎉", emotes = "💃", nameplates = "🏷", bundles = "🎁", tones = "🙂", hairColors = "💇"}
+local CATEGORY_ICON = {skins = "👕", masks = "🎭", trails = "✨", tagEffects = "💥", victories = "🎉", emotes = "💃", nameplates = "🏷", bundles = "🎁", vip = "👑"}
 local TIPS = {
 	"Hold E near a fitting room, locker or stall to hide. Hunters can search them!",
 	"Grab the spinning coins. Up to 25 per round.",
@@ -172,6 +172,30 @@ function UIController.new(ctx)
 	}, UIController)
 end
 
+-- The shop and locker preview the player's own avatar wearing the chosen cosmetics. The base model is built
+-- from their applied HumanoidDescription (async); until it exists, a neutral mannequin stands in.
+function UIController:_loadAvatarBase()
+	if self.avatarLoading or self.destroyed then return end
+	self.avatarLoading = true
+	task.spawn(function()
+		local character = self.player.Character
+		local humanoid = character and character:FindFirstChildOfClass("Humanoid")
+		local base
+		if humanoid then
+			local ok, description = pcall(function() return humanoid:GetAppliedDescription() end)
+			if ok and description then base = self.Appearance.BuildAvatar(description, humanoid.RigType) end
+		end
+		self.avatarLoading = false
+		if base and not self.destroyed then
+			if self.avatarBase then self.avatarBase:Destroy() end
+			self.avatarBase, self.thumbs, self.thumbCount = base, {}, 0
+			if self.menu == "Shop" or self.menu == "Inventory" then self:_renderMenu() end
+		elseif base then
+			base:Destroy()
+		end
+	end)
+end
+
 function UIController:_send(action, payload)
 	self.ctx.Remotes.Action:FireServer(action, payload or {})
 end
@@ -208,13 +232,16 @@ function UIController:Start()
 	self:_buildAbilities()
 	self:_buildSpectator()
 	self:_buildPanel()
+	self:_buildResults()
 	self:_buildDock() -- built after the panel so Shop and Locker always stay on top and clickable
 	self:_buildToast()
 	self:_buildAnnouncement()
 	self:_buildTutorial()
 	self:_buildLoading()
 	self.connections[#self.connections + 1] = UserInputService.InputBegan:Connect(function(input)
-		if self.menu and input.KeyCode == Enum.KeyCode.Escape then self:CloseMenu() end
+		if input.KeyCode == Enum.KeyCode.Escape then
+			if self.menu then self:CloseMenu() elseif self.moreMenu.Visible then self:CloseMore() end
+		end
 	end)
 	-- B must be consumed before the movement binding, including the closing press.
 	ContextActionService:BindActionAtPriority("CatchCloseMenu", function(_, state)
@@ -256,36 +283,28 @@ function UIController:Start()
 	end)
 	self:_makeRoomForCoreUi()
 	self:_responsive()
+	self:_loadAvatarBase()
 	self:OnProfile(self.ctx.Profile)
 	self:OnState(self.ctx.State)
 end
 
--- Roblox's default chat window and player list sit in corners the HUD uses. On keyboard devices the chat moves
--- to the lower left (clear of the dock and the ability bar) and the player list is hidden, because the CREW menu
--- replaces it. On phones both collapse to topbar icons above the HUD, so they are left alone.
--- TextChat exposes alignment and scale (not Position/Size); the legacy chat gets the SetCore equivalents.
--- Best-effort: a failure here never affects gameplay.
+-- Roblox's default player list sits in the top right corner the wallet uses, so on keyboard devices it is hidden
+-- (the CREW menu replaces it). Chat stays in its familiar top-left corner and is only narrowed. On phones both
+-- collapse to topbar icons, so they are left alone. Best-effort: a failure here never affects gameplay.
 function UIController:_makeRoomForCoreUi()
 	local touchOnly = UserInputService.TouchEnabled and not UserInputService.KeyboardEnabled
 	if touchOnly then return end
 	pcall(function()
 		game:GetService("StarterGui"):SetCoreGuiEnabled(Enum.CoreGuiType.PlayerList, false)
 	end)
-	local placed = pcall(function()
+	-- Chat stays where players expect it (top left). It is only narrowed so it can never reach the round timer;
+	-- the HUD keeps the whole left edge below it free and puts its own buttons on the right.
+	pcall(function()
 		local window = game:GetService("TextChatService"):FindFirstChildOfClass("ChatWindowConfiguration")
 		assert(window, "no ChatWindowConfiguration")
-		window.HorizontalAlignment = Enum.HorizontalAlignment.Left
-		window.VerticalAlignment = Enum.VerticalAlignment.Bottom
-		window.WidthScale = 0.22
-		window.HeightScale = 0.2
+		window.WidthScale = 0.3
+		window.HeightScale = 0.22
 	end)
-	if not placed then
-		pcall(function()
-			local starterGui = game:GetService("StarterGui")
-			starterGui:SetCore("ChatWindowPosition", UDim2.new(0, 108, 1, -230))
-			starterGui:SetCore("ChatWindowSize", UDim2.fromOffset(340, 170))
-		end)
-	end
 end
 
 ---------------------------------------------------------------------------------------------------
@@ -293,170 +312,193 @@ end
 ---------------------------------------------------------------------------------------------------
 
 function UIController:_buildHeader()
-	self.header = frame(self.root, {Position = UDim2.fromOffset(12, 8), Size = UDim2.new(1, -24, 0, 66), BackgroundTransparency = 1})
-	self.brand = frame(self.header, {Name = "Brand", Size = UDim2.fromOffset(176, 52), BackgroundColor3 = C.pink}, 14)
-	stroke(self.brand, C.ink, 0, 3)
-	gradient(self.brand, Color3.fromRGB(255, 130, 200), Color3.fromRGB(235, 60, 150), 90)
-	self.brandLabel = label(self.brand, "CATCH ME\nIF YOU CAN!", {Font = F.title, TextSize = 20, TextXAlignment = Enum.TextXAlignment.Center, TextStrokeTransparency = 0.6})
-	self.clock = frame(self.header, {Name = "RoundCard", AnchorPoint = Vector2.new(0.5, 0), Position = UDim2.fromScale(0.5, 0), Size = UDim2.fromOffset(230, 66), BackgroundColor3 = C.background}, 16)
+	self.header = frame(self.root, {Position = UDim2.fromOffset(10, 6), Size = UDim2.new(1, -20, 0, 52), BackgroundTransparency = 1})
+	-- Round chip: phase, timer and runners left in one compact card.
+	self.clock = frame(self.header, {Name = "RoundCard", AnchorPoint = Vector2.new(0.5, 0), Position = UDim2.fromScale(0.5, 0), Size = UDim2.fromOffset(190, 50), BackgroundColor3 = C.background}, 14)
 	self.clockStroke = stroke(self.clock, C.ink, 0, 3)
-	gradient(self.clock, Color3.fromRGB(74, 56, 170), C.background, 90)
-	self.roundTrack = frame(self.clock, {Name = "RoundProgress", Position = UDim2.new(0, 12, 1, -9), Size = UDim2.new(1, -24, 0, 5), BackgroundColor3 = C.ink}, 3)
-	self.roundFill = frame(self.roundTrack, {Size = UDim2.fromScale(1, 1), BackgroundColor3 = C.cyan}, 3)
-	self.phaseLabel = label(self.clock, "WELCOME TO THE MALL", {Position = UDim2.fromOffset(5, 5), Size = UDim2.new(1, -10, 0, 14), TextXAlignment = Enum.TextXAlignment.Center, TextSize = 10, TextColor3 = C.cyan})
-	self.timerLabel = label(self.clock, "LOBBY", {Position = UDim2.fromOffset(5, 18), Size = UDim2.new(1, -10, 0, 30), TextXAlignment = Enum.TextXAlignment.Center, TextSize = 28, Font = F.title})
-	self.aliveLabel = label(self.clock, "Waiting for players", {Position = UDim2.fromOffset(5, 47), Size = UDim2.new(1, -10, 0, 11), TextXAlignment = Enum.TextXAlignment.Center, TextSize = 9, TextColor3 = C.muted})
-	self.wallet = frame(self.header, {Name = "Wallet", AnchorPoint = Vector2.new(1, 0), Position = UDim2.fromScale(1, 0), Size = UDim2.fromOffset(188, 60), BackgroundColor3 = C.background}, 16)
+	gradient(self.clock, Color3.fromRGB(52, 62, 120), C.background, 90)
+	self.roundTrack = frame(self.clock, {Name = "RoundProgress", Position = UDim2.new(0, 12, 1, -6), Size = UDim2.new(1, -24, 0, 4), BackgroundColor3 = C.ink}, 2)
+	self.roundFill = frame(self.roundTrack, {Size = UDim2.fromScale(1, 1), BackgroundColor3 = C.cyan}, 2)
+	self.phaseLabel = label(self.clock, "WELCOME TO THE MALL", {Position = UDim2.fromOffset(6, 3), Size = UDim2.new(1, -12, 0, 11), TextXAlignment = Enum.TextXAlignment.Center, TextSize = 9, TextColor3 = C.cyan, TextTruncate = Enum.TextTruncate.AtEnd})
+	self.timerLabel = label(self.clock, "LOBBY", {Position = UDim2.fromOffset(6, 13), Size = UDim2.new(1, -12, 0, 24), TextXAlignment = Enum.TextXAlignment.Center, TextSize = 22, Font = F.title})
+	self.aliveLabel = label(self.clock, "Waiting for players", {Position = UDim2.fromOffset(6, 34), Size = UDim2.new(1, -12, 0, 9), TextXAlignment = Enum.TextXAlignment.Center, TextSize = 8, TextColor3 = C.muted, TextTruncate = Enum.TextTruncate.AtEnd})
+	-- Wallet pill: coins, level and an XP bar.
+	self.wallet = frame(self.header, {Name = "Wallet", AnchorPoint = Vector2.new(1, 0), Position = UDim2.fromScale(1, 0), Size = UDim2.fromOffset(150, 44), BackgroundColor3 = C.background}, 14)
 	stroke(self.wallet, C.ink, 0, 3)
-	gradient(self.wallet, Color3.fromRGB(74, 56, 170), C.background, 90)
-	self.coinsLabel = label(self.wallet, "🪙 0", {Position = UDim2.fromOffset(12, 5), Size = UDim2.new(1, -24, 0, 26), Font = F.title, TextColor3 = C.amber, TextSize = 21, TextXAlignment = Enum.TextXAlignment.Right})
-	self.levelLabel = label(self.wallet, "LEVEL 1", {Position = UDim2.fromOffset(12, 33), Size = UDim2.new(1, -24, 0, 12), Font = F.bold, TextColor3 = C.muted, TextSize = 10, TextXAlignment = Enum.TextXAlignment.Right})
-	local xpTrack = frame(self.wallet, {Position = UDim2.new(0, 12, 1, -11), Size = UDim2.new(1, -24, 0, 6), BackgroundColor3 = C.ink}, 3)
-	self.xpFill = frame(xpTrack, {Name = "XpFill", Size = UDim2.fromScale(0, 1), BackgroundColor3 = C.green}, 3)
+	gradient(self.wallet, Color3.fromRGB(52, 62, 120), C.background, 90)
+	self.coinsLabel = label(self.wallet, "🪙 0", {Position = UDim2.fromOffset(10, 3), Size = UDim2.new(1, -20, 0, 22), Font = F.title, TextColor3 = C.amber, TextSize = 17, TextXAlignment = Enum.TextXAlignment.Right})
+	self.levelLabel = label(self.wallet, "LEVEL 1", {Position = UDim2.fromOffset(10, 25), Size = UDim2.new(1, -20, 0, 10), Font = F.bold, TextColor3 = C.muted, TextSize = 8, TextXAlignment = Enum.TextXAlignment.Right})
+	local xpTrack = frame(self.wallet, {Position = UDim2.new(0, 10, 1, -8), Size = UDim2.new(1, -20, 0, 4), BackgroundColor3 = C.ink}, 2)
+	self.xpFill = frame(xpTrack, {Name = "XpFill", Size = UDim2.fromScale(0, 1), BackgroundColor3 = C.green}, 2)
 end
 
+-- Shop and Locker are always on screen: not in the lobby, an active round, spectating, or results.
+-- Everything else lives behind one "More" button so the HUD stays clean.
 local DOCK = {
 	{"Shop", "SHOP", "🛒", C.pink},
-	{"Inventory", "LOCKER", "👕", C.cyan},
+	{"Inventory", "LOCKER", "👕", C.blue},
+}
+local MORE = {
 	{"Quests", "QUESTS", "📋", C.amber},
 	{"Progress", "CAREER", "🏆", C.green},
-	{"Leaderboard", "CREW", "👥", C.card},
-	{"Settings", "SETTINGS", "⚙", C.card},
+	{"Leaderboard", "CREW", "👥", C.cyan},
+	{"Settings", "SETTINGS", "⚙", C.line},
 }
 
--- Shop and Locker are the first two entries and never hide: not in the lobby, the mall,
--- an active round, spectating, or between rounds.
 function UIController:_buildDock()
-	self.dock = frame(self.root, {Name = "Dock", Position = UDim2.fromOffset(10, 84), Size = UDim2.fromOffset(78, 400), BackgroundTransparency = 1, ZIndex = 12})
+	self.dock = frame(self.root, {Name = "Dock", Position = UDim2.fromOffset(8, 62), Size = UDim2.fromOffset(64, 200), BackgroundTransparency = 1, ZIndex = 12})
 	self.dockLayout = list(self.dock, false, 6)
 	self.dockButtons = {}
 	for index, spec in ipairs(DOCK) do
-		self.dockButtons[spec[1]] = self:_dockButton(spec[1], spec[2], spec[3], spec[4], index, function() self:OpenMenu(spec[1]) end)
+		self.dockButtons[spec[1]] = self:_dockButton(self.dock, spec[1], spec[2], spec[3], spec[4], index, function() self:OpenMenu(spec[1]) end)
 	end
-	self.emoteButton = self:_dockButton("Emote", "EMOTE", "💃", C.card, #DOCK + 1, function()
+	self.dockButtons.More = self:_dockButton(self.dock, "More", "MORE", "☰", C.amber, #DOCK + 1, function() self:ToggleMore() end)
+	-- The More popover: icon + caption rows, closed on any selection.
+	self.moreMenu = frame(self.root, {Name = "MoreMenu", Position = UDim2.fromOffset(80, 120), Size = UDim2.fromOffset(150, 8 + (#MORE + 1) * 40), BackgroundColor3 = C.background, Visible = false, ZIndex = 14}, 14)
+	stroke(self.moreMenu, C.ink, 0, 3)
+	local layout = list(self.moreMenu, false, 4)
+	layout.HorizontalAlignment = Enum.HorizontalAlignment.Center
+	node("UIPadding", {PaddingTop = UDim.new(0, 4), PaddingBottom = UDim.new(0, 4)}, self.moreMenu)
+	for index, spec in ipairs(MORE) do
+		self.dockButtons[spec[1]] = self:_moreRow(spec[1], spec[2], spec[3], spec[4], index, function() self:CloseMore() self:OpenMenu(spec[1]) end)
+	end
+	self.emoteButton = self:_moreRow("Emote", "EMOTE", "💃", C.card, #MORE + 1, function()
+		self:CloseMore()
 		local id = (self.ctx.Profile.equipped or {}).emotes
 		if id and id ~= "" then self:_send("Emote", {id = id}) end
 	end)
+	self.dockButtons.Emote = self.emoteButton
 end
 
-function UIController:_dockButton(name, text, icon, color, order, callback)
-	local object = button(self.dock, "", callback, {Name = name, Size = UDim2.fromOffset(74, 58), LayoutOrder = order, BackgroundColor3 = color, ZIndex = 12})
-	self:_dockContent(object, text, icon)
-	return object
-end
-
-function UIController:_dockContent(object, text, icon)
-	label(object, icon, {Name = "Icon", Position = UDim2.fromOffset(0, 5), Size = UDim2.new(1, 0, 0, 28), TextSize = 24, TextXAlignment = Enum.TextXAlignment.Center, ZIndex = 13})
-	label(object, text, {Name = "Caption", Position = UDim2.new(0, 0, 1, -21), Size = UDim2.new(1, 0, 0, 16), TextSize = 10, Font = F.black, TextXAlignment = Enum.TextXAlignment.Center, ZIndex = 13})
+function UIController:_dockButton(parent, name, text, icon, color, order, callback)
+	local object = button(parent, "", callback, {Name = name, Size = UDim2.fromOffset(62, 62), LayoutOrder = order, BackgroundColor3 = color, ZIndex = 12})
+	label(object, icon, {Name = "Icon", Position = UDim2.fromOffset(0, 4), Size = UDim2.new(1, 0, 0, 30), TextSize = 26, TextXAlignment = Enum.TextXAlignment.Center, ZIndex = 13})
+	label(object, text, {Name = "Caption", Position = UDim2.new(0, 0, 1, -20), Size = UDim2.new(1, 0, 0, 14), TextSize = 10, Font = F.black, TextXAlignment = Enum.TextXAlignment.Center, ZIndex = 13, TextColor3 = color == C.amber and C.ink or C.text})
 	local badge = frame(object, {Name = "Badge", AnchorPoint = Vector2.new(1, 0), Position = UDim2.new(1, 4, 0, -4), Size = UDim2.fromOffset(20, 20), BackgroundColor3 = C.coral, Visible = false, ZIndex = 14}, 10)
 	stroke(badge, C.text, 0, 2)
 	label(badge, "!", {TextXAlignment = Enum.TextXAlignment.Center, TextSize = 13, Font = F.black, ZIndex = 15})
+	return object
 end
 
--- Objective card: what to do right now, coin progress, runners left, hide meter.
+function UIController:_moreRow(name, text, icon, color, order, callback)
+	local object = button(self.moreMenu, "", callback, {Name = name, Size = UDim2.new(1, -12, 0, 36), LayoutOrder = order, BackgroundColor3 = color, ZIndex = 14})
+	label(object, icon, {Name = "Icon", Position = UDim2.fromOffset(6, 0), Size = UDim2.fromOffset(28, 36), TextSize = 20, TextXAlignment = Enum.TextXAlignment.Center, ZIndex = 15})
+	label(object, text, {Name = "Caption", Position = UDim2.fromOffset(38, 0), Size = UDim2.new(1, -44, 1, 0), TextSize = 12, Font = F.black, ZIndex = 15, TextColor3 = color == C.amber and C.ink or C.text})
+	local badge = frame(object, {Name = "Badge", AnchorPoint = Vector2.new(1, 0.5), Position = UDim2.new(1, -6, 0.5, 0), Size = UDim2.fromOffset(18, 18), BackgroundColor3 = C.coral, Visible = false, ZIndex = 16}, 9)
+	stroke(badge, C.text, 0, 2)
+	label(badge, "!", {TextXAlignment = Enum.TextXAlignment.Center, TextSize = 12, Font = F.black, ZIndex = 17})
+	return object
+end
+
+function UIController:ToggleMore()
+	if self.moreMenu.Visible then self:CloseMore() return end
+	self.moreMenu.Visible = true
+	self:_responsive()
+	if UserInputService.GamepadEnabled then
+		local first = self.moreMenu:FindFirstChild("Quests")
+		if first then GuiService.SelectedObject = first end
+	end
+end
+
+function UIController:CloseMore()
+	if self.moreMenu and self.moreMenu.Visible then
+		self.moreMenu.Visible = false
+		if GuiService.SelectedObject and GuiService.SelectedObject:IsDescendantOf(self.moreMenu) then GuiService.SelectedObject = self.dockButtons.More end
+	end
+end
+
+-- Objective chip: what to do right now. Kept to two short lines.
 function UIController:_buildObjective()
-	self.objective = frame(self.root, {Name = "Objective", AnchorPoint = Vector2.new(0.5, 0), Position = UDim2.new(0.5, 0, 0, 82), Size = UDim2.fromOffset(300, 58), BackgroundColor3 = C.background, Visible = false}, 14)
+	self.objective = frame(self.root, {Name = "Objective", AnchorPoint = Vector2.new(0.5, 0), Position = UDim2.new(0.5, 0, 0, 62), Size = UDim2.fromOffset(280, 44), BackgroundColor3 = C.background, Visible = false}, 12)
 	stroke(self.objective, C.ink, 0, 3)
-	gradient(self.objective, Color3.fromRGB(74, 56, 170), C.background, 90)
-	self.roleChip = label(self.objective, "RUNNER", {Position = UDim2.fromOffset(12, 5), Size = UDim2.new(0.5, -12, 0, 16), TextSize = 11, TextColor3 = C.cyan, Font = F.black})
-	self.objectiveRight = label(self.objective, "", {Position = UDim2.new(0.5, 0, 0, 5), Size = UDim2.new(0.5, -12, 0, 16), TextSize = 11, TextColor3 = C.muted, TextXAlignment = Enum.TextXAlignment.Right})
-	self.objectiveText = label(self.objective, "", {Position = UDim2.fromOffset(12, 22), Size = UDim2.new(1, -24, 0, 30), TextSize = 12, TextWrapped = true, TextYAlignment = Enum.TextYAlignment.Top})
-	self.hideMeter = frame(self.root, {Name = "HideMeter", AnchorPoint = Vector2.new(0.5, 0), Position = UDim2.new(0.5, 0, 0, 150), Size = UDim2.fromOffset(300, 84), BackgroundColor3 = C.background, Visible = false}, 14)
+	self.roleChip = label(self.objective, "RUNNER", {Position = UDim2.fromOffset(12, 4), Size = UDim2.new(0.5, -12, 0, 14), TextSize = 10, TextColor3 = C.cyan, Font = F.black})
+	self.objectiveRight = label(self.objective, "", {Position = UDim2.new(0.5, 0, 0, 4), Size = UDim2.new(0.5, -12, 0, 14), TextSize = 10, TextColor3 = C.muted, TextXAlignment = Enum.TextXAlignment.Right})
+	self.objectiveText = label(self.objective, "", {Position = UDim2.fromOffset(12, 20), Size = UDim2.new(1, -24, 0, 20), TextSize = 12, TextTruncate = Enum.TextTruncate.AtEnd})
+	self.hideMeter = frame(self.root, {Name = "HideMeter", AnchorPoint = Vector2.new(0.5, 0), Position = UDim2.new(0.5, 0, 0, 112), Size = UDim2.fromOffset(240, 62), BackgroundColor3 = C.background, Visible = false}, 12)
 	stroke(self.hideMeter, C.amber, 0, 3)
-	label(self.hideMeter, "🤫 HIDING... SHHH!", {Position = UDim2.fromOffset(12, 6), Size = UDim2.new(1, -24, 0, 16), TextSize = 12, TextColor3 = C.amber, Font = F.black})
-	local track = frame(self.hideMeter, {Position = UDim2.fromOffset(12, 28), Size = UDim2.new(1, -24, 0, 8), BackgroundColor3 = C.ink}, 4)
-	self.hideFill = frame(track, {Name = "HideFill", Size = UDim2.fromScale(1, 1), BackgroundColor3 = C.amber}, 4)
-	self.leaveButton = button(self.hideMeter, "LEAVE SPOT", function() self:_send("Unhide") end, {Name = "LeaveHiding", Position = UDim2.new(0, 12, 1, -38), Size = UDim2.new(1, -24, 0, 32), TextSize = 12, BackgroundColor3 = C.coral})
+	label(self.hideMeter, "🤫 HIDING...", {Position = UDim2.fromOffset(12, 4), Size = UDim2.new(1, -24, 0, 14), TextSize = 11, TextColor3 = C.amber, Font = F.black})
+	local track = frame(self.hideMeter, {Position = UDim2.fromOffset(12, 21), Size = UDim2.new(1, -24, 0, 6), BackgroundColor3 = C.ink}, 3)
+	self.hideFill = frame(track, {Name = "HideFill", Size = UDim2.fromScale(1, 1), BackgroundColor3 = C.amber}, 3)
+	self.leaveButton = button(self.hideMeter, "LEAVE SPOT", function() self:_send("Unhide") end, {Name = "LeaveHiding", Position = UDim2.new(0, 12, 1, -30), Size = UDim2.new(1, -24, 0, 24), TextSize = 11, BackgroundColor3 = C.coral})
 end
 
+-- Build/save status lives quietly at the bottom right, clear of the chat in the bottom left.
 function UIController:_buildHero()
-	self.hero = frame(self.root, {Name = "Welcome", Position = UDim2.new(0, 108, 0.5, -90), Size = UDim2.fromOffset(430, 250), BackgroundColor3 = C.background}, 22)
-	stroke(self.hero, C.ink, 0, 4)
-	gradient(self.hero, Color3.fromRGB(90, 66, 196), C.background, 110)
-	label(self.hero, "THE BIGGEST MALL IN TOWN", {Position = UDim2.fromOffset(20, 14), Size = UDim2.new(1, -40, 0, 18), TextColor3 = C.cyan, TextSize = 11, Font = F.black})
-	self.heroTitle = label(self.hero, "RUN. HIDE.\nESCAPE THE MALL!", {Position = UDim2.fromOffset(20, 38), Size = UDim2.new(1, -40, 0, 90), Font = F.title, TextSize = 34, TextWrapped = true, TextYAlignment = Enum.TextYAlignment.Top, TextStrokeTransparency = 0.7})
-	self.heroDescription = label(self.hero, "Two floors, 24 stores and secret hiding spots. Grab coins, dodge the hunters, and look good doing it.", {Position = UDim2.fromOffset(20, 132), Size = UDim2.new(1, -40, 0, 44), TextColor3 = C.muted, TextSize = 13, TextWrapped = true, TextYAlignment = Enum.TextYAlignment.Top, Font = F.medium})
-	button(self.hero, "LET'S GO!", function()
-		self.visited = true self.hero.Visible = false
-		self:Toast("Explore the mall. You join the next round automatically.", "welcome")
-	end, {Name = "EnterMall", Position = UDim2.fromOffset(20, 192), Size = UDim2.fromOffset(190, 46), BackgroundColor3 = C.green, TextColor3 = C.ink, TextSize = 16})
-	button(self.hero, "OPEN LOCKER", function() self:OpenMenu("Inventory") end, {Name = "HeroLocker", Position = UDim2.fromOffset(222, 192), Size = UDim2.fromOffset(188, 46), BackgroundColor3 = C.cyan, TextColor3 = C.ink, TextSize = 14})
-	self.saveLabel = label(self.root, "CONNECTING TO YOUR PROFILE", {AnchorPoint = Vector2.new(1, 0), Position = UDim2.new(1, -118, 1, -22), Size = UDim2.fromOffset(300, 14), TextColor3 = C.muted, TextSize = 9, TextXAlignment = Enum.TextXAlignment.Right, TextTruncate = Enum.TextTruncate.AtEnd})
-	self.versionLabel = label(self.root, "BUILD " .. tostring(self.ctx.Config.Version), {Name = "BuildVersion", AnchorPoint = Vector2.new(1, 0), Position = UDim2.new(1, -16, 1, -22), Size = UDim2.fromOffset(95, 14), TextColor3 = C.muted, TextSize = 9, TextXAlignment = Enum.TextXAlignment.Right})
+	self.saveLabel = label(self.root, "CONNECTING TO YOUR PROFILE", {AnchorPoint = Vector2.new(1, 1), Position = UDim2.new(1, -112, 1, -6), Size = UDim2.fromOffset(280, 12), TextColor3 = C.muted, TextSize = 8, TextXAlignment = Enum.TextXAlignment.Right, TextTruncate = Enum.TextTruncate.AtEnd})
+	self.versionLabel = label(self.root, "BUILD " .. tostring(self.ctx.Config.Version), {Name = "BuildVersion", AnchorPoint = Vector2.new(1, 1), Position = UDim2.new(1, -12, 1, -6), Size = UDim2.fromOffset(95, 12), TextColor3 = C.muted, TextSize = 8, TextXAlignment = Enum.TextXAlignment.Right})
 end
 
 function UIController:_buildAbilities()
-	self.abilities = frame(self.root, {Name = "Abilities", AnchorPoint = Vector2.new(0.5, 1), Position = UDim2.new(0.5, 0, 1, -30), Size = UDim2.fromOffset(500, 54), BackgroundTransparency = 1})
-	local layout = list(self.abilities, true, 6)
+	self.abilities = frame(self.root, {Name = "Abilities", AnchorPoint = Vector2.new(0.5, 1), Position = UDim2.new(0.5, 0, 1, -12), Size = UDim2.fromOffset(410, 46), BackgroundTransparency = 1})
+	local layout = list(self.abilities, true, 5)
 	layout.HorizontalAlignment = Enum.HorizontalAlignment.Center
 	self.abilityLabels = {}
 	local specs = {{"Sprint", "SHIFT", "L3", "👟"}, {"Slide", "C", "B", "🛹"}, {"Vault", "SPACE", "A", "🦘"}, {"Tag", "F", "R2", "🖐"}, {"Scan", "Q", "X", "📡"}}
 	for index, spec in ipairs(specs) do
 		local clickable = spec[1] == "Scan"
-		local box = clickable and button(self.abilities, "", function() self:_send("Scan") end, {Name = "ScanButton", Size = UDim2.fromOffset(96, 52), BackgroundColor3 = C.background, LayoutOrder = index})
-			or frame(self.abilities, {Size = UDim2.fromOffset(96, 52), BackgroundColor3 = C.background, LayoutOrder = index}, 12)
+		local box = clickable and button(self.abilities, "", function() self:_send("Scan") end, {Name = "ScanButton", Size = UDim2.fromOffset(76, 44), BackgroundColor3 = C.background, LayoutOrder = index})
+			or frame(self.abilities, {Size = UDim2.fromOffset(76, 44), BackgroundColor3 = C.background, LayoutOrder = index}, 12)
 		if not clickable then stroke(box, C.ink, 0, 2) end
-		label(box, spec[4], {Position = UDim2.fromOffset(8, 5), Size = UDim2.fromOffset(24, 24), TextSize = 18})
-		local name = label(box, string.upper(spec[1]), {Position = UDim2.fromOffset(34, 6), Size = UDim2.new(1, -40, 0, 16), Font = F.black, TextSize = 11})
-		local status = label(box, spec[2], {Position = UDim2.fromOffset(8, 29), Size = UDim2.new(1, -16, 0, 14), TextColor3 = C.cyan, TextSize = 10})
-		local fill = frame(box, {AnchorPoint = Vector2.new(0, 1), Position = UDim2.new(0, 8, 1, -4), Size = UDim2.new(1, -16, 0, 3), BackgroundColor3 = C.cyan}, 2)
+		label(box, spec[4], {Position = UDim2.fromOffset(6, 4), Size = UDim2.fromOffset(22, 20), TextSize = 16})
+		local name = label(box, string.upper(spec[1]), {Position = UDim2.fromOffset(28, 5), Size = UDim2.new(1, -32, 0, 14), Font = F.black, TextSize = 10})
+		local status = label(box, spec[2], {Position = UDim2.fromOffset(6, 24), Size = UDim2.new(1, -12, 0, 12), TextColor3 = C.cyan, TextSize = 9})
+		local fill = frame(box, {AnchorPoint = Vector2.new(0, 1), Position = UDim2.new(0, 6, 1, -3), Size = UDim2.new(1, -12, 0, 3), BackgroundColor3 = C.cyan}, 2)
 		self.abilityLabels[spec[1]] = {box = box, name = name, status = status, fill = fill, keyboard = spec[2], gamepad = spec[3]}
 	end
 end
 
 function UIController:_buildSpectator()
-	self.spectator = frame(self.root, {AnchorPoint = Vector2.new(0.5, 1), Position = UDim2.new(0.5, 0, 1, -96), Size = UDim2.fromOffset(320, 62), BackgroundColor3 = C.background, Visible = false}, 16)
+	self.spectator = frame(self.root, {AnchorPoint = Vector2.new(0.5, 1), Position = UDim2.new(0.5, 0, 1, -66), Size = UDim2.fromOffset(280, 52), BackgroundColor3 = C.background, Visible = false}, 14)
 	stroke(self.spectator, C.ink, 0, 3)
-	button(self.spectator, "<", function() self.spectateIndex -= 1 self:_updateSpectator() end, {Position = UDim2.fromOffset(8, 11), Size = UDim2.fromOffset(40, 40)})
-	button(self.spectator, ">", function() self.spectateIndex += 1 self:_updateSpectator() end, {Position = UDim2.new(1, -48, 0, 11), Size = UDim2.fromOffset(40, 40)})
-	label(self.spectator, "SPECTATING", {Position = UDim2.fromOffset(52, 8), Size = UDim2.new(1, -104, 0, 16), TextColor3 = C.cyan, Font = F.black, TextSize = 10, TextXAlignment = Enum.TextXAlignment.Center})
-	self.spectatorName = label(self.spectator, "Waiting for runners", {Position = UDim2.fromOffset(52, 28), Size = UDim2.new(1, -104, 0, 22), Font = F.bold, TextSize = 13, TextXAlignment = Enum.TextXAlignment.Center, TextTruncate = Enum.TextTruncate.AtEnd})
+	button(self.spectator, "<", function() self.spectateIndex -= 1 self:_updateSpectator() end, {Position = UDim2.fromOffset(6, 8), Size = UDim2.fromOffset(36, 36)})
+	button(self.spectator, ">", function() self.spectateIndex += 1 self:_updateSpectator() end, {Position = UDim2.new(1, -42, 0, 8), Size = UDim2.fromOffset(36, 36)})
+	label(self.spectator, "SPECTATING", {Position = UDim2.fromOffset(46, 6), Size = UDim2.new(1, -92, 0, 14), TextColor3 = C.cyan, Font = F.black, TextSize = 9, TextXAlignment = Enum.TextXAlignment.Center})
+	self.spectatorName = label(self.spectator, "Waiting for runners", {Position = UDim2.fromOffset(46, 22), Size = UDim2.new(1, -92, 0, 22), Font = F.bold, TextSize = 12, TextXAlignment = Enum.TextXAlignment.Center, TextTruncate = Enum.TextTruncate.AtEnd})
 end
 
+-- The shared menu panel. Shop and Locker get a roomy panel; every other menu is a small card.
 function UIController:_buildPanel()
 	self.panel = frame(self.root, {
-		Name = "MenuPanel", Position = UDim2.fromOffset(108, 80), Size = UDim2.new(1, -120, 1, -140), BackgroundColor3 = C.background, Visible = false, ZIndex = 5,
-	}, 22)
-	node("UISizeConstraint", {MaxSize = Vector2.new(1180, 760), MinSize = Vector2.new(250, 160)}, self.panel)
+		Name = "MenuPanel", Position = UDim2.fromOffset(84, 62), Size = UDim2.fromOffset(900, 560), BackgroundColor3 = C.background, Visible = false, ZIndex = 5,
+	}, 18)
+	node("UISizeConstraint", {MaxSize = Vector2.new(980, 640), MinSize = Vector2.new(250, 160)}, self.panel)
 	stroke(self.panel, C.ink, 0, 4)
-	gradient(self.panel, Color3.fromRGB(70, 54, 160), C.background, 110)
+	gradient(self.panel, Color3.fromRGB(50, 60, 116), C.background, 110)
 	self.panelScale = node("UIScale", {Scale = 1}, self.panel)
-	self.panelBanner = frame(self.panel, {Name = "Banner", Size = UDim2.new(1, 0, 0, 66), BackgroundColor3 = C.pink, ZIndex = 5}, 22)
-	self.bannerGradient = gradient(self.panelBanner, Color3.fromRGB(255, 130, 200), Color3.fromRGB(150, 80, 255), 0)
-	self.panelTitle = label(self.panel, "THE SHOP", {Position = UDim2.fromOffset(20, 8), Size = UDim2.new(1, -90, 0, 30), Font = F.title, TextSize = 26, TextTruncate = Enum.TextTruncate.AtEnd, TextStrokeTransparency = 0.6, ZIndex = 6})
-	self.panelSubtitle = label(self.panel, "", {Position = UDim2.fromOffset(20, 38), Size = UDim2.new(1, -90, 0, 20), TextColor3 = Color3.fromRGB(255, 240, 255), TextSize = 11, Font = F.medium, ZIndex = 6})
-	button(self.panel, "X", function() self:CloseMenu() end, {Name = "Close", Position = UDim2.new(1, -54, 0, 12), Size = UDim2.fromOffset(40, 40), BackgroundColor3 = C.coral, ZIndex = 7})
-	self.panelContent = frame(self.panel, {Position = UDim2.fromOffset(16, 80), Size = UDim2.new(1, -32, 1, -96), BackgroundTransparency = 1, ZIndex = 6})
+	self.panelBanner = frame(self.panel, {Name = "Banner", Size = UDim2.new(1, 0, 0, 52), BackgroundColor3 = C.pink, ZIndex = 5}, 18)
+	self.bannerGradient = gradient(self.panelBanner, Color3.fromRGB(255, 130, 170), Color3.fromRGB(255, 96, 84), 0)
+	self.panelTitle = label(self.panel, "THE SHOP", {Position = UDim2.fromOffset(16, 5), Size = UDim2.new(1, -76, 0, 26), Font = F.title, TextSize = 22, TextTruncate = Enum.TextTruncate.AtEnd, TextStrokeTransparency = 0.6, ZIndex = 6})
+	self.panelSubtitle = label(self.panel, "", {Position = UDim2.fromOffset(16, 30), Size = UDim2.new(1, -76, 0, 16), TextColor3 = Color3.fromRGB(255, 244, 240), TextSize = 10, Font = F.medium, ZIndex = 6})
+	button(self.panel, "X", function() self:CloseMenu() end, {Name = "Close", Position = UDim2.new(1, -46, 0, 6), Size = UDim2.fromOffset(38, 38), BackgroundColor3 = C.coral, ZIndex = 7})
+	self.panelContent = frame(self.panel, {Position = UDim2.fromOffset(14, 62), Size = UDim2.new(1, -28, 1, -76), BackgroundTransparency = 1, ZIndex = 6})
 end
 
 ---------------------------------------------------------------------------------------------------
--- Onboarding
+-- Onboarding: a small tip card at the bottom of the screen. It never blocks the world or the controls.
 ---------------------------------------------------------------------------------------------------
 
 function UIController:_buildTutorial()
-	self.tutorial = frame(self.root, {Name = "Tutorial", AnchorPoint = Vector2.new(0.5, 0.5), Position = UDim2.fromScale(0.5, 0.5), Size = UDim2.new(1, -40, 0, 320), BackgroundColor3 = C.background, Visible = false, ZIndex = 30}, 22)
-	node("UISizeConstraint", {MaxSize = Vector2.new(580, 340), MinSize = Vector2.new(260, 260)}, self.tutorial)
-	stroke(self.tutorial, C.cyan, 0, 4)
-	gradient(self.tutorial, Color3.fromRGB(90, 66, 196), C.background, 110)
-	self.tutorialStep = label(self.tutorial, "", {Position = UDim2.fromOffset(22, 16), Size = UDim2.new(1, -44, 0, 16), TextSize = 11, Font = F.black, TextColor3 = C.cyan, ZIndex = 31})
-	self.tutorialTitle = label(self.tutorial, "", {Position = UDim2.fromOffset(22, 38), Size = UDim2.new(1, -44, 0, 40), Font = F.title, TextSize = 26, TextWrapped = true, ZIndex = 31})
-	self.tutorialBody = label(self.tutorial, "", {Position = UDim2.fromOffset(22, 88), Size = UDim2.new(1, -44, 1, -166), TextSize = 14, TextColor3 = C.muted, TextWrapped = true, TextYAlignment = Enum.TextYAlignment.Top, ZIndex = 31, Font = F.medium})
-	self.tutorialSkip = button(self.tutorial, "SKIP", function() self:_finishTutorial() end, {Name = "TutorialSkip", AnchorPoint = Vector2.new(0, 1), Position = UDim2.new(0, 22, 1, -18), Size = UDim2.fromOffset(90, 42), ZIndex = 31})
-	self.tutorialNext = button(self.tutorial, "NEXT", function() self:_tutorialAdvance() end, {Name = "TutorialNext", AnchorPoint = Vector2.new(1, 1), Position = UDim2.new(1, -22, 1, -18), Size = UDim2.fromOffset(160, 42), BackgroundColor3 = C.green, TextColor3 = C.ink, ZIndex = 31})
+	self.tutorial = frame(self.root, {Name = "Tutorial", AnchorPoint = Vector2.new(0.5, 1), Position = UDim2.new(0.5, 0, 1, -70), Size = UDim2.new(1, -24, 0, 170), BackgroundColor3 = C.background, Visible = false, ZIndex = 30}, 16)
+	node("UISizeConstraint", {MaxSize = Vector2.new(430, 180), MinSize = Vector2.new(240, 150)}, self.tutorial)
+	stroke(self.tutorial, C.cyan, 0, 3)
+	self.tutorialStep = label(self.tutorial, "", {Position = UDim2.fromOffset(16, 8), Size = UDim2.new(1, -32, 0, 14), TextSize = 9, Font = F.black, TextColor3 = C.cyan, ZIndex = 31})
+	self.tutorialTitle = label(self.tutorial, "", {Position = UDim2.fromOffset(16, 24), Size = UDim2.new(1, -32, 0, 28), Font = F.title, TextSize = 20, TextWrapped = true, ZIndex = 31})
+	self.tutorialBody = label(self.tutorial, "", {Position = UDim2.fromOffset(16, 54), Size = UDim2.new(1, -32, 1, -100), TextSize = 12, TextColor3 = C.muted, TextWrapped = true, TextYAlignment = Enum.TextYAlignment.Top, ZIndex = 31, Font = F.medium})
+	self.tutorialSkip = button(self.tutorial, "SKIP", function() self:_finishTutorial() end, {Name = "TutorialSkip", AnchorPoint = Vector2.new(0, 1), Position = UDim2.new(0, 16, 1, -10), Size = UDim2.fromOffset(70, 32), TextSize = 11, ZIndex = 31})
+	self.tutorialNext = button(self.tutorial, "NEXT", function() self:_tutorialAdvance() end, {Name = "TutorialNext", AnchorPoint = Vector2.new(1, 1), Position = UDim2.new(1, -16, 1, -10), Size = UDim2.fromOffset(120, 32), BackgroundColor3 = C.green, TextColor3 = C.ink, TextSize = 12, ZIndex = 31})
 end
 
 function UIController:_tutorialPages()
 	local touch = UserInputService.TouchEnabled and not UserInputService.KeyboardEnabled
 	local pad = UserInputService.GamepadEnabled and not UserInputService.KeyboardEnabled and not touch
-	local controls = touch and "Use the RUN, SLIDE and TAG buttons. The jump button also vaults low obstacles. Hold the HIDE prompt near a hiding spot."
-		or (pad and "Sprint: L3     Slide: B     Jump / vault: A     Tag: R2     Scan: X     Locker: Y")
-		or "Sprint: hold Shift     Slide: C while running     Jump / vault: Space     Tag: F     Hide / search: hold E     Scan (hunters): Q"
+	local controls = touch and "RUN, SLIDE and TAG buttons sit by your thumb. Jump also vaults low things. Tap a hiding spot's HIDE prompt."
+		or (pad and "Sprint L3 · Slide B · Jump/Vault A · Tag R2 · Scan X · Locker Y")
+		or "Shift = sprint · C = slide · Space = jump/vault · F = tag · E = hide/search · Q = scan"
 	return {
-		{title = "WELCOME TO THE MALL!", body = "Every round, a few HUNTERS chase the RUNNERS through a two-floor mall. The round starts by itself when enough players are ready."},
-		{title = "RUNNERS: STAY FREE", body = "Grab spinning coins, dive into fitting rooms, lockers and stalls to hide for a few seconds, cut through stores, take escalators and jump the balcony gaps. Survive until the timer ends."},
-		{title = "HUNTERS: FIND THEM ALL", body = "Runners get a head start. Search hiding spots with E, use SCAN (Q) to spot movement nearby, and tag anyone you catch. Hidden runners cannot be tagged, but searching flushes them out!"},
-		{title = "MOVE LIKE A PRO", body = controls .. "\n\nHiding only lasts a few seconds and needs a cooldown. Nobody can sit in a closet forever."},
-		{title = "EARN, STYLE, SHOW OFF", body = "Collect coins and win rounds for XP and coins. Unlock skins, masks, trails and titles in the SHOP and wear them from your LOCKER. Everything is cosmetic: nobody can buy an advantage."},
+		{title = "WELCOME TO THE MALL!", body = "Hunters chase runners through a two-floor mall. Rounds start by themselves."},
+		{title = "RUNNERS: STAY FREE", body = "Grab coins, hide in fitting rooms, lockers and vents, cut through stores and jump the balcony gaps. Survive until the timer ends."},
+		{title = "HUNTERS: FIND THEM", body = "Runners get a head start. Search hiding spots (E), scan (Q) and tag everyone you catch."},
+		{title = "MOVE LIKE A PRO", body = controls .. "\nSHOP and LOCKER are always on the left: skins are just for style."},
 	}
 end
 
@@ -465,6 +507,7 @@ function UIController:ShowTutorial()
 	self.tutorialPages = self:_tutorialPages()
 	self.tutorialPage = 1
 	self:CloseMenu()
+	self:CloseMore()
 	self.tutorial.Visible = true
 	self:_renderTutorial()
 end
@@ -489,34 +532,34 @@ end
 function UIController:_finishTutorial()
 	if self.tutorial then self.tutorial.Visible = false end
 	self.visited = true
-	if self.hero then self.hero.Visible = false end
 	if (self.ctx.Profile.settings or {}).tutorialDone ~= true then
 		self:_send("Settings", {tutorialDone = true})
 	end
 end
 
 function UIController:_buildToast()
-	self.toast = frame(self.root, {AnchorPoint = Vector2.new(0.5, 0), Position = UDim2.fromScale(0.5, 0.68), Size = UDim2.new(0.8, 0, 0, 52), Visible = false, BackgroundColor3 = C.card, ZIndex = 20}, 14)
-	node("UISizeConstraint", {MaxSize = Vector2.new(600, 90)}, self.toast)
+	self.toast = frame(self.root, {AnchorPoint = Vector2.new(0.5, 0), Position = UDim2.new(0.5, 0, 0, 180), Size = UDim2.new(0.9, 0, 0, 40), Visible = false, BackgroundColor3 = C.card, ZIndex = 20}, 12)
+	node("UISizeConstraint", {MaxSize = Vector2.new(440, 80)}, self.toast)
 	self.toastStroke = stroke(self.toast, C.cyan, 0, 3)
-	self.toastText = label(self.toast, "", {Position = UDim2.fromOffset(14, 6), Size = UDim2.new(1, -28, 1, -12), TextSize = 14, Font = F.bold, TextWrapped = true, TextXAlignment = Enum.TextXAlignment.Center, ZIndex = 21})
+	self.toastText = label(self.toast, "", {Position = UDim2.fromOffset(12, 4), Size = UDim2.new(1, -24, 1, -8), TextSize = 12, Font = F.bold, TextWrapped = true, TextXAlignment = Enum.TextXAlignment.Center, ZIndex = 21})
 end
 
+-- Role banner at the start of a round: short, near the top, gone in a few seconds.
 function UIController:_buildAnnouncement()
-	self.announcement = frame(self.root, {AnchorPoint = Vector2.new(0.5, 0.5), Position = UDim2.fromScale(0.5, 0.3), Size = UDim2.new(0.85, 0, 0, 144), BackgroundColor3 = C.background, BackgroundTransparency = 0.04, Visible = false, ZIndex = 18}, 22)
-	node("UISizeConstraint", {MaxSize = Vector2.new(640, 144)}, self.announcement)
-	self.announcementStroke = stroke(self.announcement, C.cyan, 0, 4)
-	self.announcementTitle = label(self.announcement, "YOU ARE A RUNNER", {Position = UDim2.fromOffset(12, 20), Size = UDim2.new(1, -24, 0, 50), TextSize = 32, Font = F.title, TextXAlignment = Enum.TextXAlignment.Center, TextScaled = true, ZIndex = 19})
-	node("UITextSizeConstraint", {MaxTextSize = 34, MinTextSize = 16}, self.announcementTitle)
-	self.announcementCopy = label(self.announcement, "", {Position = UDim2.fromOffset(20, 80), Size = UDim2.new(1, -40, 0, 46), TextSize = 14, TextWrapped = true, TextColor3 = C.muted, TextXAlignment = Enum.TextXAlignment.Center, Font = F.medium, ZIndex = 19})
+	self.announcement = frame(self.root, {AnchorPoint = Vector2.new(0.5, 0), Position = UDim2.new(0.5, 0, 0, 112), Size = UDim2.new(0.9, 0, 0, 74), BackgroundColor3 = C.background, BackgroundTransparency = 0.04, Visible = false, ZIndex = 18}, 16)
+	node("UISizeConstraint", {MaxSize = Vector2.new(430, 74)}, self.announcement)
+	self.announcementStroke = stroke(self.announcement, C.cyan, 0, 3)
+	self.announcementTitle = label(self.announcement, "YOU ARE A RUNNER", {Position = UDim2.fromOffset(12, 6), Size = UDim2.new(1, -24, 0, 34), TextSize = 26, Font = F.title, TextXAlignment = Enum.TextXAlignment.Center, TextScaled = true, ZIndex = 19})
+	node("UITextSizeConstraint", {MaxTextSize = 28, MinTextSize = 14}, self.announcementTitle)
+	self.announcementCopy = label(self.announcement, "", {Position = UDim2.fromOffset(14, 40), Size = UDim2.new(1, -28, 0, 28), TextSize = 11, TextWrapped = true, TextColor3 = C.muted, TextXAlignment = Enum.TextXAlignment.Center, Font = F.medium, ZIndex = 19})
 end
 
 function UIController:_buildLoading()
 	self.loading = frame(self.root, {Size = UDim2.fromScale(1, 1), BackgroundColor3 = C.background, ZIndex = 50})
-	gradient(self.loading, Color3.fromRGB(110, 70, 220), Color3.fromRGB(255, 96, 184), 45)
-	label(self.loading, "CATCH ME IF YOU CAN", {AnchorPoint = Vector2.new(0.5, 0.5), Position = UDim2.fromScale(0.5, 0.42), Size = UDim2.new(0.9, 0, 0, 70), Font = F.title, TextSize = 40, TextScaled = true, TextXAlignment = Enum.TextXAlignment.Center, TextStrokeTransparency = 0.5, ZIndex = 51})
+	gradient(self.loading, Color3.fromRGB(255, 150, 70), Color3.fromRGB(255, 80, 110), 45)
+	label(self.loading, "CATCH ME IF YOU CAN", {AnchorPoint = Vector2.new(0.5, 0.5), Position = UDim2.fromScale(0.5, 0.42), Size = UDim2.new(0.9, 0, 0, 70), Font = F.title, TextSize = 40, TextScaled = true, TextXAlignment = Enum.TextXAlignment.Center, TextStrokeTransparency = 0.4, ZIndex = 51})
 	label(self.loading, "THE MALL", {AnchorPoint = Vector2.new(0.5, 0.5), Position = UDim2.fromScale(0.5, 0.52), Size = UDim2.new(0.9, 0, 0, 24), Font = F.black, TextSize = 18, TextXAlignment = Enum.TextXAlignment.Center, TextColor3 = C.amber, ZIndex = 51})
-	self.loadingStatus = label(self.loading, "Opening the mall / loading your profile", {AnchorPoint = Vector2.new(0.5, 0), Position = UDim2.fromScale(0.5, 0.6), Size = UDim2.new(0.85, 0, 0, 44), TextColor3 = Color3.fromRGB(255, 240, 255), TextSize = 14, TextWrapped = true, TextXAlignment = Enum.TextXAlignment.Center, ZIndex = 51})
+	self.loadingStatus = label(self.loading, "Opening the mall / loading your profile", {AnchorPoint = Vector2.new(0.5, 0), Position = UDim2.fromScale(0.5, 0.6), Size = UDim2.new(0.85, 0, 0, 44), TextColor3 = Color3.fromRGB(255, 244, 240), TextSize = 14, TextWrapped = true, TextXAlignment = Enum.TextXAlignment.Center, ZIndex = 51})
 	label(self.loading, "TIP: " .. TIPS[math.floor(os.clock() * 7) % #TIPS + 1], {AnchorPoint = Vector2.new(0.5, 1), Position = UDim2.new(0.5, 0, 1, -30), Size = UDim2.new(0.9, 0, 0, 40), TextColor3 = C.text, TextSize = 13, TextWrapped = true, TextXAlignment = Enum.TextXAlignment.Center, Font = F.medium, ZIndex = 51})
 	task.delay(12, function()
 		if self.loading and self.loading.Visible then self.loadingStatus.Text = "Your profile is taking longer to load. Reconnecting automatically..." end
@@ -527,6 +570,8 @@ end
 -- Layout
 ---------------------------------------------------------------------------------------------------
 
+local BIG_MENUS = {Shop = true, Inventory = true}
+
 function UIController:_responsive()
 	local size = self.root.AbsoluteSize
 	local small = size.X < 700
@@ -534,78 +579,87 @@ function UIController:_responsive()
 	local tiny = size.X < 360
 	self.compact = small
 	self.short = short
-	local compactDock = small or short
+	local cell = (small or short) and (tiny and 44 or 48) or 62
 	local horizontal = short
-	local cell = compactDock and (tiny and 40 or 44) or 74
 	self.dockHorizontal = horizontal
-	-- Header
-	self.brand.Visible = size.X >= 560
-	self.brand.Size = UDim2.fromOffset(small and 120 or 176, 52)
-	self.brandLabel.TextSize = small and 13 or 20
-	self.clock.Position = size.X < 560 and UDim2.fromOffset(size.X < 400 and 60 or 80, 0) or UDim2.fromScale(0.5, 0)
-	self.clock.AnchorPoint = size.X < 560 and Vector2.zero or Vector2.new(0.5, 0)
-	self.clock.Size = UDim2.fromOffset(size.X < 360 and 124 or (small and 150 or 230), 66)
-	self.phaseLabel.TextSize = small and 8 or 10
-	self.timerLabel.TextSize = small and 22 or 28
-	self.wallet.Size = UDim2.fromOffset(size.X < 360 and 108 or (small and 116 or 188), 60)
-	self.coinsLabel.TextSize = small and 15 or 21
-	self.levelLabel.TextSize = small and 8 or 10
-	-- Dock: Shop and Locker lead, and stay on screen at every size.
+	-- Header: a compact timer chip and wallet pill.
+	self.clock.Position = size.X < 520 and UDim2.fromOffset(tiny and 8 or 12, 0) or UDim2.fromScale(0.5, 0)
+	self.clock.AnchorPoint = size.X < 520 and Vector2.zero or Vector2.new(0.5, 0)
+	self.clock.Size = UDim2.fromOffset(tiny and 128 or (small and 150 or 190), 50)
+	self.phaseLabel.TextSize = small and 8 or 9
+	self.timerLabel.TextSize = small and 18 or 22
+	self.wallet.Size = UDim2.fromOffset(tiny and 104 or (small and 116 or 150), 44)
+	self.coinsLabel.TextSize = small and 14 or 17
+	-- Dock: Shop, Locker and More, on screen at every size.
 	for _, child in ipairs(self.dock:GetChildren()) do
 		if child:IsA("GuiButton") then
-			child.Size = UDim2.fromOffset(cell, compactDock and cell or 58)
-			local caption = child:FindFirstChild("Caption")
-			local icon = child:FindFirstChild("Icon")
-			if caption then caption.Visible = not compactDock end
+			child.Size = UDim2.fromOffset(cell, cell)
+			local caption, icon = child:FindFirstChild("Caption"), child:FindFirstChild("Icon")
+			if caption then caption.Visible = cell >= 60 end
 			if icon then
-				icon.Size = UDim2.new(1, 0, 0, compactDock and cell or 28)
-				icon.Position = UDim2.fromOffset(0, compactDock and 0 or 5)
-				icon.TextSize = compactDock and 22 or 24
+				icon.Size = UDim2.new(1, 0, 0, cell >= 60 and 30 or cell)
+				icon.Position = UDim2.fromOffset(0, cell >= 60 and 4 or 0)
+				icon.TextSize = cell >= 60 and 26 or 22
 			end
 		end
 	end
 	self.dockLayout.FillDirection = horizontal and Enum.FillDirection.Horizontal or Enum.FillDirection.Vertical
-	self.dockLayout.Padding = UDim.new(0, compactDock and 4 or 6)
-	self.dock.Position = horizontal and UDim2.fromOffset(8, 74) or UDim2.fromOffset(compactDock and 6 or 10, 82)
-	self.dock.Size = horizontal and UDim2.new(1, -16, 0, cell) or UDim2.fromOffset(cell, math.max(60, size.Y - 100))
-	local leftMargin = horizontal and 8 or (cell + 20)
-	local top = horizontal and (74 + cell + 6) or 80
-	self.leftMargin = leftMargin
-	-- Objective
-	local objectiveWidth = math.min(300, size.X - leftMargin - 130)
-	self.objective.Size = UDim2.fromOffset(math.max(180, objectiveWidth), 62)
-	-- Short screens tuck the objective under the dock row instead of beside it, so it never leaves the screen.
+	self.dockLayout.Padding = UDim.new(0, (small or short) and 4 or 6)
+	local dockCount = #DOCK + 1
+	local gap = (small or short) and 4 or 6
+	local dockLength = dockCount * cell + (dockCount - 1) * gap
+	-- The dock lives on the right, so Roblox's own chat (top left) is never moved or covered.
+	self.dock.AnchorPoint = Vector2.new(1, 0)
+	self.dock.Position = horizontal and UDim2.new(1, -8, 0, 58) or UDim2.new(1, small and -6 or -8, 0, 62)
+	self.dock.Size = horizontal and UDim2.fromOffset(dockLength, cell) or UDim2.fromOffset(cell, dockLength)
+	local rightMargin = horizontal and 8 or (cell + (small and 12 or 16))
+	local top = horizontal and (58 + cell + 6) or 62
+	self.rightMargin = rightMargin
+	self.leftMargin = 12
+	-- More popover: beside the More button (below the dock on short screens).
+	self.moreMenu.AnchorPoint = Vector2.new(1, 0)
 	if horizontal then
-		self.objective.Size = UDim2.fromOffset(math.max(180, math.min(300, size.X - 16)), 52)
-		self.objective.Position = UDim2.fromOffset(8, top)
-	elseif small then
-		self.objective.Position = UDim2.fromOffset(leftMargin, 78)
+		self.moreMenu.Position = UDim2.new(1, -8, 0, 58 + cell + 4)
 	else
-		self.objective.Position = UDim2.new(0.5, 0, 0, 82)
+		local y = 62 + (dockCount - 1) * (cell + gap)
+		y = math.min(y, math.max(8, size.Y - self.moreMenu.Size.Y.Offset - 8))
+		self.moreMenu.Position = UDim2.new(1, -rightMargin, 0, y)
 	end
-	self.objective.AnchorPoint = (small or horizontal) and Vector2.zero or Vector2.new(0.5, 0)
-	self.hideMeter.Size = UDim2.fromOffset(math.max(180, math.min(300, size.X - leftMargin - 16)), 84)
-	self.hideMeter.AnchorPoint = Vector2.new(0.5, 0)
-	self.hideMeter.Position = UDim2.new(0.5, 0, 0, horizontal and 140 or (small and 146 or 150))
-	-- Welcome card
-	self.hero.Size = UDim2.fromOffset(math.max(220, math.min(size.X - leftMargin - 16, 430)), short and 200 or 250)
-	self.hero.Position = short and UDim2.fromOffset(leftMargin, top + 6) or UDim2.new(0, leftMargin, 0.5, -90)
-	self.heroTitle.TextSize = small and 26 or 34
-	-- Menu panel: leaves the dock visible. During a round it becomes a side drawer so the world stays in view.
-	local bottom = (compactDock and 8 or 16)
+	-- Objective chip: centered under the timer, or at the left edge on narrow screens.
+	local objectiveWidth = math.min(290, size.X - 12 - rightMargin - 8)
+	self.objective.Size = UDim2.fromOffset(math.max(180, objectiveWidth), 44)
+	if small then
+		self.objective.AnchorPoint = Vector2.zero
+		self.objective.Position = UDim2.fromOffset(12, 58)
+	else
+		self.objective.AnchorPoint = Vector2.new(0.5, 0)
+		self.objective.Position = UDim2.new(0.5, 0, 0, 62)
+	end
+	self.hideMeter.Size = UDim2.fromOffset(math.max(180, math.min(240, size.X - 12 - rightMargin - 8)), 62)
+	self.hideMeter.AnchorPoint = small and Vector2.zero or Vector2.new(0.5, 0)
+	self.hideMeter.Position = small and UDim2.fromOffset(12, 108) or UDim2.new(0.5, 0, 0, 112)
+	-- Menu panel: Shop and Locker are roomy, everything else is a small card. In a round the big menus become a
+	-- narrow drawer so the world stays in view. The panel sits left of the dock and never covers it.
+	local bottom = (small or short) and 8 or 12
 	local drawer = self:_inRound() and size.X >= 700
-	local width = math.min(math.max(250, size.X - leftMargin - 12), drawer and 540 or 1180)
-	self.panel.Size = UDim2.new(0, width, 1, -(top + bottom))
-	self.panel.Position = UDim2.new(0, drawer and (size.X - width - 12) or leftMargin, 0, top)
-	self.panelTitle.TextSize = small and 20 or 26
-	self.panelSubtitle.TextSize = small and 9 or 11
+	local big = BIG_MENUS[self.menu or ""] == true
+	local available = size.X - rightMargin - 12
+	local width
+	if big then width = math.min(math.max(250, available), drawer and 440 or 940)
+	else width = math.min(math.max(250, available), 390) end
+	local height = size.Y - (top + bottom)
+	if not big then height = math.min(height, 520) elseif not drawer then height = math.min(height, 600) end
+	self.panel.Size = UDim2.fromOffset(width, height)
+	self.panel.Position = UDim2.fromOffset(size.X - rightMargin - width, top)
+	self.panelTitle.TextSize = small and 18 or 22
+	self.panelSubtitle.TextSize = small and 9 or 10
 	self.panelSubtitle.TextTruncate = Enum.TextTruncate.AtEnd
-	self.hero.Visible = not self.visited and not self.menu and (self.ctx.State.phase == "Waiting" or self.ctx.State.phase == "Intermission") and not short
-	self.abilities.Visible = not self.menu and UserInputService:GetLastInputType() ~= Enum.UserInputType.Touch and not short
-	self.spectator.Size = UDim2.fromOffset(math.min(320, size.X - 36), 62)
-	self.spectator.Position = UDim2.new(0.5, 0, 1, UserInputService.TouchEnabled and -32 or -96)
+	self.abilities.Visible = UserInputService:GetLastInputType() ~= Enum.UserInputType.Touch and not short and size.X >= 820 and not (self.results and self.results.Visible)
+	self.spectator.Size = UDim2.fromOffset(math.min(280, size.X - 36), 52)
+	self.spectator.Position = UDim2.new(0.5, 0, 1, UserInputService.TouchEnabled and -24 or -66)
 	self.saveLabel.Visible = not short and not small
 	self.versionLabel.Visible = not short
+	if self.results then self:_layoutResults() end
 	self:_updateSpectator()
 end
 
@@ -616,12 +670,12 @@ end
 function UIController:OpenMenu(name)
 	if not self.ctx.Profile.loaded then return end
 	if self.menu == name then self:CloseMenu() return end
+	self:CloseMore()
 	self.menu = name
 	self.player:SetAttribute("CatchMenuOpen", true)
 	self.panel.Visible = true
 	self.panelScale.Scale = self:_motion() and 0.97 or 1
 	self:_tween(self.panelScale, 0.22, {Scale = 1})
-	self.hero.Visible = false
 	self:_responsive()
 	self:_renderMenu()
 	if UserInputService.GamepadEnabled then
@@ -648,16 +702,15 @@ function UIController:_renderMenu()
 	if grid and grid.ClassName == "ScrollingFrame" and grid.CanvasPosition then self.gridScroll = grid.CanvasPosition.Y end
 	self.previewModel, self.previewCamera = nil, nil
 	clear(self.panelContent)
-	local colors = {Shop = C.pink, Inventory = C.cyan, Quests = C.amber, Progress = C.green, Settings = C.card, Leaderboard = C.card, Results = C.amber}
+	local colors = {Shop = C.pink, Inventory = C.blue, Quests = C.amber, Progress = C.green, Settings = C.line, Leaderboard = C.cyan}
 	local banner = colors[self.menu] or C.pink
 	self.bannerGradient.Color = ColorSequence.new(shade(banner, 1.12), shade(banner, 0.82))
 	if self.menu == "Shop" or self.menu == "Inventory" then self:_renderShop()
 	elseif self.menu == "Quests" then self:_renderQuests()
 	elseif self.menu == "Progress" then self:_renderProgress()
 	elseif self.menu == "Settings" then self:_renderSettings()
-	elseif self.menu == "Leaderboard" then self:_renderLeaderboard()
-	elseif self.menu == "Results" then self:_renderResults() end
-	if self:_inRound() and self.menu ~= "Results" then
+	elseif self.menu == "Leaderboard" then self:_renderLeaderboard() end
+	if self:_inRound() and (self.menu == "Shop" or self.menu == "Inventory") then
 		self.panelSubtitle.Text = "The round keeps going while you browse. " .. self.panelSubtitle.Text
 	end
 	-- Rerendering an equipped item or category must not strand controller focus.
@@ -691,7 +744,7 @@ end
 
 -- Skin and mask thumbnails come from a cached preview rig so browsing does not rebuild avatars.
 function UIController:_thumbnail(parent, item, equipped)
-	local key = item.id .. "|" .. (item.category == "masks" and tostring(equipped.skins) or tostring(equipped.masks))
+	local key = item.id .. "|" .. (item.category == "masks" and tostring(equipped.skins) or tostring(equipped.masks)) .. "|" .. (self.avatarBase and "avatar" or "mannequin")
 	local view = node("ViewportFrame", {
 		Name = "Thumb", BackgroundTransparency = 1, Size = UDim2.fromScale(1, 1), ZIndex = 3,
 		Ambient = Color3.fromRGB(200, 205, 235), LightColor = Color3.fromRGB(255, 244, 225), LightDirection = Vector3.new(-1, -0.6, -1),
@@ -712,7 +765,7 @@ function UIController:_thumbnail(parent, item, equipped)
 			skin = item.id
 			mask = ""
 		end
-		local ok, built = pcall(self.Appearance.BuildPreview, skin, mask, extra)
+		local ok, built = pcall(self.Appearance.BuildPreview, skin, mask, extra, {userId = self.player.UserId}, self.avatarBase)
 		if ok and built then
 			self.thumbCount = (self.thumbCount or 0) + 1
 			if self.thumbCount > 48 then self.thumbs, self.thumbCount = {}, 1 end
@@ -809,7 +862,9 @@ function UIController:_renderShop()
 		label(card, item.name, {Name = "Name", Position = UDim2.new(0, 8, 1, -64), Size = UDim2.new(1, -16, 0, 34), Font = F.black, TextSize = portrait and 11 or 13, TextWrapped = true, TextYAlignment = Enum.TextYAlignment.Center, ZIndex = 4})
 		local text, color = self:_cardStatus(item, owned, equipped)
 		label(card, text, {Name = "Status", Position = UDim2.new(0, 8, 1, -28), Size = UDim2.new(1, -16, 0, 20), Font = F.black, TextSize = 10, TextColor3 = color, TextTruncate = Enum.TextTruncate.AtEnd, ZIndex = 4})
-		if chosen then stroke(card, C.text, 0, 3) end
+		-- Rarity at a glance: Epic and Legendary cards carry a colored outline; the chosen card is outlined in white.
+		if chosen then stroke(card, C.text, 0, 3)
+		elseif item.rarity == "Epic" or item.rarity == "Legendary" then stroke(card, rarity, 0, item.rarity == "Legendary" and 3 or 2) end
 	end
 	if not compact and grid.ClassName == "ScrollingFrame" and self.gridScroll then grid.CanvasPosition = Vector2.new(0, self.gridScroll) end
 	if #visible == 0 then
@@ -862,7 +917,7 @@ function UIController:_renderItemDetail(parent, item, horizontal)
 	end
 	local skin = extra.skins ~= "" and extra.skins or "skin_courier"
 	local mask = extra.masks or ""
-	local success, rig = pcall(self.Appearance.BuildPreview, skin, mask, extra)
+	local success, rig = pcall(self.Appearance.BuildPreview, skin, mask, extra, {userId = self.player.UserId}, self.avatarBase)
 	if success and rig then
 		rig.Parent = world
 		self.previewModel = rig
@@ -1001,7 +1056,7 @@ end
 
 function UIController:_renderSettings()
 	self.panelTitle.Text = "SETTINGS"
-	self.panelSubtitle.Text = "CATCH ME IF YOU CAN / " .. tostring(self.ctx.Config.Version or "v0.4.0") .. " / Preferences save with your profile."
+	self.panelSubtitle.Text = "CATCH ME IF YOU CAN / " .. tostring(self.ctx.Config.Version or "v0.5.0") .. " / Preferences save with your profile."
 	local container = scroll(self.panelContent)
 	list(container, false, 10)
 	local settings = self.ctx.Profile.settings or {}
@@ -1062,52 +1117,94 @@ function UIController:_renderLeaderboard()
 	end
 end
 
--- Results show exactly what the server granted (arrives as a "reward" notice).
+-- Results: a compact card at the side of the screen (not a full panel), so the podium and the world stay visible.
+-- Practice rounds say plainly that nothing is saved; real rounds show exactly what the server granted
+-- (it arrives as a "reward" notice).
+function UIController:_buildResults()
+	self.results = frame(self.root, {Name = "ResultsCard", AnchorPoint = Vector2.new(0, 0.5), Position = UDim2.new(0, 12, 0.5, 0), Size = UDim2.fromOffset(330, 240), BackgroundColor3 = C.background, Visible = false, ZIndex = 16}, 16)
+	stroke(self.results, C.amber, 0, 3)
+	gradient(self.results, Color3.fromRGB(56, 66, 124), C.background, 110)
+	self.resultsTitle = label(self.results, "", {Position = UDim2.fromOffset(14, 8), Size = UDim2.new(1, -62, 0, 28), Font = F.title, TextSize = 22, TextTruncate = Enum.TextTruncate.AtEnd, ZIndex = 17})
+	self.resultsSubtitle = label(self.results, "", {Position = UDim2.fromOffset(14, 36), Size = UDim2.new(1, -28, 0, 28), TextSize = 10, TextColor3 = C.muted, TextWrapped = true, TextYAlignment = Enum.TextYAlignment.Top, Font = F.medium, ZIndex = 17})
+	button(self.results, "X", function() self:_hideResults() end, {Name = "ResultsClose", Position = UDim2.new(1, -42, 0, 8), Size = UDim2.fromOffset(32, 32), BackgroundColor3 = C.coral, TextSize = 13, ZIndex = 18})
+	self.resultsBody = frame(self.results, {Name = "ResultsBody", Position = UDim2.fromOffset(12, 68), Size = UDim2.new(1, -24, 1, -118), BackgroundTransparency = 1, ZIndex = 17})
+	list(self.resultsBody, false, 5)
+	button(self.results, "OK", function() self:_hideResults() end, {Name = "ViewPodium", AnchorPoint = Vector2.new(0, 1), Position = UDim2.new(0, 12, 1, -10), Size = UDim2.new(0.4, -16, 0, 34), BackgroundColor3 = C.green, TextColor3 = C.ink, TextSize = 12, ZIndex = 18})
+	button(self.results, "MY CAREER", function() self:_hideResults() self:OpenMenu("Progress") end, {Name = "ViewCareer", AnchorPoint = Vector2.new(1, 1), Position = UDim2.new(1, -12, 1, -10), Size = UDim2.new(0.6, -16, 0, 34), TextSize = 12, ZIndex = 18})
+end
+
+function UIController:_layoutResults()
+	local size = self.root.AbsoluteSize
+	local winners = math.min(#(self.ctx.State.winners or {}), 3)
+	local rewarded = self.lastReward ~= nil and not self.ctx.State.practice
+	local height = 132 + winners * 24 + (rewarded and 70 or 26)
+	height = math.min(height, size.Y - 90)
+	if size.X < 700 then
+		self.results.AnchorPoint = Vector2.new(0.5, 1)
+		self.results.Position = UDim2.new(0.5, 0, 1, -62)
+		self.results.Size = UDim2.fromOffset(math.min(340, size.X - 24), math.min(height, size.Y - 130))
+	else
+		self.results.AnchorPoint = Vector2.new(0, 0.5)
+		self.results.Position = UDim2.new(0, 12, 0.5, 0)
+		self.results.Size = UDim2.fromOffset(330, height)
+	end
+end
+
+function UIController:_showResults()
+	self:CloseMore()
+	self.results.Visible = true
+	self:_renderResults()
+	self:_responsive()
+end
+
+function UIController:_hideResults()
+	if self.results and self.results.Visible then
+		self.results.Visible = false
+		self:_responsive()
+	end
+end
+
 function UIController:_renderResults()
 	local state = self.ctx.State
 	local winners = state.winners or {}
 	local won = table.find(winners, self.player.UserId) ~= nil
-	self.panelTitle.Text = state.practice and "ROUTE LEARNED. CHASE NEXT." or (won and "YOU DID IT!" or "ROUND OVER")
-	self.panelSubtitle.Text = state.practice and "Solo practice / no coins, XP, rating, or wins awarded" or "The next round starts automatically."
-	local container = scroll(self.panelContent)
-	list(container, false, 12)
-	local headline = card(container, {Name = "WinnerHeadline", Size = UDim2.new(1, -8, 0, 120), LayoutOrder = 0})
-	gradient(headline, Color3.fromRGB(110, 76, 210), Color3.fromRGB(52, 38, 120), 20)
-	label(headline, state.practice and "PRACTICE" or (won and "VICTORY LAP" or "BETTER LUCK NEXT TIME"), {Position = UDim2.fromOffset(18, 14), Size = UDim2.new(1, -36, 0, 18), TextSize = 11, Font = F.black, TextColor3 = C.amber, TextXAlignment = Enum.TextXAlignment.Center})
-	label(headline, state.resultText or "ROUND COMPLETE", {Position = UDim2.fromOffset(18, 40), Size = UDim2.new(1, -36, 0, 64), TextSize = 30, Font = F.title, TextWrapped = true, TextXAlignment = Enum.TextXAlignment.Center, TextScaled = true})
-	local reward = self.lastReward
-	if reward and not state.practice then
-		local rewardCard = card(container, {Name = "RewardBreakdown", Size = UDim2.new(1, -8, 0, 214), LayoutOrder = 1})
-		label(rewardCard, "YOUR REWARDS", {Position = UDim2.fromOffset(18, 12), Size = UDim2.new(1, -36, 0, 16), TextSize = 11, Font = F.black, TextColor3 = C.cyan})
-		local rows = {
-			{"🪙 Mall coins collected", reward.pickups}, {"😮 Close calls", reward.closeCalls},
-			{"🎯 Runners tagged", reward.tags}, {"🔍 Hidden runners found", reward.finds}, {"⏱ Seconds survived", reward.survived},
-		}
-		local y = 34
-		for _, row in ipairs(rows) do
-			if (row[2] or 0) > 0 then
-				label(rewardCard, row[1], {Position = UDim2.fromOffset(18, y), Size = UDim2.new(1, -110, 0, 20), TextSize = 12, TextColor3 = C.muted, Font = F.medium})
-				label(rewardCard, number(row[2]), {Position = UDim2.new(1, -90, 0, y), Size = UDim2.fromOffset(72, 20), TextSize = 14, TextXAlignment = Enum.TextXAlignment.Right})
-				y += 22
+	clear(self.resultsBody)
+	self.resultsTitle.Text = state.practice and "PRACTICE DONE" or (won and "YOU DID IT!" or "ROUND OVER")
+	self.resultsTitle.TextColor3 = state.practice and C.cyan or (won and C.amber or C.text)
+	self.resultsSubtitle.Text = state.practice and "Practice rounds are not saved: no XP, coins, rating or wins."
+		or (state.resultText or "The next round starts automatically.")
+	local function row(text, props)
+		local values = {Size = UDim2.new(1, 0, 0, 20), TextSize = 12, TextColor3 = C.muted, Font = F.medium, ZIndex = 18}
+		for key, value in pairs(props or {}) do values[key] = value end
+		return label(self.resultsBody, text, values)
+	end
+	if state.practice then
+		local picked = self.pickupCount or 0
+		row(picked > 0 and ("🪙 " .. picked .. " practice coins grabbed (not saved)") or "Explore every route, then jump into a real round.")
+		row("Your coins and level are unchanged.", {TextSize = 10})
+	else
+		local reward = self.lastReward
+		if reward then
+			local card = frame(self.resultsBody, {Name = "RewardBreakdown", Size = UDim2.new(1, 0, 0, 64), BackgroundColor3 = C.panel}, 12)
+			label(card, "+" .. number(reward.xp) .. " XP    +" .. number(reward.coins) .. " COINS", {Name = "RewardTotal", Position = UDim2.fromOffset(10, 4), Size = UDim2.new(1, -20, 0, 30), Font = F.title, TextSize = 22, TextColor3 = C.amber, ZIndex = 18})
+			local parts = {}
+			for _, spec in ipairs({{"🪙", reward.pickups}, {"😮", reward.closeCalls}, {"🎯", reward.tags}, {"🔍", reward.finds}, {"⏱", reward.survived}}) do
+				if (spec[2] or 0) > 0 then table.insert(parts, spec[1] .. " " .. number(spec[2])) end
 			end
-		end
-		label(rewardCard, "+" .. number(reward.xp) .. " XP    +" .. number(reward.coins) .. " COINS", {Name = "RewardTotal", AnchorPoint = Vector2.new(0, 1), Position = UDim2.new(0, 18, 1, -16), Size = UDim2.new(1, -36, 0, 36), Font = F.title, TextSize = 26, TextColor3 = C.amber})
-		if reward.rating and reward.rating ~= 0 then
-			label(rewardCard, (reward.rating > 0 and "+" or "") .. number(reward.rating) .. " RATING", {AnchorPoint = Vector2.new(1, 1), Position = UDim2.new(1, -18, 1, -22), Size = UDim2.fromOffset(110, 20), TextSize = 11, Font = F.black, TextColor3 = reward.rating > 0 and C.green or C.coral, TextXAlignment = Enum.TextXAlignment.Right})
+			if reward.rating and reward.rating ~= 0 then table.insert(parts, (reward.rating > 0 and "+" or "") .. number(reward.rating) .. " RATING") end
+			label(card, table.concat(parts, "   "), {Position = UDim2.fromOffset(10, 36), Size = UDim2.new(1, -20, 0, 22), TextSize = 11, TextColor3 = C.muted, ZIndex = 18, TextTruncate = Enum.TextTruncate.AtEnd})
+		else
+			row("Counting your rewards...")
 		end
 	end
+	local medals = {"🥇", "🥈", "🥉"}
 	for index, userId in ipairs(winners) do
+		if index > 3 then break end
 		local name = "Player " .. tostring(userId)
 		for _, entry in ipairs(state.players or {}) do if entry.userId == userId then name = entry.displayName or entry.name break end end
-		local row = card(container, {Size = UDim2.new(1, -8, 0, 76), LayoutOrder = 10 + index, BackgroundColor3 = userId == self.player.UserId and C.card or C.panel})
-		label(row, string.format("%02d", index), {Position = UDim2.fromOffset(17, 14), Size = UDim2.fromOffset(48, 48), TextColor3 = C.amber, Font = F.title, TextSize = 30})
-		label(row, "CHAMPION", {Position = UDim2.fromOffset(78, 12), Size = UDim2.new(1, -96, 0, 16), TextColor3 = C.amber, Font = F.black, TextSize = 10})
-		label(row, name .. (userId == self.player.UserId and " / YOU" or ""), {Position = UDim2.fromOffset(78, 34), Size = UDim2.new(1, -96, 0, 27), TextSize = 19, TextTruncate = Enum.TextTruncate.AtEnd})
+		row(medals[index] .. "  " .. name .. (userId == self.player.UserId and "  (YOU)" or ""), {TextColor3 = userId == self.player.UserId and C.amber or C.text, Font = F.bold, TextTruncate = Enum.TextTruncate.AtEnd})
 	end
-	local footer = card(container, {Size = UDim2.new(1, -8, 0, 116), LayoutOrder = 100})
-	label(footer, "LEVEL " .. number(self.ctx.Profile.level) .. "  /  " .. number(self.ctx.Profile.xp) .. " XP  /  " .. number(self.ctx.Profile.coins) .. " COINS", {Position = UDim2.fromOffset(16, 12), Size = UDim2.new(1, -32, 0, 30), TextSize = 12, TextColor3 = C.cyan, TextWrapped = true, TextXAlignment = Enum.TextXAlignment.Center})
-	button(footer, "VIEW PODIUM", function() self:CloseMenu() end, {Name = "ViewPodium", Position = UDim2.fromOffset(12, 58), Size = UDim2.new(0.5, -18, 0, 44), BackgroundColor3 = C.green, TextColor3 = C.ink, TextSize = 11})
-	button(footer, "MY CAREER", function() self:OpenMenu("Progress") end, {Name = "ViewCareer", Position = UDim2.new(0.5, 6, 0, 58), Size = UDim2.new(0.5, -18, 0, 44), TextSize = 11})
+	self:_layoutResults()
 end
 
 ---------------------------------------------------------------------------------------------------
@@ -1158,6 +1255,7 @@ end
 
 function UIController:OnCharacter(character)
 	if not character then return end
+	task.delay(2, function() if not self.destroyed and self.player.Character == character then self:_loadAvatarBase() end end)
 	task.spawn(function()
 		character:WaitForChild("Humanoid", 10)
 		if self.destroyed or self.player.Character ~= character then return end
@@ -1212,7 +1310,7 @@ function UIController:_updateObjective(state, role)
 		self.objectiveText.Text = "Search (E) · Scan (Q) · Tag" .. (finds > 0 and ("  ·  Found: " .. finds) or "")
 	else
 		local count = math.max(record and record.pickups or 0, self.pickupCount or 0)
-		self.objectiveText.Text = "🪙 Coins " .. count .. "/" .. cap .. "  ·  Hold E to hide"
+		self.objectiveText.Text = (state.practice and "🪙 Practice coins " or "🪙 Coins ") .. count .. "/" .. cap .. "  ·  Hold E to hide"
 	end
 	local hiding = self.hideEndsAt ~= nil and role == "Runner"
 	self.hideMeter.Visible = hiding
@@ -1265,7 +1363,7 @@ function UIController:OnState(state)
 	local special = modifier and modifier.id ~= "classic" and not state.practice
 	if special and phase == "Intermission" then labels.Intermission = "NEXT: " .. modifier.name .. " IN"
 	elseif special and phase == "Active" then labels.Active = modifier.name end
-	self.phaseLabel.Text = state.practice and "STUDIO / SOLO PRACTICE" or (labels[phase] or "CATCH ME IF YOU CAN")
+	self.phaseLabel.Text = state.practice and "PRACTICE / NOTHING IS SAVED" or (labels[phase] or "CATCH ME IF YOU CAN")
 	self.phaseLabel.TextColor3 = C.cyan
 	self.aliveLabel.Text = active and (tostring(state.aliveRunners or 0) .. " RUNNERS LEFT") or (phase == "Waiting" and "Waiting for the crew" or (state.mapName or "THE MALL"))
 	self.emoteButton.Visible = not active
@@ -1276,18 +1374,19 @@ function UIController:OnState(state)
 		end
 		if self.tutorial and self.tutorial.Visible and role ~= "Spectator" then self:_finishTutorial() end
 		self.visited = true
+		self:_hideResults()
 		self:_announce(role, state.practice, state.modifier, self.lastRole)
 	end
 	if phase == "Results" and self.lastResult ~= state.roundId then
 		self.lastResult = state.roundId
-		self:OpenMenu("Results")
-	elseif self.menu == "Results" and phase ~= "Results" then self:CloseMenu() end
+		self:_showResults()
+	elseif phase ~= "Results" and self.results.Visible then self:_hideResults() end
 	if not active then self.hideEndsAt = nil end
 	self.lastRound = state.roundId
 	self.lastRole = role
 	self:_responsive()
 	-- The drawer layout and "round keeps going" notes follow the round, so redraw an open menu once.
-	if self.menu and self.menu ~= "Results" and self.menuWasInRound ~= active then self:_renderMenu() end
+	if self.menu and self.menuWasInRound ~= active then self:_renderMenu() end
 	self.menuWasInRound = active
 	self:_updateSpectator()
 	if self.menu == "Leaderboard" then self:_renderLeaderboardRefresh() end
@@ -1314,9 +1413,12 @@ function UIController:OnProfile(profile)
 	self.saveLabel.TextColor3 = profile.persistence == "saved" and C.muted or C.amber
 	self.pendingId = nil
 	local login = profile.loginStatus
-	local questsButton = self.dock and self.dock:FindFirstChild("Quests")
-	local badge = questsButton and questsButton:FindFirstChild("Badge")
-	if badge then badge.Visible = login ~= nil and login.canClaim == true end
+	local flagged = login ~= nil and login.canClaim == true
+	for _, name in ipairs({"Quests", "More"}) do
+		local holder = self.dockButtons and self.dockButtons[name]
+		local badge = holder and holder:FindFirstChild("Badge")
+		if badge then badge.Visible = flagged end
+	end
 	if profile.loaded and profile.settings and profile.settings.tutorialDone == false and not self.tutorialShown then
 		self.tutorialShown = true
 		self:ShowTutorial()
@@ -1330,7 +1432,10 @@ end
 function UIController:OnNotice(notice)
 	if not self.gui or type(notice) ~= "table" then return end
 	if notice.text then self:Toast(notice.text, notice.kind) end
-	if notice.kind == "purchase" or notice.kind == "unlock" then
+	if notice.kind == "menu" then
+		-- Hub kiosks: the server only asks; menus open on this client.
+		if notice.menu == "Shop" or notice.menu == "Inventory" then self:OpenMenu(notice.menu) end
+	elseif notice.kind == "purchase" or notice.kind == "unlock" then
 		self.pendingId = nil
 		if self.menu == "Shop" or self.menu == "Inventory" then self:_renderMenu() end
 	elseif notice.kind == "pickup" then
@@ -1345,7 +1450,7 @@ function UIController:OnNotice(notice)
 		end
 	elseif notice.kind == "reward" then
 		self.lastReward = notice
-		if self.menu == "Results" then self:_renderMenu() end
+		if self.results.Visible then self:_renderResults() end
 	end
 end
 
@@ -1356,6 +1461,7 @@ function UIController:Destroy()
 	for _, connection in ipairs(self.connections) do connection:Disconnect() end
 	self.player:SetAttribute("CatchMenuOpen", false)
 	self:_restoreCamera()
+	if self.avatarBase then self.avatarBase:Destroy() self.avatarBase = nil end
 	if self.gui then self.gui:Destroy() end
 end
 

@@ -37,8 +37,8 @@ local function diningIsland(ctx, lx, lz, color)
 	local f, P = ctx.f, ctx.P
 	f.can("DiningTable", lx, 0, lz, 4.6, 2.8, P.white, Enum.Material.SmoothPlastic, true, {cover = "Low", vault = true})
 	f.can("DiningTop", lx, 2.8, lz, 5, 0.25, color, Enum.Material.SmoothPlastic, false)
-	for i = 0, 3 do
-		local a = i * math.pi / 2 + math.pi / 4
+	for i = 0, 1 do
+		local a = i * math.pi + math.pi / 4
 		f.can("Stool", lx + math.cos(a) * 3.4, 0, lz + math.sin(a) * 3.4, 1.6, 1.8, color, Enum.Material.SmoothPlastic, false)
 	end
 end
@@ -254,6 +254,10 @@ function Zones.defs(P, Fx)
 			Fx.gondola(ctx, 24, 40, 16, false, P.white, fur, 7)
 			Fx.rack(ctx, 12, 22, 8, false, P.coral, P.sun)
 			Fx.counter(ctx, 22, 6, 10, 2.6, P.orange, P.white, P.orange)
+			-- A dog house with a pitched red roof.
+			Fx.hideCell(ctx, {id = "pet_doghouse", kind = "Dog House", lx = -34, lz = 48, yaw = 0, w = 6, d = 6, h = 6.5, wall = P.wood, accent = P.red, door = P.darkwood,
+				doorMaterial = Enum.Material.Wood, carpet = P.sun, doorGap = 0.4,
+				decor = function(g, w, d, h) g.b("DogRoof", 0, h, 0, w + 1.2, 0.8, d + 1.2, P.red, Enum.Material.SmoothPlastic, false) end})
 			for i = 1, 3 do Fx.hideCell(ctx, {id = "pet_carrier_" .. i, kind = "Pet Carrier", lx = -18 + (i - 1) * 6, lz = 60, yaw = 0, w = 5, d = 4.5, h = 7, wall = P.orange, accent = P.sun, door = P.sun, carpet = P.peach, doorMaterial = Enum.Material.Metal}) end
 		end})
 

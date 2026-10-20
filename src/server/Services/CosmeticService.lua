@@ -100,13 +100,38 @@ function CosmeticService:Apply(player, refreshLoadingAppearance, force)
 	end
 	self.pendingLook[player] = nil
 	local equipped = profile and ownedEquipment(self.ctx,profile) or self.ctx.Catalog.DefaultEquipment
+	local previousSkin = rig:GetAttribute("CatchAppearanceSkinId")
 	local folder = Appearance.Apply(rig,equipped.skins,equipped.masks,equipped,{userId=player.UserId})
 	if not folder then return false end
+	if profile and previousSkin ~= nil and previousSkin ~= equipped.skins then self:_celebrate(rig,equipped.skins) end
 	nameplate(folder,rig,player.DisplayName,equipped.nameplates,nil,self.ctx.Catalog,player.UserId)
 	Appearance.ApplyRole(rig,player:GetAttribute("RoundRole") or rig:GetAttribute("RoundRole") or "Lobby")
 	local humanoid = rig:FindFirstChildOfClass("Humanoid")
 	if humanoid then humanoid.DisplayDistanceType = Enum.HumanoidDisplayDistanceType.None end
 	return profile ~= nil
+end
+
+-- A short rarity-colored sparkle burst when a better look is equipped. Cosmetic only and capped to one emitter.
+local BURST = {Rare={count=14,color=Color3.fromRGB(90,180,255)},Epic={count=24,color=Color3.fromRGB(200,120,255)},Legendary={count=40,color=Color3.fromRGB(255,205,70)}}
+function CosmeticService:_celebrate(rig,skinId)
+	local item = self.ctx.Catalog.Get(skinId)
+	local style = item and BURST[item.rarity]
+	local root = rig:FindFirstChild("HumanoidRootPart")
+	if not style or not root then return end
+	local emitter = Instance.new("ParticleEmitter")
+	emitter.Name = "CatchEquipBurst"
+	emitter.Color = ColorSequence.new(style.color,Color3.fromRGB(255,255,255))
+	emitter.Texture = "rbxasset://textures/particles/sparkles_main.dds"
+	emitter.Lifetime = NumberRange.new(0.7,1.2)
+	emitter.Speed = NumberRange.new(8,15)
+	emitter.SpreadAngle = Vector2.new(180,180)
+	emitter.Size = NumberSequence.new({NumberSequenceKeypoint.new(0,0.9),NumberSequenceKeypoint.new(1,0)})
+	emitter.Transparency = NumberSequence.new({NumberSequenceKeypoint.new(0,0),NumberSequenceKeypoint.new(1,1)})
+	emitter.LightEmission = 0.6
+	emitter.Rate = 0
+	emitter.Parent = root
+	emitter:Emit(style.count)
+	game:GetService("Debris"):AddItem(emitter,1.6)
 end
 
 function CosmeticService:UpdateRole(player)
@@ -202,6 +227,22 @@ function CosmeticService:Emote(player, id)
 	return true
 end
 
+-- Winners stand on the podium as their REAL avatar (from their HumanoidDescription) wearing their equipped
+-- cosmetics. If the description cannot be fetched, a neutral mannequin wearing the same cosmetics is used.
+function CosmeticService:_buildShowcase(player,profile)
+	local equipped = ownedEquipment(self.ctx,profile)
+	local base
+	local character = player.Character
+	local humanoid = character and character:FindFirstChildOfClass("Humanoid")
+	if humanoid then
+		local ok,description = pcall(function() return humanoid:GetAppliedDescription() end)
+		if ok and description then base = Appearance.BuildAvatar(description,humanoid.RigType) end
+	end
+	local rig = Appearance.BuildPreview(equipped.skins,equipped.masks,equipped,{userId=player.UserId},base)
+	if base then base:Destroy() end
+	return rig,equipped
+end
+
 function CosmeticService:ShowWinners(players)
 	if self.podiumSpin then self.podiumSpin:Disconnect(); self.podiumSpin=nil end
 	if self.podiums then self.podiums:Destroy(); self.podiums=nil end
@@ -213,39 +254,40 @@ function CosmeticService:ShowWinners(players)
 	folder.Parent = workspace
 	self.podiums = folder
 	local showcases = {}
+	local began = os.clock()
 	for index=1,math.min(#players,#positions) do
 		local player = players[index]
 		local profile = self.ctx.Services.DataService:Get(player)
 		if profile then
-			local equipped = ownedEquipment(self.ctx,profile)
-			local rig = Appearance.BuildPreview(equipped.skins,equipped.masks,equipped,{userId=player.UserId})
-			rig.Name = "Winner_"..tostring(player.UserId)
-			rig.Parent = folder
-			rig:PivotTo(positions[index])
-			nameplate(rig.CatchAppearance,rig,player.DisplayName,equipped.nameplates,"CHASE CHAMPION",self.ctx.Catalog,player.UserId)
-			local animate = Appearance.CreatePreviewPose(rig,equipped.victories)
-			if animate then
-				animate(0)
-				table.insert(showcases,{rig=rig,origin=positions[index],spin=equipped.victories=="victory_spin",animate=animate})
-			end
+			task.spawn(function()
+				local ok,rig,equipped = pcall(function() return self:_buildShowcase(player,profile) end)
+				if not ok or not rig then return end
+				if self.podiums ~= folder or not folder.Parent then rig:Destroy(); return end
+				rig.Name = "Winner_"..tostring(player.UserId)
+				rig.Parent = folder
+				rig:PivotTo(positions[index])
+				nameplate(rig.CatchAppearance,rig,player.DisplayName,equipped.nameplates,"CHASE CHAMPION",self.ctx.Catalog,player.UserId)
+				local animate = Appearance.CreatePreviewPose(rig,equipped.victories)
+				if animate then
+					animate(0)
+					table.insert(showcases,{rig=rig,origin=positions[index],spin=equipped.victories=="victory_spin",animate=animate})
+				end
+			end)
 		end
 	end
-	if #showcases > 0 then
-		local began = os.clock()
-		self.podiumSpin = RunService.Heartbeat:Connect(function()
-			if not folder.Parent then
-				if self.podiumSpin then self.podiumSpin:Disconnect(); self.podiumSpin=nil end
-				return
+	self.podiumSpin = RunService.Heartbeat:Connect(function()
+		if not folder.Parent then
+			if self.podiumSpin then self.podiumSpin:Disconnect(); self.podiumSpin=nil end
+			return
+		end
+		local elapsed = os.clock()-began
+		for _, item in ipairs(showcases) do
+			if item.rig.Parent then
+				if item.spin then item.rig:PivotTo(item.origin*CFrame.Angles(0,elapsed*0.7,0)) end
+				item.animate(elapsed)
 			end
-			local elapsed = os.clock()-began
-			for _, item in ipairs(showcases) do
-				if item.rig.Parent then
-					if item.spin then item.rig:PivotTo(item.origin*CFrame.Angles(0,elapsed*0.7,0)) end
-					item.animate(elapsed)
-				end
-			end
-		end)
-	end
+		end
+	end)
 end
 
 function CosmeticService:_watchPlayer(player)

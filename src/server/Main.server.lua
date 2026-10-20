@@ -21,7 +21,7 @@ for _, name in ipairs({"State", "Action", "Profile", "Notice", "Query"}) do
 end
 local ctx = {Config=Config, Catalog=Catalog, Rules=Rules, Modifiers=Modifiers, Achievements=Achievements, Remotes=remotes, Services={}}
 ctx.World = MapBuilder.Build()
-for _, name in ipairs({"DataService", "CosmeticService", "ShopService", "MovementService", "RoundService", "HideService"}) do
+for _, name in ipairs({"DataService", "CosmeticService", "ShopService", "MovementService", "RoundService", "HideService", "HubService"}) do
 	ctx.Services[name] = require(script.Parent.Services[name]).new(ctx)
 end
 
@@ -98,7 +98,7 @@ remotes.Query.OnServerInvoke = function(player)
 	return {state=ctx.Services.RoundService:Snapshot(),profile=ctx.Services.DataService:Snapshot(player)}
 end
 Players.PlayerRemoving:Connect(function(player) buckets[player]=nil; queryTimes[player]=nil end)
-for _, name in ipairs({"DataService", "CosmeticService", "ShopService", "MovementService", "RoundService", "HideService"}) do
+for _, name in ipairs({"DataService", "CosmeticService", "ShopService", "MovementService", "RoundService", "HideService", "HubService"}) do
 	local service = ctx.Services[name]
 	if service.Start then service:Start() end
 end

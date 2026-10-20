@@ -23,7 +23,7 @@ for _, instance in ipairs(map.Model:GetDescendants()) do
 			size = {instance.Size.X, instance.Size.Y, instance.Size.Z},
 			color = {instance.Color.R, instance.Color.G, instance.Color.B}, alpha = instance.Transparency,
 			shape = instance:IsA("WedgePart") and "Wedge" or (instance:IsA("Part") and instance.Shape.Name or "Block"),
-			neon = instance.Material == roblox.Enum.Material.Neon, collide = instance.CanCollide,
+			neon = instance.Material == roblox.Enum.Material.Neon, material = instance.Material.Name, collide = instance.CanCollide,
 			parent = instance.Parent and instance.Parent.Name or "",
 		})
 	end

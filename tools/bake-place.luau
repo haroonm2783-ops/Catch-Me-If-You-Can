@@ -70,6 +70,8 @@ camera.Parent=world
 world.CurrentCamera=camera
 -- The Roblox player camera controller takes over in Play mode.
 place:GetService("StarterPlayer").GameSettingsAvatar=roblox.Enum.GameAvatarType.R15
+-- ShadowMap: soft sun shadows without Future lighting's cost on phones. Lighting.Technology is not scriptable at runtime.
+place:GetService("Lighting").Technology=roblox.Enum.Technology.ShadowMap
 local xml, binary = roblox.serializePlace(place,true), roblox.serializePlace(place,false)
 -- Generate the requested delivery names from this build, retaining the existing
 -- canonical paths for current Rojo workflows and links. They are byte-identical.
@@ -96,5 +98,7 @@ for path in pairs(deliverables) do
 	assert(reopened:GetService("ReplicatedStorage"):FindFirstChild("CatchShared"):FindFirstChild("Appearance"),"Missing cosmetics")
 	assert(reopened:GetService("ServerScriptService"):FindFirstChild("CatchServer"):FindFirstChild("Main"),"Missing server bootstrap")
 	assert(reopened:GetService("StarterPlayer").GameSettingsAvatar==roblox.Enum.GameAvatarType.R15,"R15 avatar setting")
+	assert(reopened:GetService("Lighting").Technology==roblox.Enum.Technology.ShadowMap,"ShadowMap lighting technology persists in the saved place")
+	assert(reopened:GetService("StarterPlayer").LoadCharacterAppearance==true,"Players keep their own Roblox avatar")
 	print("Verified serialized place: "..path)
 end

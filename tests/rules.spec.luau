@@ -95,10 +95,9 @@ for category,id in pairs(Catalog.DefaultEquipment) do
 end
 equal(Catalog.IsEquippable("bundles"),false,"Bundles cannot equip")
 equal(Catalog.IsEquippable("skins"),true,"Skins can equip")
-equal(#Catalog.ForCategory("skins"),8,"Eight distinct launch skins")
+equal(#Catalog.ForCategory("skins"),13,"Thirteen collectible skins (including the untouched default)")
 equal(#Catalog.ForCategory("masks"),8,"Eight launch masks")
-equal(#Catalog.ForCategory("tones"),7,"Auto plus six skin tones")
-equal(#Catalog.ForCategory("hairColors"),9,"Auto plus eight hair colors")
+equal(#Catalog.ForCategory("tones")+#Catalog.ForCategory("hairColors"),0,"Players keep their own skin tone and hair")
 -- Every premium item is cosmetic: only an appearance category, never a gameplay stat.
 local rarities,free,earned,coins,robux={},0,0,0,0
 for _,item in pairs(Catalog.Items) do
@@ -107,7 +106,7 @@ for _,item in pairs(Catalog.Items) do
 	equal(item.stat==nil and item.speed==nil and item.advantage==nil,true,"Catalog entries carry no gameplay modifiers: "..item.id)
 end
 equal(rarities.Common>=3 and rarities.Rare>=3 and rarities.Epic>=3 and rarities.Legendary>=2,true,"All four rarity tiers are populated")
-equal(earned>=8 and coins>=8 and free>=10,true,"Meaningful free and earnable cosmetics exist beside Robux items")
+equal(earned>=8 and coins>=8 and free>=6,true,"Meaningful free and earnable cosmetics exist beside Robux items")
 equal(robux>=8 and robux<=14,true,"Robux items are a premium minority")
 for _,id in ipairs({"skin_courier","skin_rooftop","skin_streetwear","skin_cyber"}) do equal(Catalog.Get(id).currency~="Robux",true,"Skin can be earned without Robux: "..id) end
 print("PASS: "..assertions.." economy, profile, rank, quest and catalog assertions")

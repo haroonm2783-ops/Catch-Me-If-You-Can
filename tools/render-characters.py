@@ -165,7 +165,6 @@ def main():
     sheets = json.loads(args.input.read_text())["sheets"]
     sheet(sheets["skins"],4,(760,520),"CATCH ME IF YOU CAN / SKINS",[(0,0.35,-10),(-6,1.0,-10),(5,1.0,10)],args.outdir/"Character-lineup.png")
     sheet(sheets["masks"],4,(420,380),"CATCH ME IF YOU CAN / MASKS",[(0,0.2,-10),(-6,0.6,-10)],args.outdir/"Mask-lineup.png")
-    sheet(sheets["moods"],3,(420,380),"CATCH ME IF YOU CAN / EXPRESSIONS",[(0,0.2,-10)],args.outdir/"Expression-lineup.png")
 
 
 if __name__=="__main__":

@@ -213,7 +213,7 @@ for _, size in ipairs({Vector2.new(1440, 860), Vector2.new(390, 760), Vector2.ne
 		{id = "tags", text = "Tag 5 runners", xp = 75, coins = 30, goal = 5, progress = 2, claimed = false}}
 	f.ctx.State.winners = {42}; f.ctx.State.resultText = "The runners own Neon Heights!"
 	local ui = f.load("UIController"); f.ctx.Controllers.UIController = ui; ui:Start()
-	for _, menu in ipairs({"Shop", "Inventory", "Quests", "Progress", "Settings", "Leaderboard", "Results"}) do
+	for _, menu in ipairs({"Shop", "Inventory", "Quests", "Progress", "Settings", "Leaderboard"}) do
 		ui:OpenMenu(menu)
 		for _, node in ipairs(ui.panelContent:GetDescendants()) do
 			if node.ClassName == "Frame" or node.ClassName == "ScrollingFrame" or node.ClassName == "ViewportFrame" then
@@ -223,6 +223,10 @@ for _, size in ipairs({Vector2.new(1440, 860), Vector2.new(390, 760), Vector2.ne
 	end
 	ui:CloseMenu()
 	expect(not f.player:GetAttribute("CatchMenuOpen"), "Closing the menu must release input")
+	-- The results card is compact and fits the screen without blocking the whole view.
+	ui:_showResults()
+	expect(ui.results.Visible and ui.results.Size.X.Offset <= size.X and ui.results.Size.Y.Offset <= size.Y * 0.75, "Results are a compact card at " .. tostring(size))
+	ui:_hideResults()
 end
 
 -- Onboarding, daily login and round-type presentation.
@@ -230,10 +234,10 @@ do
 	local f = fixture(Vector2.new(390, 760), Enum.UserInputType.Touch)
 	f.ctx.Profile.loginStatus = {streak = 2, canClaim = true, day = 3, coins = 40, xp = 30}
 	local ui = f.load("UIController"); f.ctx.Controllers.UIController = ui; ui:Start()
-	expect(ui.tutorial.Visible and ui.tutorialStep.Text == "HOW TO PLAY  /  1 OF 5", "First-time players must see the tutorial")
-	expect(ui.dock:FindFirstChild("Quests"):FindFirstChild("Badge").Visible, "Claimable daily reward must flag the Quests button")
-	for _ = 1, 4 do ui.tutorialNext.Activated:Fire() end
-	expect(ui.tutorialNext.Text == "LET'S RUN" and ui.tutorialTitle.Text:find("EARN"), "Final tutorial page should start the game")
+	expect(ui.tutorial.Visible and ui.tutorialStep.Text == "HOW TO PLAY  /  1 OF 4", "First-time players must see the tutorial")
+	expect(ui.dockButtons.Quests:FindFirstChild("Badge").Visible and ui.dockButtons.More:FindFirstChild("Badge").Visible, "Claimable daily reward must flag Quests and the More button")
+	for _ = 1, 3 do ui.tutorialNext.Activated:Fire() end
+	expect(ui.tutorialNext.Text == "LET'S RUN" and ui.tutorialTitle.Text:find("MOVE"), "Final tutorial page should start the game")
 	ui.tutorialNext.Activated:Fire()
 	expect(not ui.tutorial.Visible and f.actions[#f.actions].action == "Settings" and f.actions[#f.actions].payload.tutorialDone == true, "Finishing the tutorial must persist through the server")
 	f.ctx.Profile.settings.tutorialDone = true
@@ -376,9 +380,40 @@ do
 	expect(#sounds == 1 and sounds[1].SoundId == "rbxasset://sounds/action_footsteps_plastic.mp3" and sounds[1].IsPlaying, "Slide must use the verified engine fallback when its ID is zero")
 	f.ctx.Profile.settings.sfx = false; effects:OnProfile(f.ctx.Profile)
 	expect(#f.services.SoundService:GetChildren() == 0, "Disabling SFX must stop active one-shot sounds")
+	expect(#effects.worldEffects:GetChildren() >= 4 and effects.worldEffects:GetChildren()[1].Name == "DustPuff", "A slide kicks up a ring of dust at the feet")
+	effects.worldEffects:ClearAllChildren()
 	f.ctx.Profile.settings.reducedMotion = true
 	effects:_worldBurst(Vector3.zero, roblox.Color3.new(1, 1, 1), false)
-	expect(#effects.worldEffects:GetChildren() == 0, "Reduced motion must suppress animated tag particles")
+	effects:_dust(true)
+	expect(#effects.worldEffects:GetChildren() == 0, "Reduced motion must suppress animated tag particles and dust")
+end
+
+-- Danger vignette: grows as a hunter closes in on a runner, fades with distance, hiding and reduced motion.
+do
+	local f = fixture(Vector2.new(1280, 720))
+	local effects = f.load("EffectsController"); effects:Start()
+	local hunter = f.instance.new("Player"); hunter.UserId = 77
+	local model = f.character(); hunter.Character = model; table.insert(f.players.list, hunter)
+	local hunterRoot = model:FindFirstChild("HumanoidRootPart")
+	f.ctx.State = {phase = "Active", roundId = 1, endsAt = 200, players = {{userId = 42, role = "Runner", alive = true}, {userId = 77, role = "Hunter", alive = true}}}
+	local function settle() for _ = 1, 12 do effects:_dangerTick() end end
+	hunterRoot.Position = Vector3.new(60, 0, 0); settle()
+	expect(effects.danger < 0.03 and not effects.dangerFrames[1].Visible, "No danger glow when the hunter is far away")
+	hunterRoot.Position = Vector3.new(8, 0, 0); settle()
+	expect(effects.danger > 0.5 and effects.dangerFrames[1].Visible and effects.dangerFrames[4].Visible, "The edges glow when a hunter is close")
+	local near = effects.danger
+	hunterRoot.Position = Vector3.new(24, 0, 0); settle()
+	expect(effects.danger < near and effects.danger > 0.05, "The glow weakens as the distance grows")
+	hunterRoot.Position = Vector3.new(8, 0, 0)
+	f.player.Character:SetAttribute("CatchHiding", true); settle()
+	expect(effects.danger < 0.03, "A hidden runner gets no danger glow")
+	f.player.Character:SetAttribute("CatchHiding", false)
+	f.ctx.Profile.settings.reducedMotion = true; settle()
+	expect(effects.danger < 0.03, "Reduced motion disables the danger glow")
+	f.ctx.Profile.settings.reducedMotion = false
+	f.ctx.State.players[1].role = "Hunter"; settle()
+	expect(effects.danger < 0.03, "Hunters never get the runner danger glow")
+	effects:Destroy()
 end
 
 -- Collection previews must present the granted pieces, not the current outfit.
@@ -463,10 +498,11 @@ do
 	f.ctx.State = {phase = "Results", roundId = 9, endsAt = 105, winners = {42}, resultText = "The runners win!", players = {{userId = 42, role = "Runner", displayName = "Test Runner"}}}
 	ui:OnState(f.ctx.State)
 	expect(math.abs(ui.roundFill.Size.X.Scale - 0.5) < 0.001, "Results track must use the configured ten-second duration")
-	ui.panelContent:FindFirstChild("ViewCareer", true).Activated:Fire()
-	expect(ui.menu == "Progress", "Results career button must open progression")
-	ui:OpenMenu("Results"); ui.panelContent:FindFirstChild("ViewPodium", true).Activated:Fire()
-	expect(ui.menu == nil and not f.player:GetAttribute("CatchMenuOpen"), "Podium button must restore the playable world")
+	expect(ui.results.Visible and ui.resultsTitle.Text == "YOU DID IT!", "Results appear as a compact card")
+	ui.results:FindFirstChild("ViewCareer").Activated:Fire()
+	expect(ui.menu == "Progress" and not ui.results.Visible, "Results career button must open progression")
+	ui:CloseMenu(); ui:_showResults(); ui.results:FindFirstChild("ViewPodium").Activated:Fire()
+	expect(not ui.results.Visible and ui.menu == nil and not f.player:GetAttribute("CatchMenuOpen"), "OK must restore the playable world")
 	ui:OpenMenu("Inventory"); ui.category = "trails"; ui:_renderMenu()
 	local explore = ui.panelContent:FindFirstChild("ExploreShop", true)
 	expect(explore ~= nil, "An empty collection must expose a path to earn or buy its items")
@@ -582,21 +618,33 @@ do
 			f.ctx.State = state; ui:OnState(state)
 			local where = tostring(size) .. " / " .. state.phase
 			expect(ui.dock.Visible and ui.root.Visible, "Dock must be visible at " .. where)
-			for index, name in ipairs({"Shop", "Inventory"}) do
+			-- The dock is right-anchored: resolve its left edge from the viewport, then stack its buttons.
+			local dockLeft = size.X + ui.dock.Position.X.Offset - ui.dock.Size.X.Offset
+			local dockTop = ui.dock.Position.Y.Offset
+			for index, name in ipairs({"Shop", "Inventory", "More"}) do
 				local b = ui.dock:FindFirstChild(name)
 				expect(b and b.Visible and b.ClassName == "TextButton", name .. " button must exist and be visible at " .. where)
-				-- Extents of the n-th dock button must stay on screen.
-				local step = (b.Size.X.Offset + 6)
-				local x = ui.dock.Position.X.Offset + (ui.dockHorizontal and (index - 1) * step or 0)
-				local y = ui.dock.Position.Y.Offset + (ui.dockHorizontal and 0 or (index - 1) * (b.Size.Y.Offset + 6))
+				local gap = (ui.compact or ui.short) and 4 or 6
+				local x = dockLeft + (ui.dockHorizontal and (index - 1) * (b.Size.X.Offset + gap) or 0)
+				local y = dockTop + (ui.dockHorizontal and 0 or (index - 1) * (b.Size.Y.Offset + gap))
 				expect(x >= 0 and y >= 0 and x + b.Size.X.Offset <= size.X and y + b.Size.Y.Offset <= size.Y, name .. " button must fit on screen at " .. where)
 				expect(b.Size.X.Offset >= 40 and b.Size.Y.Offset >= 40, name .. " must keep a touch-sized hit area at " .. where)
 			end
-			if ui.dockHorizontal ~= true then
-				ui:OpenMenu("Shop")
-				expect(ui.panel.Position.X.Offset >= ui.dock.Position.X.Offset + ui.dock.Size.X.Offset, "The menu must not cover the dock at " .. where)
-				ui:CloseMenu()
+			-- Menus open beside the dock (never over it) and the More popover stays on screen.
+			if not ui.dockHorizontal then
+				for _, menu in ipairs({"Shop", "Inventory", "Quests", "Settings"}) do
+					ui:OpenMenu(menu)
+					local right = ui.panel.Position.X.Offset + ui.panel.Size.X.Offset
+					expect(right <= dockLeft and ui.panel.Position.X.Offset >= 0, "The " .. menu .. " menu must not cover the dock at " .. where)
+					expect(ui.panel.Position.Y.Offset + ui.panel.Size.Y.Offset <= size.Y, "The " .. menu .. " menu must fit vertically at " .. where)
+					ui:CloseMenu()
+				end
 			end
+			ui:ToggleMore()
+			local moreRight = size.X + ui.moreMenu.Position.X.Offset
+			expect(moreRight <= size.X and moreRight - ui.moreMenu.Size.X.Offset >= 0, "The More popover must stay on screen at " .. where)
+			expect(ui.moreMenu.Position.Y.Offset + ui.moreMenu.Size.Y.Offset <= size.Y, "The More popover must fit vertically at " .. where)
+			ui:CloseMore()
 		end
 	end
 end
@@ -652,9 +700,9 @@ do
 	-- Reward breakdown arrives with the results.
 	f.ctx.State = {phase = "Results", roundId = 7, endsAt = 105, winners = {42}, resultText = "The runners win!", players = {{userId = 42, role = "Runner", displayName = "Test Runner"}}}
 	ui:OnState(f.ctx.State)
-	expect(ui.menu == "Results" and not ui.panelContent:FindFirstChild("RewardBreakdown", true), "Results open before the reward arrives")
+	expect(ui.results.Visible and not ui.results:FindFirstChild("RewardBreakdown", true), "Results open before the reward arrives")
 	ui:OnNotice({kind = "reward", xp = 120, coins = 80, rating = 24, pickups = 12, closeCalls = 3, tags = 0, finds = 0, survived = 150})
-	local total = ui.panelContent:FindFirstChild("RewardTotal", true)
+	local total = ui.results:FindFirstChild("RewardTotal", true)
 	expect(total and string.find(total.Text, "+120 XP", 1, true) and string.find(total.Text, "+80 COINS", 1, true), "Results list exactly the server-granted rewards")
 	expect(ui.dock:FindFirstChild("Shop").Visible and ui.dock:FindFirstChild("Inventory").Visible, "Shop and Locker stay visible on the results screen")
 end
@@ -714,7 +762,7 @@ do
 end
 
 
--- Moods pose the avatar through the same single joint writer as sliding, for local and remote avatars.
+-- Roblox's own animations drive everything except sliding: moods never write to the joints.
 do
 	local f = fixture(Vector2.new(1280, 720))
 	local function rig()
@@ -730,23 +778,15 @@ do
 	local movement = f.load("MovementController"); movement:Start()
 	movement:OnState({phase = "Results", roundId = 3, players = {}})
 	local function joint(model, name) return model:FindFirstChild(name, true) end
-	local base = joint(localRig, "RightShoulder").C0
-	local otherBase = joint(other.Character, "RightShoulder").C0
-	movement:_feedback(0.1)
-	expect(joint(localRig, "Neck").C0 ~= roblox.CFrame.new(0, 0.2, 0), "Idle avatars breathe and sway their head")
-	expect(joint(localRig, "RightShoulder").C0 == base, "Idle does not move the shoulders")
-	localRig:SetAttribute("CatchMood", "Win"); other.Character:SetAttribute("CatchMood", "Win")
-	for _ = 1, 20 do movement:_feedback(0.1) end
-	expect(joint(localRig, "RightShoulder").C0 ~= base and joint(other.Character, "RightShoulder").C0 ~= otherBase, "A winning mood raises both avatars' arms")
-	expect(joint(localRig, "LeftElbow").C0 ~= roblox.CFrame.new(0, 0.2, 0), "Win bends the elbows")
-	localRig:SetAttribute("CatchMood", "Idle"); other.Character:SetAttribute("CatchMood", "Idle")
-	for _ = 1, 40 do movement:_feedback(0.1) end
-	expect((joint(localRig, "RightShoulder").C0.Position - base.Position).Magnitude < 0.001
-		and (joint(localRig, "RightShoulder").C0.LookVector - base.LookVector).Magnitude < 0.01, "Returning to idle lowers the arms")
-	expect(next(movement.remotePoses) == nil, "Finished remote moods release their joints")
-	f.ctx.Profile.settings.reducedMotion = true
-	other.Character:SetAttribute("CatchMood", "Scared"); movement:_feedback(0.1)
-	expect(next(movement.remotePoses) == nil and joint(other.Character, "RightShoulder").C0 == otherBase, "Reduced motion disables mood poses")
+	local rest = roblox.CFrame.new(0, 0.2, 0)
+	for _, mood in ipairs({"Idle", "Win", "Scared", "Hunt", "Hide", "Lose"}) do
+		localRig:SetAttribute("CatchMood", mood); other.Character:SetAttribute("CatchMood", mood)
+		for _ = 1, 10 do movement:_feedback(0.1) end
+		for _, name in ipairs({"Neck", "LeftShoulder", "RightShoulder", "LeftElbow", "RightElbow"}) do
+			expect(joint(localRig, name).C0 == rest and joint(other.Character, name).C0 == rest, "Mood " .. mood .. " leaves " .. name .. " to Roblox animations")
+		end
+	end
+	expect(next(movement.remotePoses) == nil, "Remote avatars hold no joint overrides outside a slide")
 	movement:Destroy()
 end
 

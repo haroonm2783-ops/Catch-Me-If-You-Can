@@ -20,7 +20,7 @@
         "CharacterWalkSpeed": 17,
         "CharacterUseJumpPower": true,
         "CharacterJumpPower": 48,
-        "LoadCharacterAppearance": false,
+        "LoadCharacterAppearance": true,
         "GameSettingsAvatar": "R15"
       },
       "StarterPlayerScripts": {

@@ -19,11 +19,24 @@ local function names(category)
 	return result
 end
 local skinItems, maskItems = names("skins"), names("masks")
-local sheets = {skins={}, masks={}, moods={}}
-local function capture(sheet, title, subtitle, skin, mask, role, mood, view, accent, tone)
-	local rig = Appearance.BuildPreview(skin, mask, {tones=tone}, {userId=3})
+local sheets = {skins={}, masks={}}
+-- Decals are not geometry, so the stock Roblox face is drawn as two eyes and a smile for the preview only.
+local function faceParts(rig)
+	local head = rig:FindFirstChild("Head")
+	if not head then return {} end
+	local list = {}
+	local function dot(name, x, y, size, color)
+		local cf = head.CFrame * roblox.CFrame.new(x, y, -0.64)
+		table.insert(list, {name=name, cf={cf:GetComponents()}, size={size[1], size[2], 0.05}, color=color, alpha=0, shape="Block", neon=false})
+	end
+	dot("FaceEyeL", -0.26, 0.12, {0.14, 0.2}, {0.1, 0.1, 0.12})
+	dot("FaceEyeR", 0.26, 0.12, {0.14, 0.2}, {0.1, 0.1, 0.12})
+	dot("FaceSmile", 0, -0.22, {0.46, 0.07}, {0.1, 0.1, 0.12})
+	return list
+end
+local function capture(sheet, title, subtitle, skin, mask, role, view, accent)
+	local rig = Appearance.BuildPreview(skin, mask, {}, {userId=3})
 	if role then Appearance.ApplyRole(rig, role) end
-	if mood then Appearance.SetMood(rig, mood) end
 	local parts = {}
 	for _, part in ipairs(rig:GetDescendants()) do
 		if part:IsA("BasePart") and part.Transparency<0.99 then
@@ -41,7 +54,7 @@ local function capture(sheet, title, subtitle, skin, mask, role, mood, view, acc
 			})
 		end
 	end
-	assert(#parts>20,"A specimen must contain actual outfit geometry")
+	for _, extra in ipairs(faceParts(rig)) do table.insert(parts, extra) end
 	table.sort(parts,function(a,b)
 		if a.name~=b.name then return a.name<b.name end
 		for i=1,12 do if a.cf[i]~=b.cf[i] then return a.cf[i]<b.cf[i] end end
@@ -51,19 +64,15 @@ local function capture(sheet, title, subtitle, skin, mask, role, mood, view, acc
 	rig:Destroy()
 end
 for _, item in ipairs(skinItems) do
-	capture("skins", string.upper(item.name), item.rarity .. " / " .. item.currency, item.id, "", nil, "Idle", "full", item.accent)
+	capture("skins", string.upper(item.name), item.rarity .. " / " .. item.currency, item.id, "", nil, "full", item.accent)
 end
-capture("skins", "HUNTER ROLE", "Mall Runner + hunter identity", "skin_courier", "", "Hunter", "Hunt", "full", {255,84,70})
-capture("skins", "SKIN TONE CHECK", "Streetwear / cocoa", "skin_streetwear", "mask_street", nil, "Run", "full", {240,200,90}, "tone_cocoa")
+capture("skins", "HUNTER ROLE", "Original You + hunter identity", "skin_courier", "", "Hunter", "full", {255,84,70})
 for _, item in ipairs(maskItems) do
-	capture("masks", string.upper(item.name), item.rarity .. " / " .. item.currency, "skin_courier", item.id, nil, "Idle", "head", item.accent)
-end
-for _, mood in ipairs({"Idle","Run","Hunt","Scared","Win","Lose"}) do
-	capture("moods", string.upper(mood), "Expression", "skin_midnight", "", nil, mood, "head", {255,200,90})
+	capture("masks", string.upper(item.name), item.rarity .. " / " .. item.currency, "skin_courier", item.id, nil, "head", item.accent)
 end
 local output = process.args[1] or ".tooling/character-geometry.json"
 fs.writeFile(output,serde.encode("json",{
-	notice="Geometry preview—not Roblox Studio rendering. Head mesh approximated; no materials, highlights, particles, trails, or engine lighting.",
+	notice="Geometry preview, not Roblox Studio rendering. Players keep their own avatar; this mannequin stands in for it. No materials, particles, trails, auras or engine lighting.",
 	source="src/shared/Appearance.lua",sheets=sheets,
 },true))
 print("Exported character sheets to "..output)

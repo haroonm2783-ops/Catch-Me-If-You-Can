@@ -13,12 +13,14 @@ end
 
 local function planter(kit, parent, x, y, z, radius, flower)
 	local P = kit.P
-	kit.can(parent, "PlanterWall", x, y + 1.1, z, radius * 2, 2.2, P.white, Enum.Material.Marble, true, {cover = "Low", vault = true})
+	kit.can(parent, "PlanterWall", x, y + 1.1, z, radius * 2, 2.2, P.terracotta, Enum.Material.Concrete, true, {cover = "Low", vault = true})
 	kit.can(parent, "PlanterSoil", x, y + 2.25, z, radius * 2 - 1, 0.2, P.soil, Enum.Material.SmoothPlastic, false)
 	kit.can(parent, "PlanterRim", x, y + 2.2, z, radius * 2 + 0.3, 0.3, flower, Enum.Material.SmoothPlastic, false)
 	kit.can(parent, "TreeTrunk", x, y + 5.5, z, 1.2, 7, P.darkwood, Enum.Material.Wood, true, {cover = "Soft"})
 	kit.ball(parent, "TreeCrown", x, y + 10, z, radius * 1.8, 6, radius * 1.8, P.leaf, Enum.Material.SmoothPlastic, false, {cover = "Soft"})
 	kit.ball(parent, "TreeCrownTop", x + 0.8, y + 12.5, z - 0.5, radius * 1.1, 3.4, radius * 1.1, P.lime, Enum.Material.SmoothPlastic, false)
+	kit.ball(parent, "TreeCrownSide", x - radius * 0.6, y + 8.6, z + radius * 0.3, radius * 1.1, 3.6, radius * 1.1, P.leaf, Enum.Material.SmoothPlastic, false)
+	kit.ball(parent, "TreeCrownSide", x + radius * 0.6, y + 8.4, z - radius * 0.3, radius * 1.0, 3.4, radius * 1.0, P.lime, Enum.Material.SmoothPlastic, false)
 	for i = 1, 5 do
 		local a = i / 5 * math.pi * 2
 		kit.ball(parent, "Blossom", x + math.cos(a) * (radius - 1.2), y + 2.6, z + math.sin(a) * (radius - 1.2), 1, 0.8, 1, flower, Enum.Material.SmoothPlastic, false)
@@ -28,8 +30,8 @@ end
 local function kiosk(kit, parent, x, y, z, yaw, color, label)
 	local f = kit.frame(parent, Vector3.new(x, y, z), yaw, y)
 	local P = kit.P
-	f.b("KioskBase", 0, 0, 0, 7, 3.6, 4, P.white, Enum.Material.SmoothPlastic, true, {cover = "Low", vault = true})
-	f.b("KioskTop", 0, 3.6, 0, 7.4, 0.3, 4.4, color, Enum.Material.SmoothPlastic, false)
+	f.b("KioskBase", 0, 0, 0, 7, 3.6, 4, color, Enum.Material.SmoothPlastic, true, {cover = "Low", vault = true})
+	f.b("KioskTop", 0, 3.6, 0, 7.4, 0.3, 4.4, P.cream, Enum.Material.SmoothPlastic, false)
 	for _, sx in ipairs({-3.2, 3.2}) do f.b("KioskPole", sx, 3.9, 0, 0.3, 4.4, 0.3, P.steel, Enum.Material.Metal, false) end
 	f.b("KioskCanopy", 0, 8.2, 0, 8.6, 0.5, 5.6, color, Enum.Material.Fabric, false)
 	for i = 0, 3 do f.b("CanopyStripe", -3.2 + i * 2.1, 8.25, 0, 1, 0.52, 5.7, P.white, Enum.Material.Fabric, false) end
@@ -45,13 +47,13 @@ function Atrium.build(kit, Layout)
 
 	-- Centre: fountain with tiered column, jets and a colour medallion beneath.
 	for i, d in ipairs({50, 44, 38}) do
-		kit.can(plaza, "Medallion", 0, 0.03 + i * 0.015, 0, d, 0.04, ({P.sky, P.white, P.sun})[i], Enum.Material.SmoothPlastic, false)
+		kit.can(plaza, "Medallion", 0, 0.08 + i * 0.02, 0, d, 0.04, ({P.teal, P.cream, P.sun})[i], Enum.Material.SmoothPlastic, false, {shadow = false})
 	end
-	kit.can(plaza, "FountainBasin", 0, 1.3, 0, 34, 2.6, P.white, Enum.Material.Marble, true, {cover = "Low", vault = true})
+	kit.can(plaza, "FountainBasin", 0, 1.3, 0, 34, 2.6, P.cream, Enum.Material.Concrete, true, {cover = "Low", vault = true})
 	kit.can(plaza, "FountainWater", 0, 2.3, 0, 31.4, 0.5, P.sky, Enum.Material.Glass, false, {transparency = 0.35})
 	kit.can(plaza, "FountainRim", 0, 2.7, 0, 34.6, 0.3, P.gold, Enum.Material.Metal, false)
-	kit.can(plaza, "FountainTier1", 0, 3.8, 0, 10, 2.4, P.white, Enum.Material.Marble, true, {cover = "Full"})
-	kit.can(plaza, "FountainTier2", 0, 7, 0, 6, 4, P.white, Enum.Material.Marble, true, {cover = "Full"})
+	kit.can(plaza, "FountainTier1", 0, 3.8, 0, 10, 2.4, P.cream, Enum.Material.Concrete, true, {cover = "Full"})
+	kit.can(plaza, "FountainTier2", 0, 7, 0, 6, 4, P.cream, Enum.Material.Concrete, true, {cover = "Full"})
 	kit.can(plaza, "FountainBowl", 0, 9.4, 0, 12, 0.6, P.sky, Enum.Material.Glass, false, {transparency = 0.3})
 	kit.can(plaza, "FountainTopRing", 0, 10.2, 0, 3.4, 1.2, P.gold, Enum.Material.Metal, false)
 	for i = 1, 8 do
@@ -122,8 +124,8 @@ function Atrium.build(kit, Layout)
 
 	-- Pennant strings across the ring corridors on level one.
 	for _, z in ipairs({-76, 76}) do
-		for i = 0, 15 do
-			kit.box(plaza, "Pennant", -75 + i * 10, 19.2, z, 1.6, 2.2, 0.15, banners[(i % #banners) + 1], Enum.Material.Fabric, false, {shadow = false})
+		for i = 0, 15, 2 do
+			kit.box(plaza, "Pennant", -75 + i * 10, 19.2, z, 3.2, 2.6, 0.15, banners[(i % #banners) + 1], Enum.Material.Fabric, false, {shadow = false})
 		end
 		kit.box(plaza, "PennantLine", 0, 20.3, z, 160, 0.1, 0.1, P.dark, Enum.Material.SmoothPlastic, false)
 	end
@@ -143,7 +145,7 @@ function Atrium.build(kit, Layout)
 	kiosk(kit, balcony, -72, Y2, 30, -math.pi / 2, P.mint, "GADGETS")
 	-- Pennants over the second-floor corridors.
 	for _, z in ipairs({-76, 76}) do
-		for i = 0, 15 do kit.box(balcony, "Pennant", -75 + i * 10, Y2 + 19.2, z, 1.6, 2.2, 0.15, banners[((i + 2) % #banners) + 1], Enum.Material.Fabric, false, {shadow = false}) end
+		for i = 0, 15, 2 do kit.box(balcony, "Pennant", -75 + i * 10, Y2 + 19.2, z, 3.2, 2.6, 0.15, banners[((i + 2) % #banners) + 1], Enum.Material.Fabric, false, {shadow = false}) end
 	end
 end
 

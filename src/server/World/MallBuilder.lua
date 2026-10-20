@@ -5,55 +5,61 @@ local Lighting = game:GetService("Lighting")
 
 local MallBuilder = {}
 local built
-local MAP_VERSION = 1
+local MAP_VERSION = 2
 
 local function load(name)
 	if script then return require(script.Parent.Mall[name]) end
 	return require("./Mall/" .. name)
 end
 
+-- Lighting: a warm, sunny afternoon that stays mid-tone. The previous preset stacked bright ambient, positive
+-- exposure and a long haze over hundreds of studs of near-white floor, which washed everything out. Here ambient
+-- is moderate so colors keep their saturation, the sun gives readable shadows, and bloom only catches real glow.
+-- Lighting.Technology is not scriptable; tools/bake-place.luau sets it (ShadowMap) in the saved place.
 local function applyLighting()
-	-- A bright, warm afternoon: skylights flood the corridors, neon is an accent not a necessity.
-	Lighting.ClockTime = 14.2
-	Lighting.Brightness = 2.6
-	Lighting.Ambient = Color3.fromRGB(168, 164, 176)
-	Lighting.OutdoorAmbient = Color3.fromRGB(180, 184, 200)
-	Lighting.ColorShift_Top = Color3.fromRGB(255, 240, 214)
-	Lighting.ExposureCompensation = 0.25
+	Lighting.ClockTime = 15.4
+	Lighting.GeographicLatitude = 28
+	Lighting.Brightness = 2.1
+	Lighting.Ambient = Color3.fromRGB(118, 116, 134)
+	Lighting.OutdoorAmbient = Color3.fromRGB(132, 138, 160)
+	Lighting.ColorShift_Top = Color3.fromRGB(255, 236, 205)
+	Lighting.ColorShift_Bottom = Color3.fromRGB(0, 0, 0)
+	Lighting.ExposureCompensation = -0.05
 	Lighting.GlobalShadows = true
-	Lighting.ShadowSoftness = 0.35
-	Lighting.EnvironmentDiffuseScale = 0.7
-	Lighting.EnvironmentSpecularScale = 0.5
-	for _, name in ipairs({"CatchAtmosphere", "CatchBloom", "CatchColor", "CatchSunRays"}) do
+	Lighting.ShadowSoftness = 0.25
+	Lighting.EnvironmentDiffuseScale = 0.4
+	Lighting.EnvironmentSpecularScale = 0.25
+	for _, name in ipairs({"CatchAtmosphere", "CatchBloom", "CatchColor", "CatchSunRays", "CatchSky"}) do
 		local old = Lighting:FindFirstChild(name)
 		if old then old:Destroy() end
 	end
+	local sky = Instance.new("Sky")
+	sky.Name = "CatchSky"
+	sky.StarCount = 0
+	sky.CelestialBodiesShown = true
+	sky.SunAngularSize = 14
+	sky.Parent = Lighting
 	local atmosphere = Instance.new("Atmosphere")
 	atmosphere.Name = "CatchAtmosphere"
-	atmosphere.Density = 0.18
-	atmosphere.Offset = 0.15
-	atmosphere.Color = Color3.fromRGB(200, 224, 255)
-	atmosphere.Decay = Color3.fromRGB(255, 205, 170)
-	atmosphere.Glare = 0.1
-	atmosphere.Haze = 0.5
+	atmosphere.Density = 0.1
+	atmosphere.Offset = 0.05
+	atmosphere.Color = Color3.fromRGB(190, 215, 250)
+	atmosphere.Decay = Color3.fromRGB(255, 200, 150)
+	atmosphere.Glare = 0
+	atmosphere.Haze = 0.1
 	atmosphere.Parent = Lighting
 	local bloom = Instance.new("BloomEffect")
 	bloom.Name = "CatchBloom"
-	bloom.Intensity = 0.25
-	bloom.Size = 22
-	bloom.Threshold = 1.4
+	bloom.Intensity = 0.12
+	bloom.Size = 18
+	bloom.Threshold = 1.9
 	bloom.Parent = Lighting
 	local color = Instance.new("ColorCorrectionEffect")
 	color.Name = "CatchColor"
 	color.Contrast = 0.06
-	color.Saturation = 0.18
-	color.TintColor = Color3.fromRGB(255, 248, 240)
+	color.Saturation = 0.14
+	color.TintColor = Color3.fromRGB(255, 250, 244)
 	color.Parent = Lighting
-	local rays = Instance.new("SunRaysEffect")
-	rays.Name = "CatchSunRays"
-	rays.Intensity = 0.05
-	rays.Spread = 0.6
-	rays.Parent = Lighting
 end
 
 local function readBaked(model)
@@ -82,6 +88,7 @@ function MallBuilder.Build(options)
 	model.Name = "CatchMall"
 	model:SetAttribute("MapName", "CATCH MALL")
 	local kit = Kit.new(model)
+	kit.style = load("Style").new(kit.P)
 	local Fixtures, StoreShell = load("Fixtures"), load("StoreShell")
 	local shell = load("Shell").build(kit, Layout)
 	load("Atrium").build(kit, Layout)
@@ -140,7 +147,7 @@ function MallBuilder.Build(options)
 	end
 	model:SetAttribute("CoinCount", #kit.coins)
 
-	local exterior = load("Exterior").build(kit, Layout)
+	local exterior = load("Exterior").build(kit, Layout, load("Decor"))
 	local runnerSpawns = {}
 	for _, key in ipairs(spawnOrder) do table.insert(runnerSpawns, spawnPoints[key]) end
 	table.insert(runnerSpawns, facing(Vector3.new(0, Layout.FloorY[2] + 3.4, 76)))
