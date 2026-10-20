@@ -215,7 +215,7 @@ for _, size in ipairs({Vector2.new(1440, 860), Vector2.new(390, 760), Vector2.ne
 		ui:OpenMenu(menu)
 		for _, node in ipairs(ui.panelContent:GetDescendants()) do
 			if node.ClassName == "Frame" or node.ClassName == "ScrollingFrame" or node.ClassName == "ViewportFrame" then
-				expect(node.AbsoluteSize.X >= 0 and node.AbsoluteSize.Y >= 0, menu .. " must not create negative-size content at " .. tostring(size))
+				expect(node.AbsoluteSize.X >= 0 and node.AbsoluteSize.Y >= 0, menu .. " must not create negative-size content at " .. tostring(size) .. " in " .. node.Name .. " " .. tostring(node.AbsoluteSize) .. " parent " .. tostring(node.Parent and node.Parent.Name) .. tostring(node.Parent and node.Parent.AbsoluteSize))
 			end
 		end
 	end
@@ -287,7 +287,7 @@ do
 	ui:OpenMenu("Progress")
 	local rows = 0
 	for _, node in ipairs(ui.panelContent:GetDescendants()) do
-		if node.ClassName == "TextLabel" and node.Text:find("LOCKED  /  ") then rows += 1 end
+		if node.Name:find("^Badge_") then rows += 1 end
 	end
 	expect(rows >= #Achievements.List, "Career lists every shared achievement")
 	ui:CloseMenu()
