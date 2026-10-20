@@ -43,6 +43,13 @@ local function audit(rig, anchored)
 	restored[1]:Destroy()
 end
 
+-- The catalog and the appearance module must agree on every skin and mask.
+for _, item in ipairs(Catalog.ForCategory("skins")) do expect(Appearance.HasSkin(item.id), "Catalog skin has geometry: "..item.id) end
+for _, item in ipairs(Catalog.ForCategory("masks")) do expect(Appearance.HasMask(item.id), "Catalog mask has geometry: "..item.id) end
+for _, id in ipairs(Appearance.SkinOrder) do expect(Catalog.Get(id) and Catalog.Get(id).category == "skins", "Appearance skin is sold: "..id) end
+for _, id in ipairs(Appearance.MaskOrder) do expect(Catalog.Get(id) and Catalog.Get(id).category == "masks", "Appearance mask is sold: "..id) end
+for _, id in ipairs(Appearance.ToneOrder) do expect(Catalog.Get(id) and Catalog.Get(id).category == "tones", "Tone is selectable: "..id) end
+for _, id in ipairs(Appearance.HairOrder) do expect(Catalog.Get(id) and Catalog.Get(id).category == "hairColors", "Hair color is selectable: "..id) end
 local skins, masks = Catalog.ForCategory("skins"), {""}
 for _, item in ipairs(Catalog.ForCategory("masks")) do table.insert(masks,item.id) end
 local signatures, combinations, maximum = {}, 0, 0

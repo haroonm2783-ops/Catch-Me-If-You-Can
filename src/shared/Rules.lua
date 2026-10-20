@@ -57,7 +57,7 @@ end
 function Rules.NewProfile(now)
 	return {
 		schemaVersion=1, coins=0, xp=0, level=1, rating=1000, streak=0, bestStreak=0,
-		stats={rounds=0,wins=0,hunterWins=0,runnerWins=0,tags=0,survived=0},
+		stats={rounds=0,wins=0,hunterWins=0,runnerWins=0,tags=0,survived=0,pickups=0,finds=0,closeCalls=0},
 		owned=Catalog.DefaultOwned(), equipped=table.clone(Catalog.DefaultEquipment),
 		settings={music=true,sfx=true,reducedMotion=false,cameraShake=true,tutorialDone=false},
 		daily={day=Rules.DayKey(now),progress={rounds=0,tags=0,survived=0},claimed={}},
@@ -128,10 +128,16 @@ function Rules.RoundReward(summary, config)
 	local tags = if summary.role == "Hunter" then integer(summary.tags, 0, 10) else 0
 	local survived = integer(summary.survived, 0, 180)
 	local win = summary.win == true
+	-- Runner objectives: coin pickups and close calls. Hunter objective: finding hidden runners.
+	local pickups = if summary.role == "Runner" then integer(summary.pickups, 0, 25) else 0
+	local closeCalls = if summary.role == "Runner" then integer(summary.closeCalls, 0, 5) else 0
+	local finds = if summary.role == "Hunter" then integer(summary.finds, 0, 10) else 0
 	return {
-		xp=math.floor(progression.RoundXP + tags * progression.TagXP + survived * progression.SurvivalXPPerSecond + (if win then progression.WinXP else 0)),
-		coins=progression.RoundCoins + tags * progression.TagCoins + (if win then progression.WinCoins else 0),
+		xp=math.floor(progression.RoundXP + tags * progression.TagXP + survived * progression.SurvivalXPPerSecond + (if win then progression.WinXP else 0)
+			+ pickups * (progression.PickupXP or 0) + closeCalls * (progression.CloseCallXP or 0) + finds * (progression.FindXP or 0)),
+		coins=progression.RoundCoins + tags * progression.TagCoins + (if win then progression.WinCoins else 0) + pickups * (progression.PickupCoins or 0),
 		rating=if win then 24 else -14,
+		pickups=pickups, closeCalls=closeCalls, finds=finds, tags=tags, survived=survived,
 	}
 end
 return Rules

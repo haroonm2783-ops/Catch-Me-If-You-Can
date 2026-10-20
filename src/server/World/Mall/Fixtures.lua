@@ -162,14 +162,13 @@ function Fx.hideCell(ctx, opts)
 	g.b("CellTrim", 0, h - 1.2, -d / 2 + 0.1, w, 0.8, 0.3, opts.accent or P.pink, Enum.Material.SmoothPlastic, false)
 	g.b("CellFloorMat", 0, 0.02, 0, w - 0.8, 0.05, d - 0.8, opts.carpet or opts.floor or P.lilac, Enum.Material.Fabric, false)
 	if opts.interior then opts.interior(g, w, d, h) end
-	-- The door sits just inside the opening. It is open (invisible, passable) until someone hides.
+	-- The door is always closed and solid. Whether someone hides inside is deliberately not visible
+	-- from the door itself: hunters get tells (feet under the gap, a scan pulse) and a fair Search.
 	local doorY = opts.doorGap or 1.2
-	local door = g.b("Door", 0, doorY, -d / 2 + 0.2, w - 1, h - doorY - 1.4, 0.3, opts.door or P.pink, opts.doorMaterial or Enum.Material.Fabric, false)
-	door.Transparency = 1
-	door:SetAttribute("DoorClosedCollide", true)
-	-- Bunched curtain / open-door decor stays visible while the cell is empty.
-	g.b("DoorOpenDecor", -w / 2 + 0.9, doorY, -d / 2 + 0.2, 0.9, h - doorY - 1.4, 0.5, opts.door or P.pink, opts.doorMaterial or Enum.Material.Fabric, false)
+	local door = g.b("Door", 0, doorY, -d / 2 + 0.2, w - 0.6, h - doorY - 1.4, 0.3, opts.door or P.pink, opts.doorMaterial or Enum.Material.Fabric, true)
+	door:SetAttribute("HideDoor", true)
 	g.b("DoorRail", 0, h - 1.5, -d / 2 + 0.2, w - 0.4, 0.2, 0.2, P.steel, Enum.Material.Metal, false)
+	g.b("DoorHandle", w / 2 - 1, doorY + 2.4, -d / 2 - 0.1, 0.3, 0.9, 0.2, P.steel, Enum.Material.Metal, false)
 	local promptPart = g.b("PromptPart", 0, 2.2, -d / 2 - 0.4, 3, 3, 0.3, P.white, Enum.Material.SmoothPlastic, false)
 	promptPart.Transparency = 1
 	local prompt = Instance.new("ProximityPrompt")

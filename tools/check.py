@@ -18,7 +18,7 @@ for tool in ('luau', 'luau-compile', 'lune', 'rojo'):
     if not shutil.which(tool):
         raise SystemExit(f'{tool} is missing. Run tools/bootstrap.sh on Linux x86_64 or install the pinned versions.')
 sources = sorted(Path('src').rglob('*.lua'))
-checks = sorted(Path('tests').glob('*.luau')) + sorted(Path('tools').glob('*.luau'))
+checks = sorted(Path('tests').rglob('*.luau')) + sorted(Path('tools').rglob('*.luau'))
 run('luau-compile', '--null', *sources, *checks)
 Path('dist').mkdir(exist_ok=True)
 intermediate = Path('dist/CatchMeIfYouCan.sources.rbxlx')
@@ -26,8 +26,8 @@ run('rojo', 'build', 'default.project.json', '-o', intermediate)
 run('lune', 'run', 'tools/bake-place.luau', intermediate)
 intermediate.unlink()
 run('luau', 'tests/rules.spec.luau')
-for name in ('data_service', 'gameplay', 'appearance', 'client_controllers', 'map'):
+for name in ('data_service', 'gameplay', 'appearance', 'client_controllers', 'map', 'mall'):
     run('lune', 'run', f'tests/{name}.spec.luau')
 run('git', 'diff', '--check')
-print(f'PASS: {len(sources)} production scripts compiled; six test suites; both Studio place formats validated.')
+print(f'PASS: {len(sources)} production scripts compiled; seven test suites; both Studio place formats validated.')
 print('This does not run the Roblox engine. Complete docs/TESTING.md in Studio before launch.')

@@ -101,6 +101,8 @@ local function fixture(playerCount, studio)
 		Config = {
 			Round = { MaxPlayers = 12, MinimumPlayers = 2, Duration = 180, Intermission = 16, ResultsDuration = 10, HeadStart = 5, FinalSeconds = 30, RespawnDelay = 2, StudioSolo = true },
 			Movement = table.clone(Config.Movement),
+			Hide = table.clone(Config.Hide),
+			Progression = Config.Progression,
 		},
 		Rules = Rules, Modifiers = Modifiers, Services = {},
 		World = { LobbySpawn = CFrame.new(0, 3, 250), RunnerSpawns = { CFrame.new(20, 3, 0) }, HunterSpawns = { CFrame.new(0, 3, 0) }, Bounds = { min = Vector3.new(-155, -25, -140), max = Vector3.new(155, 100, 145) } },
@@ -121,7 +123,7 @@ local function fixture(playerCount, studio)
 	local Movement = luau.load(fs.readFile("src/server/Services/MovementService.lua"), { environment = environment, debugName = "MovementService" })()
 	local round, movement = Round.new(ctx), Movement.new(ctx)
 	ctx.Services.RoundService, ctx.Services.MovementService = round, movement
-	local f = { ctx = ctx, round = round, movement = movement, players = roster, playersService = players, run = run, world = world, ground = ground, notices = notices, snapshots = snapshots, awards = awards }
+	local f = { environment = environment, ctx = ctx, round = round, movement = movement, players = roster, playersService = players, run = run, world = world, ground = ground, notices = notices, snapshots = snapshots, awards = awards }
 	function f:advance(seconds)
 		local target, executions = timestamp + seconds, 0
 		while true do
@@ -766,6 +768,129 @@ do
 	solo.round.modifier = Modifiers.ById.infection
 	solo:startActive()
 	expect(solo.round.modifier.id == "classic", "Solo practice is always Classic")
+end
+
+-- Hiding, searching, scanning, coins and close calls ---------------------------------------------
+do
+	local f = fixture(4)
+	local Hide = luau.load(fs.readFile("src/server/Services/HideService.lua"), { environment = f.environment, debugName = "HideService" })()
+	local hide = Hide.new(f.ctx)
+	f.ctx.Services.HideService = hide
+	f:startActive()
+	local hunter, runnerA, runnerB
+	for _, player in ipairs(f.players) do
+		local role = f.round:GetRole(player)
+		if role == "Hunter" then hunter = player elseif not runnerA then runnerA = player elseif not runnerB then runnerB = player end
+	end
+	local function part(x, y, z)
+		local p = object("Part")
+		p.CFrame = CFrame.new(x, y, z)
+		p.GetChildren = function() return {} end
+		return p
+	end
+	local promptPart = part(22, 3, 0)
+	local spot = {
+		id = "test_cell", model = object("Model"), prompt = { MaxActivationDistance = 8, Parent = promptPart }, door = object("Part"),
+		inside = CFrame.new(30, 3.1, 0), exit = CFrame.new(22, 3.1, -5), occupant = nil, lockedUntil = 0, anchorPart = promptPart,
+	}
+	hide.spots = { spot }
+	f:pose(runnerA, 21, 3, 0, true)
+	f:pose(runnerB, 20, 3, 2, true)
+	f:pose(hunter, 18, 3, 0, true)
+	local rootA, character = runnerA.Character.children.HumanoidRootPart, runnerA.Character
+	hide:_triggered(runnerA, spot)
+	expect(hide:IsHiding(runnerA) and rootA.Anchored and character:GetAttribute("CatchHiding") == true, "A runner in range hides and is anchored inside the cell")
+	expect((rootA.CFrame.Position - spot.inside.Position).Magnitude < 0.01 and spot.model:GetAttribute("Occupied") == true, "Hiding places the runner inside and marks the cell occupied")
+	expect(f.round:MoodFor(runnerA) == "Hide", "A hiding runner shows the hiding face")
+	for _, other in ipairs(f.players) do
+		if other ~= hunter and other ~= runnerA then f:pose(other, 90, 3, 90, true) end
+	end
+	f:pose(hunter, 24, 3, 0, true)
+	expect(not f.round:TryTag(hunter), "A hiding runner cannot be tagged through the cell door")
+	hide:_triggered(runnerB, spot)
+	expect(not hide:IsHiding(runnerB) and spot.occupant == runnerA, "An occupied cell cannot be entered by a second runner")
+	expect(not hide:Leave(runnerA), "Leaving within the minimum stay is refused")
+	-- Distance is validated by the server, not trusted from the prompt.
+	local far = f:pose(runnerB, 80, 3, 80, true)
+	hide:_triggered(runnerB, spot)
+	expect(not hide:IsHiding(runnerB), "Triggering a prompt from across the map is ignored")
+	f:pose(runnerB, 20, 3, 2, true)
+	-- A hunter's Search ejects the occupant next to the exit.
+	hide:_triggered(hunter, spot)
+	expect(not hide:IsHiding(runnerA) and not rootA.Anchored and character:GetAttribute("CatchHiding") == false, "Search ejects and unanchors the hidden runner")
+	expect((rootA.CFrame.Position - spot.exit.Position).Magnitude < 0.01, "The discovered runner is placed at the cell exit")
+	expect(f.round.roster[hunter.UserId].finds == 1, "The hunter is credited with the discovery")
+	local sawReveal, sawFound = false, false
+	for _, item in ipairs(f.notices) do
+		if item.notice.kind == "reveal" and item.notice.userId == runnerA.UserId then sawReveal = true end
+		if item.notice.kind == "found" and item.player == hunter then sawFound = true end
+	end
+	expect(sawReveal and sawFound, "Everyone sees the reveal and the searcher gets the discovery cue")
+	hide:_triggered(hunter, spot)
+	expect(f.round.roster[hunter.UserId].finds == 1, "Search spam inside the cooldown does nothing")
+	-- The ejected runner must wait before hiding again; the spot is also briefly locked.
+	hide:_triggered(runnerA, spot)
+	expect(not hide:IsHiding(runnerA), "A runner just found cannot immediately re-hide")
+	f:advance(13)
+	f:pose(runnerA, 21, 3, 0, true)
+	hide:_triggered(runnerA, spot)
+	expect(hide:IsHiding(runnerA), "After the cooldown the runner can hide again")
+	-- Scan: exposes visible runners and occupied cells (never named), then cools down.
+	f:pose(hunter, 24, 3, 0, true)
+	table.clear(f.notices)
+	expect(hide:Scan(hunter), "A hunter can scan during the chase")
+	local scan
+	for _, item in ipairs(f.notices) do if item.notice.kind == "scan" then scan = item.notice end end
+	expect(scan and table.find(scan.targets, runnerB.UserId) and not table.find(scan.targets, runnerA.UserId), "Scan lists visible runners but not hidden ones")
+	expect(scan and #scan.spots == 1, "Scan exposes the occupied cell as an unnamed position")
+	expect(not hide:Scan(hunter), "Scan respects its cooldown")
+	expect(not hide:Scan(runnerB), "Runners cannot scan")
+	f:advance(26)
+	expect(hide:Scan(hunter), "Scan is available again after its cooldown")
+	-- Timeout releases the runner next to the exit with a cooldown.
+	f:advance(8)
+	hide:_tick()
+	expect(not hide:IsHiding(runnerA) and not rootA.Anchored, "Hiding ends automatically after the maximum time")
+	-- Coins: validated pickup, one-time, capped, reset each round.
+	local coinPart = part(21, 3.2, 2)
+	local record = { part = coinPart, position = coinPart.CFrame.Position, collected = false }
+	hide.coins = { record }
+	hide.coinBuckets = { ["1,0,0"] = { record } }
+	f:pose(runnerB, 21, 3, 2, true)
+	hide:_collectCoins(runnerB, runnerB.Character.children.HumanoidRootPart)
+	expect(record.collected and coinPart.Transparency == 1 and f.round.roster[runnerB.UserId].pickups == 1, "A runner in range collects the coin")
+	hide:_collectCoins(runnerB, runnerB.Character.children.HumanoidRootPart)
+	expect(f.round.roster[runnerB.UserId].pickups == 1, "A coin can only be collected once")
+	f.round.roster[runnerB.UserId].pickups = f.ctx.Config.Hide.PickupCap
+	record.collected = false
+	hide:_collectCoins(runnerB, runnerB.Character.children.HumanoidRootPart)
+	expect(not record.collected, "Pickups are capped per round")
+	expect(f.round:AddPickup(hunter) == nil, "Hunters cannot collect coins")
+	-- Close calls: near a hunter, then clear away, pays once per gap.
+	f.round.roster[runnerB.UserId].pickups = 0
+	local hunterRoot = f:pose(hunter, 30, 3, 0, true)
+	local runnerRoot = f:pose(runnerB, 34, 3, 0, true)
+	hide:_closeCalls(runnerB, runnerRoot, { hunterRoot })
+	runnerRoot.CFrame = CFrame.new(70, 3, 0)
+	hide:_closeCalls(runnerB, runnerRoot, { hunterRoot })
+	expect(f.round.roster[runnerB.UserId].closeCalls == 1, "A close call is credited after escaping")
+	runnerRoot.CFrame = CFrame.new(34, 3, 0)
+	hide:_closeCalls(runnerB, runnerRoot, { hunterRoot })
+	runnerRoot.CFrame = CFrame.new(70, 3, 0)
+	hide:_closeCalls(runnerB, runnerRoot, { hunterRoot })
+	expect(f.round.roster[runnerB.UserId].closeCalls == 1, "Close calls have a minimum gap so they cannot be farmed")
+	-- Rewards include the objectives, and the results screen receives what the server granted.
+	local reward = Rules.RoundReward({ role = "Runner", win = true, tags = 0, survived = 100, pickups = 10, closeCalls = 2 }, f.ctx.Config)
+	local plain = Rules.RoundReward({ role = "Runner", win = true, tags = 0, survived = 100 }, f.ctx.Config)
+	expect(reward.xp == plain.xp + 10 * 3 + 2 * 5 and reward.coins == plain.coins + 10, "Objective rewards are coins and XP only")
+	-- A round change releases everyone and restores the coins.
+	hide:_triggered(runnerA, spot)
+	f.round.phase = "Results"
+	hide:_tick()
+	expect(not hide:IsHiding(runnerA) and not runnerA.Character.children.HumanoidRootPart.Anchored, "Round end releases hiders without a stuck anchor")
+	f.round.phase = "Active"
+	hide:ResetRound()
+	expect(not record.collected and coinPart.Transparency == 0, "A new round restores the coins")
 end
 
 print("Gameplay service tests passed: " .. checks .. " checks")

@@ -279,10 +279,14 @@ function DataService:AwardRound(player, summary)
 	local record = self.records[player]
 	local receipt = self.sessionId .. ":" .. tostring(summary.roundId)
 	if record.awarded[receipt] then return false, "Round already rewarded." end
+	local hide = self.ctx.Config.Hide or {}
 	local safe = {
 		role = summary.role, win = summary.win, practice = false, roundId = summary.roundId,
 		tags = summary.role == "Hunter" and number(summary.tags, 0, self.ctx.Config.Round.MaxPlayers) or 0,
 		survived = number(summary.survived, 0, self.ctx.Config.Round.Duration),
+		pickups = summary.role == "Runner" and number(summary.pickups, 0, hide.PickupCap or 25) or 0,
+		closeCalls = summary.role == "Runner" and number(summary.closeCalls, 0, hide.CloseCallMax or 5) or 0,
+		finds = summary.role == "Hunter" and number(summary.finds, 0, 10) or 0,
 	}
 	local reward = self.ctx.Rules.RoundReward(safe, self.ctx.Config)
 	-- Record receipt before changing balances; this section contains no yielding calls.
@@ -297,6 +301,9 @@ function DataService:AwardRound(player, summary)
 	profile.stats.rounds = add(profile.stats.rounds, 1)
 	profile.stats.tags = add(profile.stats.tags, safe.tags)
 	profile.stats.survived = add(profile.stats.survived, safe.survived)
+	profile.stats.pickups = add(profile.stats.pickups or 0, safe.pickups)
+	profile.stats.finds = add(profile.stats.finds or 0, safe.finds)
+	profile.stats.closeCalls = add(profile.stats.closeCalls or 0, safe.closeCalls)
 	profile.daily.progress.rounds = add(profile.daily.progress.rounds, 1)
 	profile.daily.progress.tags = add(profile.daily.progress.tags, safe.tags)
 	profile.daily.progress.survived = add(profile.daily.progress.survived, safe.survived)
@@ -310,7 +317,11 @@ function DataService:AwardRound(player, summary)
 	self:_Dirty(record)
 	self:_AfterProgress(record, previousLevel)
 	task.defer(function() self:Save(player) end)
-	return true
+	return true, {
+		xp = number(reward.xp, 0, MAX_COUNTER), coins = number(reward.coins, 0, MAX_COUNTER), rating = reward.rating,
+		pickups = safe.pickups, closeCalls = safe.closeCalls, finds = safe.finds, tags = safe.tags, survived = safe.survived,
+		win = safe.win, role = safe.role, level = profile.level, totalCoins = profile.coins, totalXP = profile.xp,
+	}
 end
 
 function DataService:Grant(player, ids, source)

@@ -8,7 +8,7 @@ local Catalog = require(shared.Catalog)
 local Rules = require(shared.Rules)
 local Modifiers = require(shared.Modifiers)
 local Achievements = require(shared.Achievements)
-local MapBuilder = require(script.Parent.World.MapBuilder)
+local MapBuilder = require(script.Parent.World[Config.Map == "NeonHeights" and "MapBuilder" or "MallBuilder"])
 
 local remotesFolder = Instance.new("Folder")
 remotesFolder.Name = "CatchRemotes"
@@ -21,7 +21,7 @@ for _, name in ipairs({"State", "Action", "Profile", "Notice", "Query"}) do
 end
 local ctx = {Config=Config, Catalog=Catalog, Rules=Rules, Modifiers=Modifiers, Achievements=Achievements, Remotes=remotes, Services={}}
 ctx.World = MapBuilder.Build()
-for _, name in ipairs({"DataService", "CosmeticService", "ShopService", "MovementService", "RoundService"}) do
+for _, name in ipairs({"DataService", "CosmeticService", "ShopService", "MovementService", "RoundService", "HideService"}) do
 	ctx.Services[name] = require(script.Parent.Services[name]).new(ctx)
 end
 
@@ -29,6 +29,7 @@ local limits = {
 	Sprint={capacity=6,refill=4}, Slide={capacity=3,refill=1}, Vault={capacity=5,refill=3},
 	Tag={capacity=5,refill=4}, Equip={capacity=4,refill=2}, Buy={capacity=2,refill=0.5},
 	ClaimQuest={capacity=3,refill=1}, ClaimLogin={capacity=2,refill=0.2}, Settings={capacity=4,refill=2}, Emote={capacity=2,refill=0.5},
+		Scan={capacity=2,refill=0.2}, Unhide={capacity=3,refill=1},
 }
 local buckets = {}
 local queryTimes = {}
@@ -65,7 +66,11 @@ local function dispatch(player, action, payload)
 	if action == "Sprint" or action == "Slide" or action == "Vault" then
 		ctx.Services.MovementService:Handle(player, action, payload)
 	elseif action == "Tag" then
-		ctx.Services.RoundService:TryTag(player)
+	ctx.Services.RoundService:TryTag(player)
+	elseif action == "Scan" then
+	ctx.Services.HideService:Scan(player)
+	elseif action == "Unhide" then
+	ctx.Services.HideService:Leave(player)
 	elseif action == "Equip" then
 		if type(payload.category)=="string" and type(payload.id)=="string" then ctx.Services.DataService:Equip(player,payload.category,payload.id) end
 	elseif action == "Buy" then
@@ -91,10 +96,10 @@ remotes.Query.OnServerInvoke = function(player)
 	return {state=ctx.Services.RoundService:Snapshot(),profile=ctx.Services.DataService:Snapshot(player)}
 end
 Players.PlayerRemoving:Connect(function(player) buckets[player]=nil; queryTimes[player]=nil end)
-for _, name in ipairs({"DataService", "CosmeticService", "ShopService", "MovementService", "RoundService"}) do
+for _, name in ipairs({"DataService", "CosmeticService", "ShopService", "MovementService", "RoundService", "HideService"}) do
 	local service = ctx.Services[name]
 	if service.Start then service:Start() end
 end
 -- Publish only after handlers and service state are initialized.
 remotesFolder.Parent = ReplicatedStorage
-print("[Catch] Neon Heights initialized. " .. Config.Version)
+print("[Catch] " .. tostring(ctx.World.Model:GetAttribute("MapName") or "Map") .. " initialized. " .. Config.Version)

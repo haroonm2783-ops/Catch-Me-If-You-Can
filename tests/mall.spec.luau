@@ -86,7 +86,7 @@ for _, spot in ipairs(kit.hideSpots) do
 	expect(not ids[spot.id], "Unique hide spot id " .. spot.id)
 	ids[spot.id] = true
 	expect(spot.prompt:IsA("ProximityPrompt") and spot.prompt.MaxActivationDistance <= 12, "Hide spot has a bounded prompt: " .. spot.id)
-	expect(spot.door.Transparency == 1 and not spot.door.CanCollide, "Door starts open: " .. spot.id)
+	expect(spot.door.CanCollide and spot.door.Transparency < 1, "Hide cell door is closed and solid so occupancy is not visible: " .. spot.id)
 end
 expect(#kit.coins >= 40, "Mall coins to collect (" .. #kit.coins .. ")")
 expect(#built.RunnerSpawns >= 12 and #built.HunterSpawns == 2 and #built.Podiums == 3, "Complete spawn roster")
