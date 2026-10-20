@@ -1,6 +1,6 @@
 # Draft pull request: Catch Mall 0.4.0 launch-quality overhaul
 
-Branch: `claude/launch-quality-overhaul` -> `main`. This is a ready-to-paste description; no PR has been opened.
+Branch: `claude/launch-quality-overhaul` -> `main`. Opened as [haroonm2783-ops/Catch-Me-If-You-Can#1](https://github.com/haroonm2783-ops/Catch-Me-If-You-Can/pull/1); this file holds the full description text.
 **Do not merge or publish on test results alone: the Studio playtest in `docs/TESTING.md` is the launch gate.**
 
 ## Summary
