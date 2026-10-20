@@ -1,0 +1,177 @@
+-- Primitive builders shared by every mall module. Everything is anchored, original geometry.
+-- Collision policy: solid architecture and furniture collide; small decoration never does,
+-- so props can never snag a sprinting avatar or block a tag raycast.
+local Kit = {}
+
+local C = Color3.fromRGB
+Kit.P = {
+	cream = C(250, 242, 228), white = C(250, 250, 252), ink = C(44, 46, 70), stone = C(236, 226, 208),
+	coral = C(255, 107, 107), teal = C(38, 198, 192), sun = C(255, 205, 60), violet = C(150, 110, 235),
+	pink = C(255, 125, 190), sky = C(90, 170, 255), mint = C(110, 225, 170), orange = C(255, 150, 60),
+	navy = C(50, 70, 130), red = C(232, 64, 76), lime = C(150, 215, 80), wood = C(196, 140, 86),
+	darkwood = C(126, 84, 54), steel = C(176, 188, 206), grey = C(200, 204, 214), dark = C(60, 64, 88),
+	glass = C(170, 220, 245), leaf = C(86, 190, 100), soil = C(88, 66, 54), gold = C(255, 200, 70),
+	black = C(30, 30, 38), blush = C(255, 214, 220), peach = C(255, 214, 180), lilac = C(214, 196, 250),
+}
+
+function Kit.new(model)
+	local kit = {
+		model = model, count = 0, lights = 0, signs = 0, P = Kit.P,
+		hideSpots = {}, coins = {}, landmarks = {}, covers = {}, doors = {},
+	}
+
+	function kit.group(name, parent)
+		local folder = Instance.new("Folder")
+		folder.Name = name
+		folder.Parent = parent or model
+		return folder
+	end
+
+	-- Core part factory. `opts`: shape (Ball|Cylinder|Can|Wedge), transparency, shadow, cover, attrs.
+	function kit.part(parent, name, size, cf, color, material, collide, opts)
+		opts = opts or {}
+		local shape = opts.shape
+		if typeof(cf) == "Vector3" then cf = CFrame.new(cf) end
+		local part = Instance.new(shape == "Wedge" and "WedgePart" or "Part")
+		part.Name = name
+		if shape == "Can" then
+			part.Size = Vector3.new(size.Y, size.X, size.Z)
+			cf = cf * CFrame.Angles(0, 0, math.pi / 2)
+			part.Shape = Enum.PartType.Cylinder
+		else
+			part.Size = size
+			if shape == "Ball" then part.Shape = Enum.PartType.Ball end
+			if shape == "Cylinder" then part.Shape = Enum.PartType.Cylinder end
+		end
+		part.CFrame = cf
+		part.Color = color or Kit.P.cream
+		part.Material = material or Enum.Material.SmoothPlastic
+		part.Anchored = true
+		part.CanCollide = collide == true
+		part.CanTouch = false
+		part.CanQuery = part.CanCollide
+		part.TopSurface = Enum.SurfaceType.Smooth
+		part.BottomSurface = Enum.SurfaceType.Smooth
+		local biggest = math.max(size.X, size.Y, size.Z)
+		if opts.shadow ~= nil then part.CastShadow = opts.shadow
+		else part.CastShadow = part.CanCollide and biggest >= 8 and material ~= Enum.Material.Neon end
+		if opts.transparency then part.Transparency = opts.transparency end
+		if opts.cover then
+			part:SetAttribute("Cover", opts.cover)
+			table.insert(kit.covers, part)
+		end
+		if opts.vault then part:SetAttribute("Vaultable", true) end
+		if opts.attrs then for key, value in pairs(opts.attrs) do part:SetAttribute(key, value) end end
+		part.Parent = parent
+		kit.count += 1
+		return part
+	end
+
+	-- World-space centre-based box.
+	function kit.box(parent, name, cx, cy, cz, sx, sy, sz, color, material, collide, opts)
+		return kit.part(parent, name, Vector3.new(sx, sy, sz), Vector3.new(cx, cy, cz), color, material, collide, opts)
+	end
+	-- Box spanning [x0,x1] x [y0,y1] x [z0,z1].
+	function kit.span(parent, name, x0, x1, y0, y1, z0, z1, color, material, collide, opts)
+		return kit.box(parent, name, (x0 + x1) / 2, (y0 + y1) / 2, (z0 + z1) / 2, x1 - x0, y1 - y0, z1 - z0, color, material, collide, opts)
+	end
+	function kit.can(parent, name, cx, cy, cz, diameter, height, color, material, collide, opts)
+		opts = opts or {}
+		opts.shape = "Can"
+		return kit.part(parent, name, Vector3.new(diameter, height, diameter), Vector3.new(cx, cy, cz), color, material, collide, opts)
+	end
+	function kit.ball(parent, name, cx, cy, cz, sx, sy, sz, color, material, collide, opts)
+		opts = opts or {}
+		opts.shape = "Ball"
+		return kit.part(parent, name, Vector3.new(sx, sy, sz), Vector3.new(cx, cy, cz), color, material, collide, opts)
+	end
+
+	-- A beam between two points (visual by default).
+	function kit.beam(parent, name, a, b, width, color, material, collide)
+		local direction = b - a
+		local up = math.abs(direction.Unit.Y) > 0.99 and Vector3.xAxis or Vector3.yAxis
+		return kit.part(parent, name, Vector3.new(width, width, direction.Magnitude), CFrame.lookAt((a + b) / 2, b, up), color, material, collide)
+	end
+
+	-- A text sign. `cf` places the backing plate; the readable face looks along the plate's -Z.
+	function kit.sign(parent, text, cf, width, height, textColor, backColor, opts)
+		opts = opts or {}
+		local backing = kit.part(parent, "Sign_" .. text, Vector3.new(width, height, 0.4), cf, backColor or Kit.P.ink, opts.material, false, {shadow = false})
+		local gui = Instance.new("SurfaceGui")
+		gui.Face = Enum.NormalId.Front
+		gui.SizingMode = Enum.SurfaceGuiSizingMode.PixelsPerStud
+		gui.PixelsPerStud = opts.pixels or 30
+		gui.LightInfluence = 0
+		gui.MaxDistance = opts.distance or 130
+		gui.Parent = backing
+		local label = Instance.new("TextLabel")
+		label.Size = UDim2.fromScale(0.94, 0.8)
+		label.Position = UDim2.fromScale(0.03, 0.1)
+		label.BackgroundTransparency = 1
+		label.Text = text
+		label.TextColor3 = textColor or Kit.P.white
+		label.TextScaled = true
+		label.FontFace = Font.fromEnum(opts.font or Enum.Font.GothamBlack)
+		label.Parent = gui
+		kit.signs += 1
+		return backing
+	end
+
+	-- Small emissive bulb with a shadowless point light. Lights are budgeted: use sparingly.
+	function kit.lamp(parent, pos, color, brightness, range)
+		local bulb = kit.box(parent, "Lamp", pos.X, pos.Y, pos.Z, 1.2, 0.3, 1.2, color, Enum.Material.Neon, false)
+		local light = Instance.new("PointLight")
+		light.Color = color
+		light.Brightness = brightness or 0.8
+		light.Range = range or 24
+		light.Shadows = false
+		light.Parent = bulb
+		kit.lights += 1
+		return bulb
+	end
+
+	-- Local frame: origin on the floor, yaw about Y; boxes are bottom-based (`y0` is the base height).
+	function kit.frame(parent, origin, yaw, baseY)
+		local f = {parent = parent, yaw = yaw}
+		local base = CFrame.new(origin.X, baseY or origin.Y, origin.Z) * CFrame.Angles(0, yaw, 0)
+		f.base = base
+		function f.pos(lx, y, lz) return base:PointToWorldSpace(Vector3.new(lx, y, lz)) end
+		function f.cf(lx, y, lz, rx, ry, rz)
+			return base * CFrame.new(lx, y, lz) * CFrame.Angles(math.rad(rx or 0), math.rad(ry or 0), math.rad(rz or 0))
+		end
+		-- Box whose bottom is at y0, centred on (lx, lz).
+		function f.b(name, lx, y0, lz, sx, sy, sz, color, material, collide, opts)
+			return kit.part(parent, name, Vector3.new(sx, sy, sz), base * CFrame.new(lx, y0 + sy / 2, lz), color, material, collide, opts)
+		end
+		-- Tilted box: rotation in degrees about the box centre.
+		function f.t(name, lx, y0, lz, sx, sy, sz, rx, ry, rz, color, material, collide, opts)
+			return kit.part(parent, name, Vector3.new(sx, sy, sz), f.cf(lx, y0 + sy / 2, lz, rx, ry, rz), color, material, collide, opts)
+		end
+		function f.can(name, lx, y0, lz, d, h, color, material, collide, opts)
+			opts = opts or {}
+			opts.shape = "Can"
+			return kit.part(parent, name, Vector3.new(d, h, d), base * CFrame.new(lx, y0 + h / 2, lz), color, material, collide, opts)
+		end
+		function f.ball(name, lx, y0, lz, sx, sy, sz, color, material, collide, opts)
+			opts = opts or {}
+			opts.shape = "Ball"
+			return kit.part(parent, name, Vector3.new(sx, sy, sz), base * CFrame.new(lx, y0 + sy / 2, lz), color, material, collide, opts)
+		end
+		function f.wedge(name, lx, y0, lz, sx, sy, sz, ry, color, material, collide, opts)
+			opts = opts or {}
+			opts.shape = "Wedge"
+			return kit.part(parent, name, Vector3.new(sx, sy, sz), f.cf(lx, y0 + sy / 2, lz, 0, ry or 0, 0), color, material, collide, opts)
+		end
+		-- Sign plate whose readable side faces local -Z (outward from a store); `inward` turns it +Z.
+		function f.sign(text, lx, y0, lz, w, h, textColor, backColor, inward, opts)
+			local cf = base * CFrame.new(lx, y0 + h / 2, lz) * CFrame.Angles(0, inward and math.pi or 0, 0)
+			return kit.sign(parent, text, cf, w, h, textColor, backColor, opts)
+		end
+		function f.lamp(lx, y0, lz, color, brightness, range) return kit.lamp(parent, f.pos(lx, y0, lz), color, brightness, range) end
+		return f
+	end
+
+	return kit
+end
+
+return Kit
