@@ -59,7 +59,7 @@ quests + 7-day login streak exist); new animations (movement poses unchanged); t
 **Next steps:** open `dist/Catch-Me-If-You-Can-Final.rbxl`, Play solo (Studio solo practice starts after PLAY), then
 Server & Clients with 2-12; tune `applyLighting()`; merge `mall-rebuild` into main when happy.
 
-## v0.5.0 - Quality overhaul (branch `mall-rebuild`, checkpoint tag `stage-0.4.0-checkpoint` is the pre-overhaul state)
+## v0.5.0 - Quality overhaul (branch `mall-rebuild`, branch `checkpoint-v0.4.0-pre-overhaul` is the pre-overhaul state; `backup-city-v0.3.0` is the original city)
 Driven by the owner's Studio feedback ("overexposed, basic UI, cramped mall, empty stores, bland characters").
 Only the three concept images were available; no new Studio screenshots reached the session.
 

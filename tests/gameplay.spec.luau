@@ -788,7 +788,13 @@ do
 	f.advance(f, 16)
 	f.round:_step()
 	expect(f.round:IsActive(f.players[1]) and not f.round:IsActive(f.players[3]), "Plaza visitors are never drafted into a chase")
+	local arena = f.players[1].Character.children.HumanoidRootPart.CFrame.Position
+	expect(arena.Z < 100, "Queued players start the round inside the mall")
 	f.round:_endRound("Runner", "test")
+	for _, member in ipairs({ f.players[1], f.players[2], f.players[3] }) do
+		local home = member.Character.children.HumanoidRootPart.CFrame.Position
+		expect(home.Z > 200, "After a round everyone returns to the Plaza hub, queued or not")
+	end
 	expect(f.round:Queue(f.players[1], false) and not f.round:IsQueued(f.players[1]), "Leaving the queue is accepted once the round has ended")
 end
 
