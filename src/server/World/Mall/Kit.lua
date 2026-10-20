@@ -14,9 +14,12 @@ Kit.P = {
 	black = C(30, 30, 38), blush = C(255, 214, 220), peach = C(255, 214, 180), lilac = C(214, 196, 250),
 }
 
+-- Parts that must never be culled: gameplay markers and light sources.
+Kit.KeepVisible = {MallCoin = true, CoinInner = true, Lamp = true, PromptPart = true}
+
 function Kit.new(model)
 	local kit = {
-		model = model, count = 0, lights = 0, signs = 0, P = Kit.P,
+		model = model, count = 0, lights = 0, signs = 0, detail = 0, P = Kit.P,
 		hideSpots = {}, coins = {}, landmarks = {}, covers = {}, doors = {},
 	}
 
@@ -61,6 +64,11 @@ function Kit.new(model)
 			table.insert(kit.covers, part)
 		end
 		if opts.vault then part:SetAttribute("Vaultable", true) end
+		-- Small non-colliding decoration: the client may hide it by distance on weaker devices (see PerformanceController).
+		if not part.CanCollide and biggest < 3 and not Kit.KeepVisible[name] and string.sub(name, 1, 5) ~= "Sign_" then
+			part:SetAttribute("CatchDetail", true)
+			kit.detail += 1
+		end
 		if opts.attrs then for key, value in pairs(opts.attrs) do part:SetAttribute(key, value) end end
 		part.Parent = parent
 		kit.count += 1

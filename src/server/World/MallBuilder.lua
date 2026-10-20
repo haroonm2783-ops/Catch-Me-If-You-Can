@@ -159,6 +159,7 @@ function MallBuilder.Build(options)
 	model:SetAttribute("HideSpotCount", #kit.hideSpots)
 	model:SetAttribute("StoreCount", #defs)
 	model:SetAttribute("LightCount", kit.lights)
+	model:SetAttribute("DetailCount", kit.detail)
 	for _, kind in ipairs({"Runner", "Hunter", "Podium"}) do
 		local values = kind == "Podium" and built.Podiums or built[kind .. "Spawns"]
 		model:SetAttribute(kind .. "Count", #values)

@@ -20,7 +20,7 @@ function Fx.gondola(ctx, lx, lz, len, vertical, bodyColor, itemColors, height)
 	f.b("GondolaBody", lx, 0, lz, sx, height, sz, bodyColor, Enum.Material.SmoothPlastic, true, {cover = "Full"})
 	f.b("GondolaCap", lx, height, lz, sx + 0.2, 0.4, sz + 0.2, P.white, Enum.Material.SmoothPlastic, false)
 	-- Merchandise on both faces: three tiers of coloured product blocks.
-	local count = math.max(2, math.floor(len / 3.2))
+	local count = math.max(2, math.floor(len / 4.4))
 	for tier = 1, 3 do
 		local y0 = 0.9 + (tier - 1) * 2.1
 		for i = 1, count do
@@ -120,7 +120,7 @@ function Fx.bookcase(ctx, lx, lz, len, vertical, color, bookColors)
 	local sx, sz = dims(len, 1.8, vertical)
 	f.b("BookcaseBody", lx, 0, lz, sx, 9, sz, color, Enum.Material.Wood, true, {cover = "Full"})
 	local rows = 4
-	local count = math.max(3, math.floor(len / 2))
+	local count = math.max(3, math.floor(len / 3))
 	for r = 1, rows do
 		for i = 1, count do
 			local along = -len / 2 + (i - 0.5) * len / count

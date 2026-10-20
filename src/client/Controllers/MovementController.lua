@@ -385,6 +385,23 @@ function MovementController:OnState(state)
 	self:_touchControls()
 end
 
+-- Touch buttons form an arc around Roblox's jump button (bottom right) without overlapping it. Landscape
+-- phones use a tighter arc. Positions are reapplied on every state update so a resize or rotation recovers.
+function MovementController:_layoutTouchControls()
+	local ok, viewport = pcall(function() return workspace.CurrentCamera.ViewportSize end)
+	local short = ok and viewport and viewport.Y < 450
+	local slideX, runX = -96, -196
+	local slideY, runY, tagY, scanX, scanY = -190, -110, -186, -96, -262
+	if short then
+		-- Landscape phones: Scan moves to a third column instead of a fourth row.
+		slideX, slideY, runY, tagY, scanX, scanY = -90, -180, -100, -176, -270, -100
+	end
+	ContextActionService:SetPosition("CatchSlide", UDim2.new(1, slideX, 1, slideY))
+	ContextActionService:SetPosition("CatchSprint", UDim2.new(1, runX, 1, runY))
+	ContextActionService:SetPosition("CatchTag", UDim2.new(1, runX, 1, tagY))
+	ContextActionService:SetPosition("CatchScan", UDim2.new(1, scanX, 1, scanY))
+end
+
 -- Touch buttons can appear a frame after BindAction, so styling is reapplied on every state update.
 function MovementController:_styleTouchControls()
 	for _, action in ipairs(ACTIONS) do
@@ -399,6 +416,7 @@ end
 
 function MovementController:_touchControls()
 	self:_styleTouchControls()
+	self:_layoutTouchControls()
 	local visible = self.role ~= "Spectator" and not self.player:GetAttribute("CatchMenuOpen")
 	for _, action in ipairs(ACTIONS) do
 		local control = ContextActionService:GetButton(action)
@@ -475,10 +493,7 @@ function MovementController:Start()
 	ContextActionService:SetTitle("CatchSlide", "SLIDE")
 	ContextActionService:SetTitle("CatchTag", "TAG")
 	ContextActionService:SetTitle("CatchScan", "SCAN")
-	ContextActionService:SetPosition("CatchSprint", UDim2.new(1, -190, 1, -150))
-	ContextActionService:SetPosition("CatchSlide", UDim2.new(1, -110, 1, -150))
-	ContextActionService:SetPosition("CatchTag", UDim2.new(1, -190, 1, -225))
-	ContextActionService:SetPosition("CatchScan", UDim2.new(1, -110, 1, -225))
+	self:_layoutTouchControls()
 	self:_styleTouchControls()
 	table.insert(self.connections, UserInputService.JumpRequest:Connect(function()
 		if UserInputService.TouchEnabled then

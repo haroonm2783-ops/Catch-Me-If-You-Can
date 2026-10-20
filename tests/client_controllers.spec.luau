@@ -186,7 +186,7 @@ local function fixture(viewport, inputType)
 	local services = {Players = players, TweenService = {Create = function(_, object, _, values) return {Play = function() for key, value in pairs(values) do object[key] = value end end} end},
 		RunService = runService, UserInputService = input, GuiService = guiService, ReplicatedStorage = replicated, ContextActionService = cas,
 		ContentProvider = {PreloadAsync = function(_, assets, callback) for _, asset in ipairs(assets) do callback(asset.SoundId, Enum.AssetFetchStatus.Success) end end},
-		SoundService = instance.new("SoundService"), Debris = {AddItem = function() end}}
+		SoundService = instance.new("SoundService"), Lighting = instance.new("Lighting"), Debris = {AddItem = function() end}}
 	local environment = {game = {GetService = function(_, name) return assert(services[name], name) end}, workspace = workspace,
 		Instance = instance, task = {spawn = function(fn) fn() end, defer = function(fn) fn() end, delay = function() end},
 		os = {clock = function() return monotonic end},
@@ -806,6 +806,104 @@ do
 		expect(o.Visible and o.Position.X.Offset >= 0 and o.Position.X.Offset + o.Size.X.Offset <= size.X, "Objective card must stay on screen at " .. tostring(size))
 		local header = ui.clock.Position.X.Offset + ui.clock.Size.X.Offset
 		expect(header <= size.X - ui.wallet.Size.X.Offset - 12 or ui.clock.AnchorPoint.X > 0, "Round card must not sit under the wallet at " .. tostring(size))
+	end
+end
+
+-- Performance tiers: distance LOD for decoration and lights, effect trimming, adaptive step-down.
+do
+	local function world(f)
+		local mall = f.instance.new("Model"); mall.Name = "CatchMall"; mall.Parent = f.workspace
+		local function part(name, x, detail)
+			local p = f.instance.new("Part"); p.Name = name; p.Position = Vector3.new(x, 0, 0); p.Parent = mall
+			if detail then p:SetAttribute("CatchDetail", true) end
+			return p
+		end
+		local near, far, wall = part("Near", 20, true), part("Far", 200, true), part("Wall", 300, false)
+		local lamp = part("Lamp", 250, false)
+		local light = f.instance.new("PointLight"); light.Enabled = true; light.Parent = lamp
+		local nearLight = f.instance.new("PointLight"); nearLight.Enabled = true; nearLight.Parent = near
+		local rays, bloom = f.instance.new("SunRaysEffect"), f.instance.new("BloomEffect")
+		rays.Enabled, bloom.Enabled = true, true
+		rays.Parent, bloom.Parent = f.services.Lighting, f.services.Lighting
+		f.services.Lighting.GlobalShadows = true
+		f.workspace.ChildAdded = signal()
+		return {near = near, far = far, wall = wall, light = light, nearLight = nearLight, rays = rays, bloom = bloom}
+	end
+	-- PC: everything stays on.
+	local f = fixture(Vector2.new(1440, 860), Enum.UserInputType.Keyboard)
+	f.input.KeyboardEnabled = true
+	local w = world(f)
+	local perf = f.load("PerformanceController"); f.ctx.Controllers.PerformanceController = perf; perf:Start()
+	expect(f.ctx.Perf.tier == 1 and (w.far.LocalTransparencyModifier or 0) == 0 and w.light.Enabled, "Desktop defaults to HIGH with nothing culled")
+	-- Manual MEDIUM: far detail and far lights go, near ones stay, sun rays off, bloom kept.
+	perf:SetPreference(2)
+	expect(w.far.LocalTransparencyModifier == 1 and (w.near.LocalTransparencyModifier or 0) == 0, "MEDIUM hides far decoration only")
+	expect(not w.light.Enabled and w.nearLight.Enabled, "MEDIUM turns off far lights only")
+	expect(not w.rays.Enabled and w.bloom.Enabled, "MEDIUM drops sun rays but keeps bloom")
+	expect((w.wall.LocalTransparencyModifier or 0) == 0, "Architecture is never culled")
+	-- Hysteresis: a part just inside the radius stays hidden once hidden.
+	w.far.Position = Vector3.new(105, 0, 0); perf:_lod(false)
+	expect(w.far.LocalTransparencyModifier == 1, "LOD uses hysteresis so decoration does not flicker at the boundary")
+	w.far.Position = Vector3.new(90, 0, 0); perf:_lod(false)
+	expect(w.far.LocalTransparencyModifier == 0, "Decoration returns when comfortably inside the radius")
+	perf:SetPreference(3)
+	expect(not w.bloom.Enabled and not f.services.Lighting.GlobalShadows, "LOW disables bloom and global shadows")
+	perf:SetPreference(nil)
+	expect(f.ctx.Perf.tier == 1 and w.bloom.Enabled and w.rays.Enabled and f.services.Lighting.GlobalShadows and w.light.Enabled, "AUTO restores every effect and light")
+	-- Adaptive: sustained low FPS steps down (once per two slow windows), good FPS never does.
+	for _ = 1, 3000 do f.services.RunService.Heartbeat:Fire(1 / 60) end
+	expect(f.ctx.Perf.tier == 1, "A healthy frame rate must never lower quality")
+	for _ = 1, 40 do f.services.RunService.Heartbeat:Fire(1.5) end
+	expect(f.ctx.Perf.tier == 1, "Hitches and tab-outs are ignored")
+	for _ = 1, 700 do f.services.RunService.Heartbeat:Fire(1 / 20) end
+	expect(f.ctx.Perf.tier == 3 and not w.bloom.Enabled, "Sustained 20 FPS steps down to LOW")
+	expect(f.player:GetAttribute("CatchGraphicsTier") == 3, "The tier is visible to other client code")
+	perf:Destroy()
+	expect((w.far.LocalTransparencyModifier or 0) == 0 and w.bloom.Enabled and f.services.Lighting.GlobalShadows, "Destroying the controller restores the world")
+	-- Phone: MEDIUM by default; manual choices are never auto-lowered.
+	local g = fixture(Vector2.new(390, 760), Enum.UserInputType.Touch)
+	local wg = world(g)
+	local gp = g.load("PerformanceController"); g.ctx.Controllers.PerformanceController = gp; gp:Start()
+	expect(g.ctx.Perf.tier == 2 and wg.far.LocalTransparencyModifier == 1, "Phones default to MEDIUM")
+	gp:SetPreference(1)
+	for _ = 1, 600 do g.services.RunService.Heartbeat:Fire(1 / 15) end
+	expect(g.ctx.Perf.tier == 1, "A manual graphics choice is respected")
+	-- Settings row cycles AUTO -> HIGH -> MEDIUM -> LOW -> AUTO.
+	gp:SetPreference(nil)
+	local ui = g.load("UIController"); g.ctx.Controllers.UIController = ui; ui.ctx = g.ctx; g.ctx.Profile.settings.tutorialDone = true; ui:Start(); ui:OpenMenu("Settings")
+	local seen = {}
+	for _ = 1, 4 do
+		local row = ui.panelContent:FindFirstChild("Setting_graphics", true)
+		table.insert(seen, row.Text)
+		row.Activated:Fire()
+	end
+	expect(seen[1]:find("AUTO") and seen[2] == "HIGH" and seen[3] == "MEDIUM" and seen[4] == "LOW" and g.ctx.Perf.auto, "Graphics button cycles through every option back to AUTO")
+end
+
+-- Touch action buttons never overlap each other or Roblox's jump button (bottom right), portrait or landscape.
+do
+	for _, size in ipairs({Vector2.new(390, 844), Vector2.new(844, 390), Vector2.new(568, 320)}) do
+		local f = fixture(size, Enum.UserInputType.Touch)
+		f.workspace.CurrentCamera.ViewportSize = size
+		local movement = f.load("MovementController"); movement:Start()
+		movement:OnState({phase = "Active", roundId = 1, players = {{userId = 42, role = "Hunter", alive = true}}})
+		local rects = {}
+		for _, name in ipairs({"CatchSprint", "CatchSlide", "CatchTag", "CatchScan"}) do
+			local b = f.cas:GetButton(name)
+			local x, y = size.X + b.Position.X.Offset, size.Y + b.Position.Y.Offset
+			rects[name] = {x0 = x, y0 = y, x1 = x + b.Size.X.Offset, y1 = y + b.Size.Y.Offset}
+			expect(x >= 0 and y >= 90 and x + b.Size.X.Offset <= size.X and y + b.Size.Y.Offset <= size.Y, name .. " must be on screen and below the header at " .. tostring(size))
+		end
+		local jump = {x0 = size.X - 130, y0 = size.Y - 110, x1 = size.X - 50, y1 = size.Y - 30}
+		local names = {"CatchSprint", "CatchSlide", "CatchTag", "CatchScan"}
+		local function overlap(a, b) return a.x0 < b.x1 and b.x0 < a.x1 and a.y0 < b.y1 and b.y0 < a.y1 end
+		for i, a in ipairs(names) do
+			expect(not overlap(rects[a], jump), a .. " must not cover the jump button at " .. tostring(size))
+			for j = i + 1, #names do
+				expect(not overlap(rects[a], rects[names[j]]), a .. " and " .. names[j] .. " overlap at " .. tostring(size))
+			end
+		end
+		movement:Destroy()
 	end
 end
 

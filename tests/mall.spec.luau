@@ -43,7 +43,21 @@ for _, instance in ipairs(model:GetDescendants()) do
 	end
 end
 print(string.format("mall: %d parts, %d colliders, %d lights, %d signs", #parts, #colliders, kit.lights, kit.signs))
-expect(#parts <= 9000, "Static part budget (" .. #parts .. ")")
+expect(#parts <= 7000, "Static part budget (" .. #parts .. ")")
+do
+	-- Distance LOD needs a meaningful pool of small decoration, and must never include gameplay parts.
+	local detail, transparent, bad = 0, 0, 0
+	for _, part in ipairs(parts) do
+		if part:GetAttribute("CatchDetail") then
+			detail += 1
+			if part.CanCollide or part.CanQuery or part.Name == "MallCoin" or part.Name == "PromptPart" or part:GetAttribute("Cover") then bad += 1 end
+		end
+		if part.Transparency > 0 then transparent += 1 end
+	end
+	expect(detail >= 1400 and detail == kit.detail, "Detail LOD pool (" .. detail .. ")")
+	expect(bad == 0, "Detail parts must be non-colliding decoration only")
+	expect(transparent <= 600, "Transparent part (overdraw) budget (" .. transparent .. ")")
+end
 expect(kit.lights <= 70, "Point-light budget (" .. kit.lights .. ")")
 expect(kit.signs <= 150, "SurfaceGui budget (" .. kit.signs .. ")")
 expect(model:GetAttribute("StaticPartCount") == kit.count, "Part count metadata matches the builder")

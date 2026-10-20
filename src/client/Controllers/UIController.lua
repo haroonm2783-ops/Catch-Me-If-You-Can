@@ -260,20 +260,32 @@ function UIController:Start()
 	self:OnState(self.ctx.State)
 end
 
--- Roblox's default chat window and player list sit in the corners the HUD uses. Move the chat to the
--- lower left and hide the player list (the CREW menu replaces it). Best-effort: failures are harmless.
+-- Roblox's default chat window and player list sit in corners the HUD uses. On keyboard devices the chat moves
+-- to the lower left (clear of the dock and the ability bar) and the player list is hidden, because the CREW menu
+-- replaces it. On phones both collapse to topbar icons above the HUD, so they are left alone.
+-- TextChat exposes alignment and scale (not Position/Size); the legacy chat gets the SetCore equivalents.
+-- Best-effort: a failure here never affects gameplay.
 function UIController:_makeRoomForCoreUi()
+	local touchOnly = UserInputService.TouchEnabled and not UserInputService.KeyboardEnabled
+	if touchOnly then return end
 	pcall(function()
 		game:GetService("StarterGui"):SetCoreGuiEnabled(Enum.CoreGuiType.PlayerList, false)
 	end)
-	pcall(function()
-		if self.root.AbsoluteSize.X < 700 then return end
+	local placed = pcall(function()
 		local window = game:GetService("TextChatService"):FindFirstChildOfClass("ChatWindowConfiguration")
-		if window then
-			window.Size = UDim2.fromOffset(340, 170)
-			window.Position = UDim2.new(0, 108, 1, -230)
-		end
+		assert(window, "no ChatWindowConfiguration")
+		window.HorizontalAlignment = Enum.HorizontalAlignment.Left
+		window.VerticalAlignment = Enum.VerticalAlignment.Bottom
+		window.WidthScale = 0.22
+		window.HeightScale = 0.2
 	end)
+	if not placed then
+		pcall(function()
+			local starterGui = game:GetService("StarterGui")
+			starterGui:SetCore("ChatWindowPosition", UDim2.new(0, 108, 1, -230))
+			starterGui:SetCore("ChatWindowSize", UDim2.fromOffset(340, 170))
+		end)
+	end
 end
 
 ---------------------------------------------------------------------------------------------------
@@ -369,7 +381,7 @@ function UIController:_buildHero()
 		self:Toast("Explore the mall. You join the next round automatically.", "welcome")
 	end, {Name = "EnterMall", Position = UDim2.fromOffset(20, 192), Size = UDim2.fromOffset(190, 46), BackgroundColor3 = C.green, TextColor3 = C.ink, TextSize = 16})
 	button(self.hero, "OPEN LOCKER", function() self:OpenMenu("Inventory") end, {Name = "HeroLocker", Position = UDim2.fromOffset(222, 192), Size = UDim2.fromOffset(188, 46), BackgroundColor3 = C.cyan, TextColor3 = C.ink, TextSize = 14})
-	self.saveLabel = label(self.root, "CONNECTING TO YOUR PROFILE", {Position = UDim2.new(0, 108, 1, -22), Size = UDim2.new(1, -230, 0, 14), TextColor3 = C.muted, TextSize = 9, TextTruncate = Enum.TextTruncate.AtEnd})
+	self.saveLabel = label(self.root, "CONNECTING TO YOUR PROFILE", {AnchorPoint = Vector2.new(1, 0), Position = UDim2.new(1, -118, 1, -22), Size = UDim2.fromOffset(300, 14), TextColor3 = C.muted, TextSize = 9, TextXAlignment = Enum.TextXAlignment.Right, TextTruncate = Enum.TextTruncate.AtEnd})
 	self.versionLabel = label(self.root, "BUILD " .. tostring(self.ctx.Config.Version), {Name = "BuildVersion", AnchorPoint = Vector2.new(1, 0), Position = UDim2.new(1, -16, 1, -22), Size = UDim2.fromOffset(95, 14), TextColor3 = C.muted, TextSize = 9, TextXAlignment = Enum.TextXAlignment.Right})
 end
 
@@ -781,8 +793,12 @@ function UIController:_renderShop()
 			BackgroundColor3 = chosen and shade(rarity, 0.62) or C.card})
 		local art = frame(card, {Name = "Art", Position = UDim2.fromOffset(6, 6), Size = UDim2.new(1, -12, 0, cellHeight - 74), BackgroundColor3 = shade(rarity, 0.4), ZIndex = 2}, 10)
 		gradient(art, shade(rarity, 0.75), shade(rarity, 0.35), 90)
-		if item.category == "skins" or item.category == "masks" then
+		local tier = (self.ctx.Perf or {}).tier or 1
+		local wantsThumb = (item.category == "skins" or item.category == "masks") and (tier == 1 or (tier == 2 and index <= 6))
+		if wantsThumb then
 			self:_thumbnail(art, item, equipped)
+		elseif item.category == "skins" or item.category == "masks" then
+			label(art, CATEGORY_ICON[item.category], {TextSize = 40, TextXAlignment = Enum.TextXAlignment.Center, ZIndex = 3})
 		elseif item.category == "tones" or item.category == "hairColors" then
 			local swatch = frame(art, {AnchorPoint = Vector2.new(0.5, 0.5), Position = UDim2.fromScale(0.5, 0.5), Size = UDim2.fromOffset(54, 54), BackgroundColor3 = accent(item), ZIndex = 3}, 27)
 			stroke(swatch, C.text, 0, 3)
@@ -1001,6 +1017,22 @@ function UIController:_renderSettings()
 		label(row, spec[3], {Position = UDim2.fromOffset(16, 40), Size = UDim2.new(1, -120, 0, 32), TextSize = 10, TextColor3 = C.muted, TextWrapped = true, Font = F.medium})
 		local enabled = settings[spec[1]] == true
 		button(row, enabled and "ON" or "OFF", function() self:_send("Settings", {[spec[1]] = not enabled}) end, {Name = "Setting_" .. spec[1], Position = UDim2.new(1, -92, 0, 23), Size = UDim2.fromOffset(74, 38), BackgroundColor3 = enabled and C.green or C.card, TextColor3 = enabled and C.ink or C.muted})
+	end
+	do
+		-- Graphics: AUTO picks by device and steps down if the frame rate stays low. Local only; never changes gameplay.
+		local perf = self.ctx.Perf or {tier = 1, name = "HIGH", auto = true}
+		local row = card(container, {Name = "GraphicsRow", Size = UDim2.new(1, -8, 0, 83), LayoutOrder = 5})
+		label(row, "GRAPHICS", {Position = UDim2.fromOffset(16, 13), Size = UDim2.new(1, -170, 0, 22), TextSize = 13, Font = F.black})
+		label(row, "Lower settings hide far-away decoration and effects on slower devices.", {Position = UDim2.fromOffset(16, 40), Size = UDim2.new(1, -170, 0, 32), TextSize = 10, TextColor3 = C.muted, TextWrapped = true, Font = F.medium})
+		button(row, (perf.auto and "AUTO · " or "") .. (perf.name or "HIGH"), function()
+			local controller = self.ctx.Controllers and self.ctx.Controllers.PerformanceController
+			if not controller then return end
+			-- AUTO -> HIGH -> MEDIUM -> LOW -> AUTO
+			if perf.auto then controller:SetPreference(1)
+			elseif perf.tier < 3 then controller:SetPreference(perf.tier + 1)
+			else controller:SetPreference(nil) end
+			self:_renderMenu()
+		end, {Name = "Setting_graphics", Position = UDim2.new(1, -150, 0, 23), Size = UDim2.fromOffset(132, 38), TextSize = 12})
 	end
 	local instructions = card(container, {Size = UDim2.new(1, -8, 0, 176), LayoutOrder = 10})
 	button(container, "HOW TO PLAY", function() self:ShowTutorial() end, {Name = "HowToPlay", Size = UDim2.new(1, -8, 0, 44), LayoutOrder = 11, TextSize = 12, BackgroundColor3 = C.pink})

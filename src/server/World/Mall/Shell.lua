@@ -150,8 +150,8 @@ function Shell.build(kit, Layout)
 		local deck = kit.part(routes, "Escalator_" .. e.id, Vector3.new(width, 1, length), cf * CFrame.new(0, -0.5, 0), P.steel, Enum.Material.Metal, true, {attrs = {TraversalRoute = true}})
 		deck:SetAttribute("TraversalRoute", true)
 		-- Treads: thin ridges, visual only.
-		for i = 1, math.floor(length / 2.2) do
-			kit.part(routes, "Tread", Vector3.new(width - 0.6, 0.12, 0.25), cf * CFrame.new(0, 0.07, -length / 2 + i * 2.2), P.dark, Enum.Material.SmoothPlastic, false)
+		for i = 1, math.floor(length / 3.4) do
+			kit.part(routes, "Tread", Vector3.new(width - 0.6, 0.12, 0.25), cf * CFrame.new(0, 0.07, -length / 2 + i * 3.4), P.dark, Enum.Material.SmoothPlastic, false)
 		end
 		local dir = (b3 - a3) * Vector3.new(1, 0, 1)
 		local dirUnit = dir.Unit
