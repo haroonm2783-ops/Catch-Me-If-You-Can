@@ -12,57 +12,64 @@ local MODEL_NAME = "CatchMall"
 local F2 = 16 -- second-floor walking surface
 
 local P = {
-	white = Color3.fromRGB(246, 246, 250), marble = Color3.fromRGB(238, 230, 220), marble2 = Color3.fromRGB(214, 204, 196),
-	cream = Color3.fromRGB(248, 234, 208), navy = Color3.fromRGB(38, 48, 92), ink = Color3.fromRGB(24, 28, 52),
+	white = Color3.fromRGB(222, 220, 230), marble = Color3.fromRGB(204, 192, 178), marble2 = Color3.fromRGB(178, 168, 160),
+	cream = Color3.fromRGB(222, 200, 166), navy = Color3.fromRGB(44, 52, 96), ink = Color3.fromRGB(30, 32, 56),
 	purple = Color3.fromRGB(128, 88, 220), magenta = Color3.fromRGB(238, 74, 190), cyan = Color3.fromRGB(70, 226, 238),
 	blue = Color3.fromRGB(72, 142, 255), coral = Color3.fromRGB(255, 108, 114), gold = Color3.fromRGB(255, 198, 86),
 	green = Color3.fromRGB(62, 182, 118), leaf = Color3.fromRGB(104, 204, 104), wood = Color3.fromRGB(164, 110, 68),
-	teal = Color3.fromRGB(44, 190, 192), pink = Color3.fromRGB(255, 152, 202), glass = Color3.fromRGB(156, 216, 242),
+	teal = Color3.fromRGB(44, 190, 192), pink = Color3.fromRGB(255, 152, 202), glass = Color3.fromRGB(128, 186, 214),
 	steel = Color3.fromRGB(150, 160, 178), red = Color3.fromRGB(214, 48, 70), orange = Color3.fromRGB(255, 152, 70),
-	soil = Color3.fromRGB(70, 60, 54), yellow = Color3.fromRGB(255, 226, 96),
+	soil = Color3.fromRGB(70, 60, 54), yellow = Color3.fromRGB(240, 204, 80),
 }
 
+-- Tunable lighting preset. Values are deliberately restrained: surfaces keep their color,
+-- neon stays an accent, and shaded interiors rely on warm point lights, not exposure.
+local LIGHTING = {
+	ClockTime = 15.6, Brightness = 1.7, Ambient = Color3.fromRGB(122, 118, 138), OutdoorAmbient = Color3.fromRGB(136, 130, 152),
+	ColorShift_Top = Color3.fromRGB(255, 226, 190), ExposureCompensation = -0.1, EnvironmentDiffuseScale = 0.5, EnvironmentSpecularScale = 0.2,
+	ShadowSoftness = 0.3, BloomIntensity = 0.12, BloomSize = 16, BloomThreshold = 2.2, Saturation = 0.04, Contrast = 0.06, Haze = 0.35, Density = 0.07,
+}
 local function applyLighting()
-	-- Bright golden hour streaming through the skylights; neon is accent, never the only light.
-	Lighting.ClockTime = 16.2
-	Lighting.Brightness = 2.8
-	Lighting.Ambient = Color3.fromRGB(168, 164, 190)
-	Lighting.OutdoorAmbient = Color3.fromRGB(186, 178, 204)
-	Lighting.ColorShift_Top = Color3.fromRGB(255, 232, 205)
-	Lighting.ExposureCompensation = 0.35
+	local L = LIGHTING
+	Lighting.ClockTime = L.ClockTime
+	Lighting.Brightness = L.Brightness
+	Lighting.Ambient = L.Ambient
+	Lighting.OutdoorAmbient = L.OutdoorAmbient
+	Lighting.ColorShift_Top = L.ColorShift_Top
+	Lighting.ExposureCompensation = L.ExposureCompensation
 	Lighting.GlobalShadows = true
-	Lighting.ShadowSoftness = 0.25
-	Lighting.EnvironmentDiffuseScale = 0.8
-	Lighting.EnvironmentSpecularScale = 0.7
+	Lighting.ShadowSoftness = L.ShadowSoftness
+	Lighting.EnvironmentDiffuseScale = L.EnvironmentDiffuseScale
+	Lighting.EnvironmentSpecularScale = L.EnvironmentSpecularScale
 	for _, name in ipairs({ "CatchAtmosphere", "CatchBloom", "CatchColor", "CatchSunRays", "CatchSky" }) do
 		local old = Lighting:FindFirstChild(name)
 		if old then old:Destroy() end
 	end
 	local atmosphere = Instance.new("Atmosphere")
 	atmosphere.Name = "CatchAtmosphere"
-	atmosphere.Density = 0.16
-	atmosphere.Offset = 0.25
-	atmosphere.Color = Color3.fromRGB(206, 196, 238)
-	atmosphere.Decay = Color3.fromRGB(255, 170, 160)
-	atmosphere.Glare = 0.15
-	atmosphere.Haze = 0.6
+	atmosphere.Density = L.Density
+	atmosphere.Offset = 0.2
+	atmosphere.Color = Color3.fromRGB(196, 190, 224)
+	atmosphere.Decay = Color3.fromRGB(240, 170, 150)
+	atmosphere.Glare = 0.05
+	atmosphere.Haze = L.Haze
 	atmosphere.Parent = Lighting
 	local bloom = Instance.new("BloomEffect")
 	bloom.Name = "CatchBloom"
-	bloom.Intensity = 0.38
-	bloom.Size = 28
-	bloom.Threshold = 1.15
+	bloom.Intensity = L.BloomIntensity
+	bloom.Size = L.BloomSize
+	bloom.Threshold = L.BloomThreshold
 	bloom.Parent = Lighting
 	local color = Instance.new("ColorCorrectionEffect")
 	color.Name = "CatchColor"
-	color.Contrast = 0.1
-	color.Saturation = 0.26
-	color.TintColor = Color3.fromRGB(255, 246, 240)
+	color.Contrast = L.Contrast
+	color.Saturation = L.Saturation
+	color.TintColor = Color3.fromRGB(255, 248, 242)
 	color.Parent = Lighting
 	local rays = Instance.new("SunRaysEffect")
 	rays.Name = "CatchSunRays"
-	rays.Intensity = 0.08
-	rays.Spread = 0.6
+	rays.Intensity = 0.03
+	rays.Spread = 0.5
 	rays.Parent = Lighting
 end
 
@@ -314,7 +321,7 @@ function MapBuilder.Build(options)
 		seg(cursor, a2, y0, y1)
 	end
 	local function ceilingStrip(parent, x, y, z, sx, sz, color)
-		neon(parent, "CeilingLight", x, y, z, sx, 0.2, sz, color or P.white)
+		neon(parent, "CeilingLight", x, y, z, sx, 0.2, sz, color or Color3.fromRGB(214, 190, 150))
 	end
 
 	-- Reusable dressing ----------------------------------------------------------------
@@ -414,9 +421,15 @@ function MapBuilder.Build(options)
 	box(floors, "Foundation", 0, -2.2, 0, 236, 3.6, 172, P.navy, Enum.Material.Concrete)
 	-- Ground floor: marble hall, tiled food court, carpeted arcade and two store rows.
 	box(floors, "HallMarble", 0, -0.2, 0, 2 * HX, 0.4, 2 * HZ, P.marble, Enum.Material.Marble)
-	box(floors, "FoodCourtFloor", -88, -0.2, 0, 48, 0.4, 96, Color3.fromRGB(246, 218, 178), Enum.Material.Marble)
+	box(floors, "FoodCourtFloor", -88, -0.2, 0, 48, 0.4, 96, Color3.fromRGB(196, 150, 104), Enum.Material.WoodPlanks)
 	box(floors, "ArcadeFloor", 88, -0.2, 0, 48, 0.4, 96, P.navy, Enum.Material.SmoothPlastic)
 	for _, zc in ipairs({ -64, 64 }) do box(floors, "StoreRowFloor", 0, -0.2, zc, 224, 0.4, 32, P.marble2, Enum.Material.Marble) end
+	-- Checker tiles break up the hall floor so it never reads as one flat slab.
+	for ix = -5, 4 do
+		for iz = -4, 3 do
+			if (ix + iz) % 2 == 0 then art(floors, "FloorTile", Vector3.new(12.6, 0.06, 11.8), Vector3.new((ix + 0.5) * 12.8, 0.03, (iz + 0.5) * 12), P.marble2, Enum.Material.Marble) end
+		end
+	end
 	-- Hall inlay: concentric rings and diagonal bands give the marble a designed pattern.
 	for i, d in ipairs({ 36, 28, 20 }) do
 		art(floors, "InlayRing", Vector3.new(0.12, d + 12, d + 12), CFrame.new(0, 0.07, 0) * CFrame.Angles(0, 0, math.pi / 2), i == 2 and P.gold or P.blue, i == 2 and Enum.Material.Metal or Enum.Material.SmoothPlastic).Shape = Enum.PartType.Cylinder
@@ -433,7 +446,7 @@ function MapBuilder.Build(options)
 	floor2("UpperStoreRow", -112, 112, 48, 80, P.marble2, Enum.Material.Marble)
 	local ringHoles = { voidHole, stairHoles[1], stairHoles[2] }
 	floor2("UpperHall", -HX, HX, -HZ, HZ, P.marble, Enum.Material.Marble, ringHoles)
-	floor2("UpperWestLounge", -112, -HX, -HZ, HZ, Color3.fromRGB(246, 218, 178), Enum.Material.Marble, { loungeHole })
+	floor2("UpperWestLounge", -112, -HX, -HZ, HZ, Color3.fromRGB(196, 150, 104), Enum.Material.Marble, { loungeHole })
 	floor2("UpperEastDept", HX, 112, -HZ, HZ, P.marble2, Enum.Material.Marble)
 	-- Trim and underside lights on the balcony edge, visible from the whole ground floor.
 	local function edgeTrim(x1, x2, z1, z2)
