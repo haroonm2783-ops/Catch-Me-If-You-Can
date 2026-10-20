@@ -26,8 +26,8 @@ run('rojo', 'build', 'default.project.json', '-o', intermediate)
 run('lune', 'run', 'tools/bake-place.luau', intermediate)
 intermediate.unlink()
 run('luau', 'tests/rules.spec.luau')
-for name in ('data_service', 'gameplay', 'appearance', 'client_controllers', 'map', 'mall'):
+for name in ('data_service', 'gameplay', 'appearance', 'client_controllers', 'map', 'mall', 'enums'):
     run('lune', 'run', f'tests/{name}.spec.luau')
 run('git', 'diff', '--check')
-print(f'PASS: {len(sources)} production scripts compiled; seven test suites; both Studio place formats validated.')
+print(f'PASS: {len(sources)} production scripts compiled; eight test suites; both Studio place formats validated.')
 print('This does not run the Roblox engine. Complete docs/TESTING.md in Studio before launch.')

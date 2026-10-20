@@ -8,11 +8,12 @@ local GuiService = game:GetService("GuiService")
 local MovementController = {}
 MovementController.__index = MovementController
 
-local ACTIONS = { "CatchSprint", "CatchSlide", "CatchVault", "CatchTag" }
+local ACTIONS = { "CatchSprint", "CatchSlide", "CatchVault", "CatchTag", "CatchScan" }
 local READY_ATTRIBUTES = {
 	Slide = "CatchSlideReadyAt",
 	Vault = "CatchVaultReadyAt",
 	Tag = "CatchTagReadyAt",
+	Scan = "CatchScanReadyAt",
 }
 
 -- Authored joint offsets provide a real slide silhouette without depending on
@@ -126,7 +127,11 @@ function MovementController:_intent(action)
 	if not self:_canAct() then
 		return
 	end
-	if action == "Tag" and (self.role ~= "Hunter" or self.phase ~= "Active") then return end
+	if (action == "Tag" or action == "Scan") and (self.role ~= "Hunter" or self.phase ~= "Active") then return end
+	-- A jump while hiding is the "step out" gesture; the server owns the actual release.
+	if action == "Vault" and self.character and self.character:GetAttribute("CatchHiding") == true then
+		action = "Unhide"
+	end
 	-- This is only an input flood guard. The server decides whether the move is valid.
 	local field = "last" .. action .. "Intent"
 	local now = os.clock()
@@ -323,7 +328,8 @@ function MovementController:_touchControls()
 	for _, action in ipairs(ACTIONS) do
 		local control = ContextActionService:GetButton(action)
 		if control then
-			control.Visible = visible and (action ~= "CatchTag" or (self.role == "Hunter" and self.phase == "Active"))
+			local hunterOnly = action == "CatchTag" or action == "CatchScan"
+			control.Visible = visible and (not hunterOnly or (self.role == "Hunter" and self.phase == "Active"))
 		end
 	end
 end
@@ -384,12 +390,20 @@ function MovementController:Start()
 		end
 		return self:_canAct() and Enum.ContextActionResult.Sink or Enum.ContextActionResult.Pass
 	end, true, Enum.KeyCode.F, Enum.KeyCode.ButtonR2)
+	ContextActionService:BindAction("CatchScan", function(_, state)
+		if state == Enum.UserInputState.Begin then
+			self:_intent("Scan")
+		end
+		return self:_canAct() and Enum.ContextActionResult.Sink or Enum.ContextActionResult.Pass
+	end, true, Enum.KeyCode.Q, Enum.KeyCode.ButtonX)
 	ContextActionService:SetTitle("CatchSprint", "RUN")
 	ContextActionService:SetTitle("CatchSlide", "SLIDE")
 	ContextActionService:SetTitle("CatchTag", "TAG")
+	ContextActionService:SetTitle("CatchScan", "SCAN")
 	ContextActionService:SetPosition("CatchSprint", UDim2.new(1, -190, 1, -150))
 	ContextActionService:SetPosition("CatchSlide", UDim2.new(1, -110, 1, -150))
 	ContextActionService:SetPosition("CatchTag", UDim2.new(1, -190, 1, -225))
+	ContextActionService:SetPosition("CatchScan", UDim2.new(1, -110, 1, -225))
 	for _, action in ipairs(ACTIONS) do
 		local button = ContextActionService:GetButton(action)
 		if button then

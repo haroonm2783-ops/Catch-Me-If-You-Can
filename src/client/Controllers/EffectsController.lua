@@ -28,6 +28,12 @@ local BUILTIN_AUDIO = {
 	Countdown = { path = "electronicpingshort.wav", pitch = 1, gain = 0.45 },
 	Final = { path = "electronicpingshort.wav", pitch = 0.85, gain = 0.5 },
 	Purchase = { path = "electronicpingshort.wav", pitch = 1.3, gain = 0.45 },
+	Pickup = { path = "electronicpingshort.wav", pitch = 1.75, gain = 0.5 },
+	CloseCall = { path = "action_jump.mp3", pitch = 1.35, gain = 0.5 },
+	Found = { path = "electronicpingshort.wav", pitch = 0.95, gain = 0.6 },
+	Hide = { path = "action_footsteps_plastic.mp3", pitch = 0.55, gain = 0.3 },
+	Reveal = { path = "electronicpingshort.wav", pitch = 0.6, gain = 0.5 },
+	Scan = { path = "electronicpingshort.wav", pitch = 0.5, gain = 0.5 },
 }
 
 local function audioSpec(config, name)
@@ -102,7 +108,7 @@ function EffectsController:_settings()
 	return self.ctx.Profile.settings or {}
 end
 
-function EffectsController:_sound(name, volume)
+function EffectsController:_sound(name, volume, pitchScale)
 	if self:_settings().sfx == false then
 		return
 	end
@@ -113,7 +119,7 @@ function EffectsController:_sound(name, volume)
 	local sound = Instance.new("Sound")
 	sound.Name = "Catch" .. name
 	sound.SoundId = source
-	sound.PlaybackSpeed = pitch
+	sound.PlaybackSpeed = pitch * (pitchScale or 1)
 	sound.Volume = (volume or 0.4) * gain
 	sound.Parent = SoundService
 	self.sounds[sound] = true
@@ -458,6 +464,33 @@ function EffectsController:OnNotice(notice)
 		if notice.action == "Slide" or notice.action == "Vault" then
 			self:_sound(notice.action, 0.25)
 		end
+	elseif notice.kind == "pickup" then
+		-- The pitch climbs with the stack so a coin run feels like a combo.
+		local count = tonumber(notice.count) or 1
+		self:_sound("Pickup", 0.4, 1 + math.min(count, 25) * 0.015)
+		self:_worldBurst(notice.position, GOLD, true)
+	elseif notice.kind == "closecall" then
+		self:_banner("CLOSE CALL!", GOLD, 0.8, false)
+		self:_pulse(GOLD, 0.45)
+		self:_sound("CloseCall", 0.4)
+	elseif notice.kind == "found" then
+		self:_banner("FOUND ONE!", CORAL, 0.8, false)
+		self:_pulse(CORAL, 0.5)
+		self:_sound("Found", 0.5)
+	elseif notice.kind == "reveal" then
+		self:_sound("Reveal", 0.3)
+		if notice.userId == self.player.UserId then
+			self:_banner("YOU WERE FOUND!", CORAL, 0.9, false)
+			self:_pulse(CORAL, 0.6)
+		end
+	elseif notice.kind == "hide" then
+		if notice.state == "in" then
+			self:_sound("Hide", 0.25)
+			self:_pulse(GOLD, 0.2)
+		end
+	elseif notice.kind == "scan" then
+		self:_sound("Scan", 0.45)
+		self:_pulse(CYAN, 0.5)
 	end
 end
 
