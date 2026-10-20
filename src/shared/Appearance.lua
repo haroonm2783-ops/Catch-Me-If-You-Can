@@ -11,6 +11,9 @@ local palettes = {
 	skin_golden = {base=C(38,38,46), coat=C(239,227,188), trim=C(201,153,57), detail=C(255,224,116), skin=C(180,131,93)},
 	skin_neon = {base=C(27,34,56), coat=C(109,51,137), trim=C(62,226,225), detail=C(248,107,212), skin=C(159,112,86)},
 	skin_crimson = {base=C(43,30,40), coat=C(145,44,62), trim=C(192,191,201), detail=C(255,113,85), skin=C(150,113,95)},
+	skin_frost = {base=C(34,62,112), coat=C(118,196,255), trim=C(228,247,255), detail=C(104,238,255), skin=C(196,214,232)},
+	skin_panda = {base=C(30,30,36), coat=C(242,242,247), trim=C(40,40,46), detail=C(118,210,124), skin=C(200,168,140)},
+	skin_candy = {base=C(236,128,176), coat=C(255,208,230), trim=C(255,255,255), detail=C(112,222,255), skin=C(214,170,140)},
 }
 local masks = {mask_phantom=true,mask_kitsune=true,mask_skull=true,mask_visor=true,mask_street=true}
 local nominal = {
@@ -200,6 +203,53 @@ local function costume(folder, rig, skinId, maskId, p)
 		piece(head,"HatRibbon",Vector3.new(0.13,1.29,1.29),offset(0,0.64,0,0,0,90),p.detail,nil,"Cylinder")
 		piece(torso,"FlowerStem",Vector3.new(0.06,0.40,0.06),offset(-0.40,0.03,-0.69,0,0,14),p.coat)
 		piece(torso,"PocketFlower",Vector3.new(0.23,0.23,0.10),offset(-0.45,0.22,-0.71),p.detail,nil,"Ball")
+	elseif skinId == "skin_frost" then
+		-- Crystalline streetwear: an ice crown, glassy shoulder shards and a glowing core.
+		for i, spec in ipairs({{-0.38,0.62,-8},{0,0.78,0},{0.38,0.62,8}}) do
+			piece(head,"IceCrown"..i,Vector3.new(0.24,0.52+(i==2 and 0.22 or 0),0.24),offset(spec[1],spec[2],0.02,0,0,spec[3]),p.detail,Enum.Material.Glass,"Wedge")
+		end
+		for _, side in ipairs({-1,1}) do
+			piece(torso,"ShoulderShard",Vector3.new(0.52,0.80,0.52),offset(side*1.12,0.72,0,0,0,side*-24),p.coat,Enum.Material.Glass,"Wedge")
+			piece(torso,"ShardSpike",Vector3.new(0.26,0.55,0.26),offset(side*1.4,1.0,0,0,0,side*-38),p.trim,Enum.Material.Glass,"Wedge")
+			piece(bodyPart(rig,side==-1 and "LeftLowerArm" or "RightLowerArm"),"IceGauntlet",Vector3.new(0.80,0.74,0.86),offset(0,-0.04,0),p.coat,Enum.Material.Glass)
+			piece(bodyPart(rig,side==-1 and "LeftLowerLeg" or "RightLowerLeg"),"FrostGreave",Vector3.new(0.18,0.74,0.64),offset(side*0.44,-0.1,0),p.detail,Enum.Material.Neon)
+			piece(torso,"FrostSeam",Vector3.new(0.07,1.5,0.06),offset(side*0.5,-0.02,-0.59),p.detail,Enum.Material.Neon)
+		end
+		piece(torso,"FrostCollar",Vector3.new(1.42,0.34,1.16),offset(0,0.80,0.02),p.trim)
+		piece(torso,"CoreCrystal",Vector3.new(0.34,0.34,0.14),offset(0,0.30,-0.68,0,0,45),p.detail,Enum.Material.Neon)
+		piece(hip,"IceBelt",Vector3.new(1.9,0.2,0.99),offset(0,0.24,0),p.coat,Enum.Material.Glass)
+		piece(head,"FrostHair",Vector3.new(1.22,0.32,1.1),offset(0,0.47,0.04),p.trim,nil,"Ball")
+	elseif skinId == "skin_panda" then
+		-- Oversized panda hoodie: round white hood, black ears, eye patches, bamboo pin.
+		piece(head,"PandaHood",Vector3.new(1.5,1.3,1.38),offset(0,0.22,0.1),p.coat,nil,"Ball")
+		for _, side in ipairs({-1,1}) do
+			piece(head,"PandaEar",Vector3.new(0.48,0.48,0.24),offset(side*0.6,0.82,0.06),p.trim,nil,"Ball")
+			piece(head,"EarInner",Vector3.new(0.24,0.24,0.12),offset(side*0.6,0.82,-0.08),p.detail,nil,"Ball")
+			piece(torso,"HoodiePouchSleeve",Vector3.new(0.9,0.95,0.96),offset(side*1.18,-0.1,0),p.coat)
+			piece(torso,"PandaPaw",Vector3.new(0.34,0.3,0.1),offset(side*0.5,-0.55,-0.62),p.trim,nil,"Ball")
+			piece(bodyPart(rig,side==-1 and "LeftFoot" or "RightFoot"),"PandaSock",Vector3.new(0.88,0.24,0.5),offset(0,0.08,-0.3),p.trim)
+		end
+		piece(torso,"HoodieBody",Vector3.new(2.14,1.7,1.14),offset(0,-0.02,0),p.coat)
+		piece(torso,"KangarooPocket",Vector3.new(1.1,0.5,0.14),offset(0,-0.5,-0.62),p.trim)
+		piece(torso,"BambooPin",Vector3.new(0.12,0.62,0.12),offset(0.62,0.35,-0.64,0,0,12),p.detail,Enum.Material.Neon)
+		piece(torso,"BambooBand",Vector3.new(0.16,0.1,0.14),offset(0.62,0.4,-0.64,0,0,12),p.trim)
+	elseif skinId == "skin_candy" then
+		-- Y2K candy pop: headphones, pigtails, puffy sleeves and a heart patch.
+		piece(head,"HeadphoneBand",Vector3.new(1.3,0.16,0.16),offset(0,0.6,0.0),p.trim)
+		for _, side in ipairs({-1,1}) do
+			piece(head,"HeadphoneCup",Vector3.new(0.34,0.6,0.6),offset(side*0.68,0.08,0.02),p.base,Enum.Material.Neon)
+			piece(head,"CupGlow",Vector3.new(0.1,0.34,0.34),offset(side*0.88,0.08,0.02),p.detail,Enum.Material.Neon)
+			piece(head,"Pigtail",Vector3.new(0.6,0.6,0.6),offset(side*0.95,-0.42,0.34),p.base,nil,"Ball")
+			piece(head,"PigtailTie",Vector3.new(0.3,0.16,0.3),offset(side*0.8,-0.14,0.3),p.trim)
+			piece(bodyPart(rig,side==-1 and "LeftUpperArm" or "RightUpperArm"),"PuffSleeve",Vector3.new(0.95,0.95,1.0),offset(0,0.04,0),p.coat,nil,"Ball")
+			piece(bodyPart(rig,side==-1 and "LeftFoot" or "RightFoot"),"PlatformHeel",Vector3.new(0.95,0.3,1.2),offset(0,-0.24,-0.02),p.base)
+		end
+		piece(head,"CandyHair",Vector3.new(1.24,0.34,1.12),offset(0,0.46,0.05),p.base,nil,"Ball")
+		piece(torso,"CropTop",Vector3.new(2.1,1.0,1.1),offset(0,0.3,0),p.coat)
+		piece(torso,"HeartPatch",Vector3.new(0.4,0.4,0.1),offset(-0.5,0.3,-0.62,0,0,45),p.base,Enum.Material.Neon)
+		piece(torso,"HeartPatchB",Vector3.new(0.3,0.3,0.1),offset(-0.5,0.5,-0.62,0,0,0),p.base,Enum.Material.Neon,"Ball")
+		piece(hip,"GlitterBelt",Vector3.new(1.9,0.2,0.99),offset(0,0.24,0),p.detail,Enum.Material.Neon)
+		piece(hip,"Skirt",Vector3.new(2.0,0.4,1.1),offset(0,-0.2,0),p.base)
 	else
 		-- The free courier is a complete streetwear outfit, not a recolored body:
 		-- cropped teal jacket, dropped hood, sling bag, cargo pants and cream soles.

@@ -138,14 +138,14 @@ def main():
     args = parser.parse_args()
     scene = json.loads(args.input.read_text())
     specimens = scene["specimens"]
-    assert len(specimens)==8,"The comparison sheet expects seven outfits and a Hunter comparison"
-    width,height = 2382,1370
+    assert len(specimens)==11,"The comparison sheet expects ten outfits and a Hunter comparison"
+    width,height = 2382,1936
     image = Image.new("RGB",(width,height),(12,20,35))
     draw = ImageDraw.Draw(image)
     draw.rounded_rectangle((43,34,53,106),radius=4,fill=(74,224,216))
     draw.text((72,32),"CATCH ME IF YOU CAN",font=font(39,True),fill=(240,244,250))
     draw.text((74,84),"CHARACTER SILHOUETTE + FIT REVIEW",font=font(18),fill=(139,178,195))
-    accents = [(75,221,211),(250,118,111),(165,215,242),(152,219,151),(182,143,232),(239,198,94),(90,222,231),(231,113,130)]
+    accents = [(75,221,211),(250,118,111),(165,215,242),(152,219,151),(182,143,232),(239,198,94),(90,222,231),(231,113,130),(120,200,255),(118,210,124),(255,150,200)]
     for i,specimen in enumerate(specimens):
         x,y = 36+(i%4)*582,133+(i//4)*566
         draw.rounded_rectangle((x,y,x+564,y+548),radius=19,fill=(21,33,51),outline=(43,61,81),width=2)
@@ -158,8 +158,8 @@ def main():
         draw = ImageDraw.Draw(image)
         draw.text((x+92,y+515),"FRONT",font=font(13,True),fill=(124,157,178))
         draw.text((x+360,y+515),"3/4 VIEW",font=font(13,True),fill=(124,157,178))
-    draw.text((41,1283),"GEOMETRY PREVIEW — NOT ROBLOX STUDIO RENDERING",font=font(20,True),fill=(90,220,213))
-    draw.text((41,1319),"Actual Appearance.BuildPreview geometry. Head meshes approximated. Materials, role outlines, VFX and lighting require Studio review.",font=font(16),fill=(149,171,190))
+    draw.text((41,height-87),"GEOMETRY PREVIEW — NOT ROBLOX STUDIO RENDERING",font=font(20,True),fill=(90,220,213))
+    draw.text((41,height-51),"Actual Appearance.BuildPreview geometry. Head meshes approximated. Materials, role outlines, VFX and lighting require Studio review.",font=font(16),fill=(149,171,190))
     args.output.parent.mkdir(parents=True,exist_ok=True)
     image.save(args.output)
     print(args.output)

@@ -120,6 +120,6 @@ part_count=scene.get('partCount',len(scene['parts']))
 route_count=scene.get('routes',12)
 d.text((62,H-62),f'{part_count:,} AUTHORED PARTS     /     {route_count} BRIDGE + RAMP ROUTES     /     6 ROOFTOP DISTRICTS',font=font(17,True),fill=(91,223,215))
 d.text((62,H-32),'Geometric overview generated from the baked place. Lighting and rendering must be reviewed in Roblox Studio.',font=font(13),fill=(145,166,187))
-output=ROOT/'docs/NeonHeights-overview.png'
+output=ROOT/'docs/city-backup-overview.png'
 image.save(output)
 print(output)

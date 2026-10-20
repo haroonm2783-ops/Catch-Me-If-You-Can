@@ -208,7 +208,7 @@ for _, size in ipairs({Vector2.new(1440, 860), Vector2.new(390, 760), Vector2.ne
 	local f = fixture(size, Enum.UserInputType.Touch)
 	f.ctx.Profile.quests = {{id = "rounds", text = "Complete 3 competitive rounds", xp = 75, coins = 30, goal = 3, progress = 3, claimed = false},
 		{id = "tags", text = "Tag 5 runners", xp = 75, coins = 30, goal = 5, progress = 2, claimed = false}}
-	f.ctx.State.winners = {42}; f.ctx.State.resultText = "The runners own Neon Heights!"
+	f.ctx.State.winners = {42}; f.ctx.State.resultText = "The runners own the Neon Mall!"
 	local ui = f.load("UIController"); f.ctx.Controllers.UIController = ui; ui:Start()
 	for _, menu in ipairs({"Shop", "Inventory", "Quests", "Progress", "Settings", "Leaderboard", "Results"}) do
 		ui:OpenMenu(menu)

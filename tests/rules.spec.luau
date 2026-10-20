@@ -95,6 +95,6 @@ for category,id in pairs(Catalog.DefaultEquipment) do
 end
 equal(Catalog.IsEquippable("bundles"),false,"Bundles cannot equip")
 equal(Catalog.IsEquippable("skins"),true,"Skins can equip")
-equal(#Catalog.ForCategory("skins"),7,"Seven distinct launch skins")
+equal(#Catalog.ForCategory("skins"),10,"Ten distinct skins")
 equal(#Catalog.ForCategory("masks"),5,"Five launch masks")
 print("PASS: "..assertions.." economy, profile, rank, quest and catalog assertions")

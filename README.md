@@ -4,11 +4,12 @@ An original Roblox multiplayer parkour chase game set in **Neon Heights**: a
 mint-and-coral twilight city with rooftop gardens, a lantern restaurant, an arcade,
 a clock tower, interconnected rooftops, and a separate social deck.
 
-**Version 0.3.0** brightens the city, adds round types (Classic, Infection, Swarm,
-Slide Frenzy), first-time onboarding, a daily login streak and 16 achievements with
-earnable titles. It builds on 0.2.1's floor-flicker and R6 slide fixes. Live status
-and next steps are in [DEVELOPMENT_PROGRESS.md](DEVELOPMENT_PROGRESS.md); the older
-[update and first-play checklist](docs/UPDATE_0_2.md) still applies.
+**Version 0.4.0** replaces the rooftop city with a two-story **Neon Mall** and adds a separate **Plaza hub**
+where players spawn, shop, check boards and press PLAY to join the chase queue. The original city is kept in
+`CityMapBuilder.lua` (tag `backup-city-v0.3.0`). Live status: [DEVELOPMENT_PROGRESS.md](DEVELOPMENT_PROGRESS.md).
+
+![Mall overview (geometry preview, not a Studio screenshot)](docs/previews/mall-overview.png)
+![Plaza hub (geometry preview)](docs/previews/plaza-hub.png)
 
 **Direct-open Studio places are included.** The user confirmed running, sprinting,
 and vaulting in the previous place, and reported that sliding failed. The new
@@ -26,7 +27,7 @@ claim of launch readiness.
 2. In Roblox Studio, choose **File → Open from File** and select the downloaded
    place. Neon Heights is already present in the editor; it is not an empty place
    that requires pasting scripts. The map is reused at runtime.
-3. Press **Play**. Output should say `Neon Heights initialized. 0.3.0`; if it
+3. Press **Play**. Output should say `Neon Mall initialized. 0.4.0`; if it
    shows an older version, download and open the updated file. A solo Studio
    session enters a clearly labeled practice round
    after the 16-second intermission and 5-second head start. Practice awards no
@@ -77,8 +78,6 @@ into the source tree.
 The leaderboard ranks players in the **current server** using their persistent
 statistics. There is no global cross-server leaderboard or ranked matchmaking.
 Rank is a transparent win/loss rating (+24 / −14), not a matchmaking skill estimate.
-
-![Geometric map overview — not a Studio screenshot](docs/NeonHeights-overview.png)
 
 ![Actual costume geometry — not a Studio screenshot](docs/Character-lineup.png)
 

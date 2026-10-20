@@ -105,7 +105,7 @@ for _, skin in ipairs(skins) do
 		rig:Destroy()
 	end
 end
-expect(combinations == 42,"All seven skins with all five masks and no mask were instantiated")
+expect(combinations == 60,"All ten skins with all five masks and no mask were instantiated")
 
 local function buildR6()
 	local rig = roblox.Instance.new("Model")
@@ -149,7 +149,7 @@ for _, skin in ipairs(skins) do
 		rig:Destroy()
 	end
 end
-expect(r6Combinations==42,"All seven skins and five masks also serialize on live R6 rigs")
+expect(r6Combinations==60,"All ten skins and five masks also serialize on live R6 rigs")
 
 do
 	local rig = Appearance.BuildPreview("skin_courier","")

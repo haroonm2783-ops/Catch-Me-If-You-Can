@@ -21,6 +21,9 @@ local specimens = {
 	{title="GOLDEN PHANTOM", subtitle="Golden skin + Gold Skull mask", skin="skin_golden", mask="mask_skull"},
 	{title="NEON OUTLAW", subtitle="Neon skin + Prism Visor mask", skin="skin_neon", mask="mask_visor"},
 	{title="CRIMSON HUNTER", subtitle="Crimson skin + Kitsune mask", skin="skin_crimson", mask="mask_kitsune"},
+	{title="FROSTBITE", subtitle="Ice crown + crystal shards", skin="skin_frost", mask=""},
+	{title="BAMBOO PANDA", subtitle="Panda hoodie + Street Signal mask", skin="skin_panda", mask="mask_street"},
+	{title="CANDY POP", subtitle="Headphones + pigtails", skin="skin_candy", mask=""},
 }
 
 for _, specimen in ipairs(specimens) do
