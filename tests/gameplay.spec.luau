@@ -6,6 +6,7 @@ local luau = require("@lune/luau")
 local roblox = require("@lune/roblox")
 local Rules = require("../src/shared/Rules")
 local Config = require("../src/shared/Config")
+local Modifiers = require("../src/shared/Modifiers")
 local Vector3, CFrame, Enum = roblox.Vector3, roblox.CFrame, roblox.Enum
 local checks = 0
 
@@ -101,7 +102,7 @@ local function fixture(playerCount, studio)
 			Round = { MaxPlayers = 12, MinimumPlayers = 2, Duration = 180, Intermission = 16, ResultsDuration = 10, HeadStart = 5, FinalSeconds = 30, RespawnDelay = 2, StudioSolo = true },
 			Movement = table.clone(Config.Movement),
 		},
-		Rules = Rules, Services = {},
+		Rules = Rules, Modifiers = Modifiers, Services = {},
 		World = { LobbySpawn = CFrame.new(0, 3, 250), RunnerSpawns = { CFrame.new(20, 3, 0) }, HunterSpawns = { CFrame.new(0, 3, 0) }, Bounds = { min = Vector3.new(-155, -25, -140), max = Vector3.new(155, 100, 145) } },
 		Remotes = {
 			State = { FireAllClients = function(_, state) table.insert(snapshots, state) end },
@@ -662,6 +663,109 @@ do
 	player.Character.children.Humanoid.Health = 0
 	f:advance(0.5)
 	expect(not root.Anchored and not player.Character:GetAttribute("Vaulting"), "Death during a vault must not leave the old avatar anchored")
+end
+
+
+-- Round modifiers: deterministic selection and per-modifier rules.
+do
+	local last = function(maximum) return maximum end
+	local first = function() return 1 end
+	expect(Modifiers.Pick(12, nil, true, last).id == "classic", "Practice must always be Classic")
+	expect(Modifiers.Pick(2, nil, false, last).id == "frenzy", "Two players may only see modifiers they support")
+	expect(Modifiers.Pick(3, nil, false, first).id == "classic", "Infection needs four players")
+	for _, modifier in ipairs(Modifiers.List) do
+		for _, roll in ipairs({ first, last }) do
+			expect(Modifiers.Pick(12, modifier.id, false, roll).id ~= modifier.id, "A modifier must not repeat back to back: " .. modifier.id)
+		end
+	end
+	expect(Modifiers.HunterCount(Modifiers.ById.swarm, 6, 1) == 2, "Swarm adds a hunter")
+	expect(Modifiers.HunterCount(Modifiers.ById.swarm, 12, 2) == 3, "Swarm adds a hunter in a full lobby")
+	expect(Modifiers.HunterCount(Modifiers.ById.classic, 12, 2) == 2, "Classic keeps base hunter count")
+	expect(Modifiers.HunterCount(Modifiers.ById.swarm, 3, 1) == 1, "Swarm never starves runners")
+	expect(Modifiers.Get("nonsense").id == "classic", "Unknown modifier ids fall back to Classic")
+end
+
+-- Infection: tagged runners become held hunters, keep survival credit, and share the hunter win.
+do
+	local f = fixture(4)
+	f.round.modifier = Modifiers.ById.infection
+	f:startActive()
+	local hunter, runner, second, third = f.players[1], f.players[2], f.players[3], f.players[4]
+	expect(f.round:Snapshot().modifier.id == "infection", "Snapshot must publish the active modifier")
+	expect(select(2, f.round:_counts()) == 1, "Four-player infection starts with one hunter")
+	f:advance(30)
+	f:pose(runner, 4, 3, 0, true)
+	expect(f.round:TryTag(hunter), "Infection tag should land")
+	expect(f.round:GetRole(runner) == "Hunter" and f.round:IsActive(runner), "Tagged runner must stay in the round as a hunter")
+	expect(runner.Character:GetAttribute("RoundFrozen") and runner.Character.children.HumanoidRootPart.Anchored, "Infected player is held briefly by the server")
+	expect(runner.Character.children.HumanoidRootPart.Position.Z == 0 and runner.Character.children.HumanoidRootPart.Position.X == 0, "Infected player respawns at a hunter spawn")
+	f:pose(second, 4, 3, 0, true)
+	f:advance(0.7)
+	expect(not f.round:TryTag(runner), "Infected hunter cannot tag while held")
+	f:advance(4)
+	expect(not runner.Character:GetAttribute("RoundFrozen") and not runner.Character.children.HumanoidRootPart.Anchored, "Infected hunter is released after the hold")
+	expect(f.round:GetRole(runner) == "Hunter", "Role remains hunter after release")
+	f:pose(second, runner.Character.children.HumanoidRootPart.Position.X + 3, 3, runner.Character.children.HumanoidRootPart.Position.Z, true)
+	expect(f.round:TryTag(runner), "Infected hunter can tag remaining runners")
+	expect(f.round.roster[runner.UserId].tags == 1, "Infected tags are credited")
+	f:advance(5)
+	f:pose(third, 4, 3, 0, true)
+	f:advance(1)
+	expect(f.round:TryTag(hunter), "Original hunter catches the last runner")
+	f:advance(0)
+	expect(f.round.phase == "Results", "Catching every runner ends infection")
+	local infected = {}
+	for _, award in ipairs(f.awards) do infected[award.player.UserId] = award.summary end
+	expect(infected[runner.UserId].role == "Hunter" and infected[runner.UserId].win and infected[runner.UserId].tags == 1, "Infected player shares the hunter win")
+	expect(infected[runner.UserId].survived >= 30 and infected[runner.UserId].survived < 40, "Infected player keeps survival time")
+	expect(infected[second.UserId].role == "Hunter" and infected[second.UserId].win, "Players infected later also share the win")
+	expect(f.round:CooldownScale() == 1, "Cooldown scale resets outside the chase")
+end
+
+-- Infection near the final seconds stops converting so the clock decides the ending.
+do
+	local f = fixture(4)
+	f.round.modifier = Modifiers.ById.infection
+	f:startActive()
+	local hunter, runner = f.players[1], f.players[2]
+	f:advance(176)
+	f:pose(runner, 4, 3, 0, true)
+	expect(f.round:TryTag(hunter), "Late tag should land")
+	expect(f.round:GetRole(runner) == "Spectator", "Late tags eliminate instead of infecting")
+end
+
+-- Infected players that time out lose with the runner team and a departing infected hunter is cleaned up.
+do
+	local f = fixture(4)
+	f.round.modifier = Modifiers.ById.infection
+	f:startActive()
+	local hunter, runner = f.players[1], f.players[2]
+	f:pose(runner, 4, 3, 0, true)
+	expect(f.round:TryTag(hunter), "Tag to infect")
+	f.round:Start()
+	f:remove(runner)
+	expect(not f.round.roster[runner.UserId].alive, "A departing infected hunter must leave the roster")
+	f:advance(180.5)
+	expect(f.round.phase == "Results" and #f.round.winners == 2, "Surviving runners win when time expires")
+end
+
+-- Swarm and Slide Frenzy change only the intended parameters.
+do
+	local f = fixture(6)
+	f.round.modifier = Modifiers.ById.swarm
+	f:startActive()
+	local runners, hunters = f.round:_counts()
+	expect(hunters == 2 and runners == 4, "Swarm adds a second hunter in a six-player lobby")
+	expect(f.round.endsAt - f:time() == 120, "Swarm rounds last 120 seconds")
+	local frenzy = fixture(3)
+	frenzy.round.modifier = Modifiers.ById.frenzy
+	expect(frenzy.movement:_cooldown(3) == 3, "Frenzy cooldown does not apply before the chase")
+	frenzy:startActive()
+	expect(frenzy.movement:_cooldown(3) == 1.5 and frenzy.round.endsAt - frenzy:time() == 180, "Frenzy halves slide and vault cooldowns only")
+	local solo = fixture(1, true)
+	solo.round.modifier = Modifiers.ById.infection
+	solo:startActive()
+	expect(solo.round.modifier.id == "classic", "Solo practice is always Classic")
 end
 
 print("Gameplay service tests passed: " .. checks .. " checks")

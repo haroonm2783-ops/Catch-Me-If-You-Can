@@ -6,6 +6,7 @@ local shared = ReplicatedStorage:WaitForChild("CatchShared")
 local Config = require(shared.Config)
 local Catalog = require(shared.Catalog)
 local Rules = require(shared.Rules)
+local Modifiers = require(shared.Modifiers)
 local MapBuilder = require(script.Parent.World.MapBuilder)
 
 local remotesFolder = Instance.new("Folder")
@@ -17,7 +18,7 @@ for _, name in ipairs({"State", "Action", "Profile", "Notice", "Query"}) do
 	remote.Parent = remotesFolder
 	remotes[name] = remote
 end
-local ctx = {Config=Config, Catalog=Catalog, Rules=Rules, Remotes=remotes, Services={}}
+local ctx = {Config=Config, Catalog=Catalog, Rules=Rules, Modifiers=Modifiers, Remotes=remotes, Services={}}
 ctx.World = MapBuilder.Build()
 for _, name in ipairs({"DataService", "CosmeticService", "ShopService", "MovementService", "RoundService"}) do
 	ctx.Services[name] = require(script.Parent.Services[name]).new(ctx)

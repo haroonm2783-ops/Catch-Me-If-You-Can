@@ -690,7 +690,7 @@ function UIController:Toast(text, kind)
 	task.delay(4.3, function() if serial == self.toastSerial then self.toast.Visible = false end end)
 end
 
-function UIController:_announce(role, practice)
+function UIController:_announce(role, practice, modifier, previousRole)
 	self.announceSerial = (self.announceSerial or 0) + 1
 	local serial = self.announceSerial
 	local hunter = role == "Hunter"
@@ -698,6 +698,15 @@ function UIController:_announce(role, practice)
 	self.announcementTitle.TextColor3 = hunter and C.coral or C.cyan
 	self.announcementTitle.Text = practice and "SOLO PRACTICE" or (role == "Spectator" and "WATCH THE CHASE" or "YOU ARE A " .. string.upper(role))
 	self.announcementCopy.Text = practice and "Learn the shortcuts. Practice gives no progression rewards." or (hunter and "The runners get a head start. Track them down. Tag them all." or (role == "Spectator" and "Join the next round automatically. Cycle through the runners below." or "Use the rooftops. Break line of sight. Survive until time runs out."))
+	local special = modifier and modifier.id ~= "classic" and not practice
+	if special then
+		if previousRole == "Runner" and hunter then
+			self.announcementTitle.Text = "INFECTED!"
+			self.announcementCopy.Text = "You are a hunter now. Tag the remaining runners."
+		else
+			self.announcementCopy.Text = modifier.name .. ": " .. modifier.tagline
+		end
+	end
 	self.announcement.Visible = true
 	task.delay(3.5, function() if self.announceSerial == serial then self.announcement.Visible = false end end)
 end
@@ -784,6 +793,10 @@ function UIController:OnState(state)
 	local role = myRole(state)
 	local active = phase == "Active" or phase == "HeadStart"
 	local labels = {Waiting = "WELCOME TO NEON HEIGHTS", Intermission = "NEXT CHASE STARTS IN", HeadStart = "RUNNERS GET A HEAD START", Active = "THE CHASE IS ON", Results = "NEXT UP / CITY PODIUM"}
+	local modifier = state.modifier
+	local special = modifier and modifier.id ~= "classic" and not state.practice
+	if special and phase == "Intermission" then labels.Intermission = "NEXT: " .. modifier.name .. " IN"
+	elseif special and phase == "Active" then labels.Active = modifier.name end
 	self.phaseLabel.Text = state.practice and "STUDIO / SOLO PRACTICE" or (labels[phase] or "NEON HEIGHTS")
 	self.phaseLabel.TextColor3 = C.cyan
 	self.aliveLabel.Text = active and (tostring(state.aliveRunners or 0) .. " RUNNERS LEFT") or (phase == "Waiting" and "Waiting for the crew" or (state.mapName or "NEON HEIGHTS"))
@@ -793,7 +806,7 @@ function UIController:OnState(state)
 	if active and (self.lastRound ~= state.roundId or self.lastRole ~= role) then
 		self:CloseMenu()
 		self.visited = true
-		self:_announce(role, state.practice)
+		self:_announce(role, state.practice, state.modifier, self.lastRole)
 	end
 	if phase == "Results" and self.lastResult ~= state.roundId then
 		self.lastResult = state.roundId

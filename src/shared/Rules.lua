@@ -103,7 +103,7 @@ function Rules.RoundReward(summary, config)
 	if summary.practice then return {xp=0,coins=0,rating=0} end
 	local progression = config.Progression or config
 	local tags = if summary.role == "Hunter" then integer(summary.tags, 0, 10) else 0
-	local survived = if summary.role == "Runner" then integer(summary.survived, 0, 180) else 0
+	local survived = integer(summary.survived, 0, 180)
 	local win = summary.win == true
 	return {
 		xp=math.floor(progression.RoundXP + tags * progression.TagXP + survived * progression.SurvivalXPPerSecond + (if win then progression.WinXP else 0)),

@@ -281,7 +281,7 @@ function DataService:AwardRound(player, summary)
 	local safe = {
 		role = summary.role, win = summary.win, practice = false, roundId = summary.roundId,
 		tags = summary.role == "Hunter" and number(summary.tags, 0, self.ctx.Config.Round.MaxPlayers) or 0,
-		survived = summary.role == "Runner" and number(summary.survived, 0, self.ctx.Config.Round.Duration) or 0,
+		survived = number(summary.survived, 0, self.ctx.Config.Round.Duration),
 	}
 	local reward = self.ctx.Rules.RoundReward(safe, self.ctx.Config)
 	-- Record receipt before changing balances; this section contains no yielding calls.

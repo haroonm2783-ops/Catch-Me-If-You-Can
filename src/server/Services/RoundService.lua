@@ -39,11 +39,28 @@ function RoundService.new(ctx)
 		random = Random.new(),
 		startedAt = 0,
 		lastBroadcast = 0,
+		modifier = ctx.Modifiers.Default,
+		lastModifierId = nil,
 	}, RoundService)
 end
 
 function RoundService:_playingPhase()
 	return self.phase == "HeadStart" or self.phase == "Active"
+end
+
+-- Slide/vault cooldown multiplier for the running round (Slide Frenzy halves it).
+function RoundService:CooldownScale()
+	if self:_playingPhase() then
+		return self.modifier.cooldownScale or 1
+	end
+	return 1
+end
+
+function RoundService:_pickModifier(playerCount)
+	local roll = function(maximum)
+		return self.random:NextInteger(1, maximum)
+	end
+	self.modifier = self.ctx.Modifiers.Pick(playerCount, self.lastModifierId, playerCount < 2, roll)
 end
 
 function RoundService:GetRole(player)
@@ -105,6 +122,7 @@ function RoundService:Snapshot()
 		players = list,
 		winners = table.clone(self.winners),
 		resultText = self.resultText,
+		modifier = self.ctx.Modifiers.Public(self.modifier),
 		mapName = "NEON HEIGHTS",
 	}
 end
@@ -124,7 +142,9 @@ function RoundService:_setCharacterRole(player, character)
 	local role = self:GetRole(player)
 	player:SetAttribute("RoundRole", role)
 	character:SetAttribute("RoundRole", role)
-	local held = self.phase == "HeadStart" and role == "Hunter"
+	local entry = self.roster[player.UserId]
+	local held = (self.phase == "HeadStart" and role == "Hunter")
+		or (entry ~= nil and entry.frozenUntil ~= nil and entry.frozenUntil > now())
 	character:SetAttribute("RoundFrozen", held)
 	local humanoid = character:FindFirstChildOfClass("Humanoid")
 	local root = character:FindFirstChild("HumanoidRootPart")
@@ -262,10 +282,16 @@ function RoundService:_startRound(eligible)
 	self.tagTimes = {}
 	self.winners = {}
 	self.practice = #eligible == 1
+	-- Player counts can change during intermission; never keep a modifier the lobby no longer supports.
+	if self.practice or #eligible < self.modifier.minPlayers then
+		self:_pickModifier(#eligible)
+	end
+	self.lastModifierId = self.modifier.id
 	self.startedAt = now()
 	self.phase = "HeadStart"
 	self.endsAt = now() + self.ctx.Config.Round.HeadStart
-	self.resultText = self.practice and "STUDIO PRACTICE · no rewards" or "Runners, find your route!"
+	self.resultText = self.practice and "STUDIO PRACTICE · no rewards"
+		or (self.modifier.id == "classic" and "Runners, find your route!" or (self.modifier.name .. " · " .. self.modifier.tagline))
 	local cosmetic = self.ctx.Services.CosmeticService
 	if cosmetic then
 		cosmetic:ShowWinners({})
@@ -286,7 +312,8 @@ function RoundService:_startRound(eligible)
 		end
 		return aTurns < bTurns
 	end)
-	local hunters = self.practice and 0 or self.ctx.Rules.HunterCount(#eligible)
+	local hunters = self.practice and 0
+		or self.ctx.Modifiers.HunterCount(self.modifier, #eligible, self.ctx.Rules.HunterCount(#eligible))
 	local runnerIndex, hunterIndex = 0, 0
 	for index, player in ipairs(eligible) do
 		local role = index <= hunters and "Hunter" or "Runner"
@@ -321,8 +348,8 @@ end
 function RoundService:_activate()
 	self.phase = "Active"
 	self.startedAt = now()
-	self.endsAt = self.startedAt + self.ctx.Config.Round.Duration
-	self.resultText = self.practice and "Explore NEON HEIGHTS · practice awards no XP or coins" or "The chase is on!"
+	self.endsAt = self.startedAt + self.modifier.duration
+	self.resultText = self.practice and "Explore NEON HEIGHTS · practice awards no XP or coins" or (self.modifier.id == "classic" and "The chase is on!" or (self.modifier.name .. " · " .. self.modifier.tagline))
 	for _, entry in pairs(self.roster) do
 		entry.joinedAt = self.startedAt
 		if entry.alive and entry.role == "Hunter" and entry.player.Character then
@@ -356,8 +383,9 @@ function RoundService:_endRound(winningRole, reason)
 			table.insert(winningPlayers, player)
 		end
 		if connected then
-			local survived = entry.role == "Runner"
-				and math.clamp((entry.eliminatedAt or endedAt) - self.startedAt, 0, self.ctx.Config.Round.Duration)
+			-- Infected hunters keep the time they survived as runners.
+			local survived = (entry.role == "Runner" or entry.infected == true)
+				and math.clamp((entry.eliminatedAt or endedAt) - self.startedAt, 0, self.modifier.duration)
 				or 0
 			local summary = {
 				role = entry.role,
@@ -499,12 +527,53 @@ function RoundService:TryTag(player)
 	elseif targetRoot then
 		self.ctx.Remotes.Notice:FireAllClients({ kind = "tag", position = targetRoot.Position, userId = player.UserId, victimUserId = target.UserId })
 	end
+	local modifier = self.modifier
+	if modifier.infection and closest.alive and self.endsAt - now() > (modifier.infectCutoff or 0) then
+		self:_infect(closest)
+		return true
+	end
 	self:_eliminate(target, "tag")
 	-- A tagged avatar immediately leaves the arena; no invisible blockers or second tags.
 	if targetCharacter and target.Character == targetCharacter then
 		self:_place(target, targetCharacter)
 	end
 	return true
+end
+
+-- Infection: a tagged runner joins the hunters at a hunter spawn after a short, server-held pause.
+function RoundService:_infect(entry)
+	local player = entry.player
+	local hunterSpawns = self.ctx.World.HunterSpawns
+	self.infections = (self.infections or 0) + 1
+	entry.role = "Hunter"
+	entry.infected = true
+	entry.eliminatedAt = now()
+	entry.spawn = hunterSpawns[((self.infections - 1) % #hunterSpawns) + 1]
+	local delay = self.modifier.infectDelay or 3
+	entry.frozenUntil = now() + delay
+	self:_notice(player, {
+		kind = "toast",
+		text = "Infected! You are a hunter now. Tag the remaining runners.",
+	})
+	local character = player.Character
+	if character then
+		self:_place(player, character)
+	end
+	local roundId = self.roundId
+	task.delay(delay, function()
+		if self.roundId ~= roundId or not self:_playingPhase() or not entry.alive then
+			return
+		end
+		entry.frozenUntil = nil
+		local current = player.Character
+		if player.Parent == Players and current and current:GetAttribute("RoundFrozen") then
+			self:_setCharacterRole(player, current)
+		end
+	end)
+	self:_checkWin()
+	if self:_playingPhase() then
+		self:_broadcast()
+	end
 end
 
 function RoundService:_step()
@@ -514,6 +583,7 @@ function RoundService:_step()
 			self.phase = "Intermission"
 			self.endsAt = now() + self.ctx.Config.Round.Intermission
 			self.practice = #eligible == 1
+			self:_pickModifier(#eligible)
 			self.resultText = self.practice and "Studio solo practice starts soon · no rewards" or "Next chase starts soon"
 			self:_broadcast()
 		end
@@ -522,6 +592,7 @@ function RoundService:_step()
 		if not self:_hasEnough(eligible) then
 			self.phase, self.endsAt = "Waiting", 0
 			self.practice = false
+			self.modifier = self.ctx.Modifiers.Default
 			self.resultText = "Waiting for at least two ready players"
 			self:_broadcast()
 		elseif now() >= self.endsAt then

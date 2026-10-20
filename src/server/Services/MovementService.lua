@@ -306,6 +306,12 @@ function MovementService:_canMove(player)
 	return character, humanoid, root
 end
 
+function MovementService:_cooldown(base)
+	local round = self.ctx.Services.RoundService
+	local scale = round and round.CooldownScale and round:CooldownScale() or 1
+	return base * scale
+end
+
 function MovementService:_ack(player, action, cooldown)
 	self.ctx.Remotes.Notice:FireClient(player, { kind = "ability", action = action, cooldown = cooldown })
 end
@@ -317,7 +323,7 @@ function MovementService:_slide(player)
 	end
 	local state, config = self:_state(player), self.ctx.Config.Movement
 	local timestamp = now()
-	if timestamp - state.lastSlide < config.SlideCooldown or state.vaultUntil > timestamp or state.slideUntil > timestamp then
+	if timestamp - state.lastSlide < self:_cooldown(config.SlideCooldown) or state.vaultUntil > timestamp or state.slideUntil > timestamp then
 		return
 	end
 	local momentum = horizontal(root.AssemblyLinearVelocity)
@@ -375,7 +381,7 @@ function MovementService:_slide(player)
 	humanoid:ChangeState(Enum.HumanoidStateType.Physics)
 	root.AssemblyAngularVelocity = Vector3.zero
 	character:SetAttribute("Sliding", true)
-	self:_ack(player, "Slide", config.SlideCooldown)
+	self:_ack(player, "Slide", self:_cooldown(config.SlideCooldown))
 end
 
 function MovementService:_stepSlide(player, state, dt)
@@ -436,7 +442,7 @@ function MovementService:_vault(player)
 	-- Space/A/native touch Jump uses this existing intent too. Release the slide
 	-- physics state immediately, then allow either a jump or the usual vault.
 	if state.slideMotion then self:_finishSlide(player, state, true) end
-	if timestamp - state.lastVault < config.VaultCooldown or state.slideUntil > timestamp or state.vaultUntil > timestamp then
+	if timestamp - state.lastVault < self:_cooldown(config.VaultCooldown) or state.slideUntil > timestamp or state.vaultUntil > timestamp then
 		return
 	end
 	-- Accept the beginning of a normal jump too: Space intentionally preserves Jump.
@@ -499,7 +505,7 @@ function MovementService:_vault(player)
 	root.Anchored = true
 	root.AssemblyLinearVelocity = Vector3.zero
 	local startPosition = root.Position
-	self:_ack(player, "Vault", config.VaultCooldown)
+	self:_ack(player, "Vault", self:_cooldown(config.VaultCooldown))
 	task.spawn(function()
 		local duration = 0.4
 		while now() - timestamp < duration do
