@@ -21,14 +21,14 @@ for _, name in ipairs({"State", "Action", "Profile", "Notice", "Query"}) do
 end
 local ctx = {Config=Config, Catalog=Catalog, Rules=Rules, Modifiers=Modifiers, Achievements=Achievements, Remotes=remotes, Services={}}
 ctx.World = MapBuilder.Build()
-for _, name in ipairs({"DataService", "CosmeticService", "ShopService", "MovementService", "RoundService"}) do
+for _, name in ipairs({"DataService", "CosmeticService", "ShopService", "MovementService", "RoundService", "HubService"}) do
 	ctx.Services[name] = require(script.Parent.Services[name]).new(ctx)
 end
 
 local limits = {
 	Sprint={capacity=6,refill=4}, Slide={capacity=3,refill=1}, Vault={capacity=5,refill=3},
 	Tag={capacity=5,refill=4}, Equip={capacity=4,refill=2}, Buy={capacity=2,refill=0.5},
-	ClaimQuest={capacity=3,refill=1}, ClaimLogin={capacity=2,refill=0.2}, Settings={capacity=4,refill=2}, Emote={capacity=2,refill=0.5},
+	ClaimQuest={capacity=3,refill=1}, ClaimLogin={capacity=2,refill=0.2}, Play={capacity=2,refill=0.5}, Leave={capacity=2,refill=0.5}, Settings={capacity=4,refill=2}, Emote={capacity=2,refill=0.5},
 }
 local buckets = {}
 local queryTimes = {}
@@ -70,6 +70,10 @@ local function dispatch(player, action, payload)
 		if type(payload.category)=="string" and type(payload.id)=="string" then ctx.Services.DataService:Equip(player,payload.category,payload.id) end
 	elseif action == "Buy" then
 		if type(payload.id)=="string" then ctx.Services.ShopService:Purchase(player,payload.id) end
+	elseif action == "Play" then
+		ctx.Services.RoundService:Queue(player, true)
+	elseif action == "Leave" then
+		ctx.Services.RoundService:Queue(player, false)
 	elseif action == "ClaimQuest" then
 		if type(payload.id)=="string" then ctx.Services.DataService:ClaimQuest(player,payload.id) end
 	elseif action == "ClaimLogin" then
@@ -91,10 +95,10 @@ remotes.Query.OnServerInvoke = function(player)
 	return {state=ctx.Services.RoundService:Snapshot(),profile=ctx.Services.DataService:Snapshot(player)}
 end
 Players.PlayerRemoving:Connect(function(player) buckets[player]=nil; queryTimes[player]=nil end)
-for _, name in ipairs({"DataService", "CosmeticService", "ShopService", "MovementService", "RoundService"}) do
+for _, name in ipairs({"DataService", "CosmeticService", "ShopService", "MovementService", "RoundService", "HubService"}) do
 	local service = ctx.Services[name]
 	if service.Start then service:Start() end
 end
 -- Publish only after handlers and service state are initialized.
 remotesFolder.Parent = ReplicatedStorage
-print("[Catch] Neon Heights initialized. " .. Config.Version)
+print("[Catch] Neon Mall initialized. " .. Config.Version)

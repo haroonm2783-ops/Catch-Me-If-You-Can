@@ -1,72 +1,67 @@
 --!nonstrict
--- NEON HEIGHTS: a deliberately composed six-rooftop chase circuit.
--- All route endpoints are walking-surface coordinates. No asset downloads required.
+-- NEON MALL: a two-story competitive chase mall plus a separate Plaza hub.
+-- Everything is authored geometry (no asset downloads). The original rooftop city is preserved
+-- in CityMapBuilder.lua for a future map. Coordinates: X east, Z south, floors at y=0 and y=16.
 local Lighting = game:GetService("Lighting")
 local TweenService = game:GetService("TweenService")
 
 local MapBuilder = {}
 local built
-local MAP_VERSION = 4
+local MAP_VERSION = 5
+local MODEL_NAME = "CatchMall"
+local F2 = 16 -- second-floor walking surface
+
 local P = {
-	ink = Color3.fromRGB(38, 52, 82),
-	navy = Color3.fromRGB(62, 96, 148),
-	steel = Color3.fromRGB(108, 138, 168),
-	concrete = Color3.fromRGB(176, 188, 194),
-	cream = Color3.fromRGB(240, 222, 186),
-	white = Color3.fromRGB(240, 246, 242),
-	teal = Color3.fromRGB(44, 192, 196),
-	cyan = Color3.fromRGB(77, 239, 229),
-	coral = Color3.fromRGB(255, 120, 112),
-	pink = Color3.fromRGB(250, 113, 174),
-	gold = Color3.fromRGB(255, 198, 100),
-	purple = Color3.fromRGB(150, 124, 224),
-	green = Color3.fromRGB(70, 190, 130),
-	leaf = Color3.fromRGB(128, 214, 120),
-	soil = Color3.fromRGB(57, 59, 61),
-	road = Color3.fromRGB(80, 90, 110),
-	glass = Color3.fromRGB(84, 168, 204),
+	white = Color3.fromRGB(246, 246, 250), marble = Color3.fromRGB(238, 230, 220), marble2 = Color3.fromRGB(214, 204, 196),
+	cream = Color3.fromRGB(248, 234, 208), navy = Color3.fromRGB(38, 48, 92), ink = Color3.fromRGB(24, 28, 52),
+	purple = Color3.fromRGB(128, 88, 220), magenta = Color3.fromRGB(238, 74, 190), cyan = Color3.fromRGB(70, 226, 238),
+	blue = Color3.fromRGB(72, 142, 255), coral = Color3.fromRGB(255, 108, 114), gold = Color3.fromRGB(255, 198, 86),
+	green = Color3.fromRGB(62, 182, 118), leaf = Color3.fromRGB(104, 204, 104), wood = Color3.fromRGB(164, 110, 68),
+	teal = Color3.fromRGB(44, 190, 192), pink = Color3.fromRGB(255, 152, 202), glass = Color3.fromRGB(156, 216, 242),
+	steel = Color3.fromRGB(150, 160, 178), red = Color3.fromRGB(214, 48, 70), orange = Color3.fromRGB(255, 152, 70),
+	soil = Color3.fromRGB(70, 60, 54), yellow = Color3.fromRGB(255, 226, 96),
 }
 
 local function applyLighting()
-	-- Warm, bright late afternoon: readable routes first, neon as an accent.
-	Lighting.ClockTime = 15.2
-	Lighting.Brightness = 3.2
-	Lighting.Ambient = Color3.fromRGB(138, 148, 172)
-	Lighting.OutdoorAmbient = Color3.fromRGB(176, 184, 204)
-	Lighting.ColorShift_Top = Color3.fromRGB(255, 236, 200)
-	Lighting.ExposureCompensation = 0.2
+	-- Bright golden hour streaming through the skylights; neon is accent, never the only light.
+	Lighting.ClockTime = 16.2
+	Lighting.Brightness = 2.8
+	Lighting.Ambient = Color3.fromRGB(168, 164, 190)
+	Lighting.OutdoorAmbient = Color3.fromRGB(186, 178, 204)
+	Lighting.ColorShift_Top = Color3.fromRGB(255, 232, 205)
+	Lighting.ExposureCompensation = 0.35
 	Lighting.GlobalShadows = true
-	Lighting.ShadowSoftness = 0.3
-	Lighting.EnvironmentDiffuseScale = 0.7
-	Lighting.EnvironmentSpecularScale = 0.6
-	for _, name in ipairs({ "CatchAtmosphere", "CatchBloom", "CatchColor", "CatchSunRays" }) do
+	Lighting.ShadowSoftness = 0.25
+	Lighting.EnvironmentDiffuseScale = 0.8
+	Lighting.EnvironmentSpecularScale = 0.7
+	for _, name in ipairs({ "CatchAtmosphere", "CatchBloom", "CatchColor", "CatchSunRays", "CatchSky" }) do
 		local old = Lighting:FindFirstChild(name)
 		if old then old:Destroy() end
 	end
 	local atmosphere = Instance.new("Atmosphere")
 	atmosphere.Name = "CatchAtmosphere"
-	atmosphere.Density = 0.22
-	atmosphere.Offset = 0.2
-	atmosphere.Color = Color3.fromRGB(190, 220, 255)
-	atmosphere.Decay = Color3.fromRGB(255, 190, 150)
-	atmosphere.Glare = 0.2
-	atmosphere.Haze = 0.8
+	atmosphere.Density = 0.16
+	atmosphere.Offset = 0.25
+	atmosphere.Color = Color3.fromRGB(206, 196, 238)
+	atmosphere.Decay = Color3.fromRGB(255, 170, 160)
+	atmosphere.Glare = 0.15
+	atmosphere.Haze = 0.6
 	atmosphere.Parent = Lighting
 	local bloom = Instance.new("BloomEffect")
 	bloom.Name = "CatchBloom"
-	bloom.Intensity = 0.2
-	bloom.Size = 24
-	bloom.Threshold = 1.5
+	bloom.Intensity = 0.38
+	bloom.Size = 28
+	bloom.Threshold = 1.15
 	bloom.Parent = Lighting
 	local color = Instance.new("ColorCorrectionEffect")
 	color.Name = "CatchColor"
-	color.Contrast = 0.08
-	color.Saturation = 0.22
-	color.TintColor = Color3.fromRGB(255, 248, 238)
+	color.Contrast = 0.1
+	color.Saturation = 0.26
+	color.TintColor = Color3.fromRGB(255, 246, 240)
 	color.Parent = Lighting
 	local rays = Instance.new("SunRaysEffect")
 	rays.Name = "CatchSunRays"
-	rays.Intensity = 0.06
+	rays.Intensity = 0.08
 	rays.Spread = 0.6
 	rays.Parent = Lighting
 end
@@ -80,8 +75,18 @@ local function activateObstacles(model)
 			local closed = gate:GetAttribute("GateClosedCFrame") or gate.CFrame
 			gate.CFrame = closed
 			local tween = TweenService:Create(gate, TweenInfo.new(gate:GetAttribute("GateCycle") or 3,
-				Enum.EasingStyle.Sine, Enum.EasingDirection.InOut, -1, true, 1.5),
-				{CFrame = closed + Vector3.new(0, 5, 0)})
+				Enum.EasingStyle.Sine, Enum.EasingDirection.InOut, -1, true, 1.5), { CFrame = closed + Vector3.new(0, 5.5, 0) })
+			table.insert(tweens, tween)
+			tween:Play()
+		elseif gate:IsA("BasePart") and gate:GetAttribute("StripeShift") then
+			-- Escalator treads: a periodic slide that loops without a visible seam.
+			local start = gate.CFrame
+			local shift = gate:GetAttribute("StripeShift")
+			local tween = TweenService:Create(gate, TweenInfo.new(1.2, Enum.EasingStyle.Linear, Enum.EasingDirection.In, -1, false), { CFrame = start * CFrame.new(0, 0, shift) })
+			table.insert(tweens, tween)
+			tween:Play()
+		elseif gate:IsA("BasePart") and gate:GetAttribute("Pulse") then
+			local tween = TweenService:Create(gate, TweenInfo.new(1.6 + (gate:GetAttribute("Pulse") % 5) * 0.2, Enum.EasingStyle.Sine, Enum.EasingDirection.InOut, -1, true), { Transparency = 0.55 })
 			table.insert(tweens, tween)
 			tween:Play()
 		end
@@ -92,12 +97,12 @@ local function activateObstacles(model)
 end
 
 local function readBaked(model)
-	local world = {Model=model, LobbySpawn=model:GetAttribute("LobbySpawn"), RunnerSpawns={}, HunterSpawns={}, Podiums={},
-		Bounds={min=model:GetAttribute("BoundsMin"),max=model:GetAttribute("BoundsMax")}}
-	for _, kind in ipairs({"Runner", "Hunter", "Podium"}) do
-		local target = kind == "Podium" and world.Podiums or world[kind.."Spawns"]
-		for i=1, model:GetAttribute(kind.."Count") or 0 do
-			table.insert(target, model:GetAttribute(kind.."Spawn"..i))
+	local world = { Model = model, LobbySpawn = model:GetAttribute("LobbySpawn"), RunnerSpawns = {}, HunterSpawns = {}, Podiums = {},
+		Bounds = { min = model:GetAttribute("BoundsMin"), max = model:GetAttribute("BoundsMax") } }
+	for _, kind in ipairs({ "Runner", "Hunter", "Podium" }) do
+		local target = kind == "Podium" and world.Podiums or world[kind .. "Spawns"]
+		for i = 1, model:GetAttribute(kind .. "Count") or 0 do
+			table.insert(target, model:GetAttribute(kind .. "Spawn" .. i))
 		end
 	end
 	return world
@@ -106,18 +111,22 @@ end
 function MapBuilder.Build(options)
 	if built and built.Model.Parent then return built end
 	local static = options and options.Static == true
-	local existing = workspace:FindFirstChild("NeonHeights")
+	local existing = workspace:FindFirstChild(MODEL_NAME)
 	if existing and existing:GetAttribute("CatchMapVersion") == MAP_VERSION then
 		built = readBaked(existing)
 		applyLighting()
 		if not static then activateObstacles(existing) end
 		return built
 	elseif existing then existing:Destroy() end
+	for _, stale in ipairs({ "NeonHeights" }) do
+		local old = workspace:FindFirstChild(stale)
+		if old then old:Destroy() end
+	end
 	local model = Instance.new("Model")
-	model.Name = "NeonHeights"
-	model:SetAttribute("MapName", "NEON HEIGHTS")
-	model:SetAttribute("ArtDirection", "Sunset district / painted masonry / mint transit / rooftop gardens")
-	local partCount = 0
+	model.Name = MODEL_NAME
+	model:SetAttribute("MapName", "NEON MALL")
+	model:SetAttribute("ArtDirection", "Two-story glass-roofed mall / neon storefronts / palm atrium / Plaza hub")
+	local partCount, lightCount = 0, 0
 	local gates = {}
 	local function group(name)
 		local folder = Instance.new("Folder")
@@ -125,18 +134,23 @@ function MapBuilder.Build(options)
 		folder.Parent = model
 		return folder
 	end
-	local terrain = group("StreetsAndPlaza")
-	local district = group("Architecture")
+	local shell = group("MallShell")
+	local floors = group("Floors")
+	local atrium = group("Atrium")
+	local storesF = group("Stores")
+	local court = group("FoodCourt")
+	local arcade = group("Arcade")
 	local routes = group("ParkourRoutes")
-	local props = group("StreetLife")
+	local decor = group("Decor")
+	local hub = group("PlazaHub")
 	local skyline = group("DistantSkyline")
-	local lobby = group("SocialDeck")
+
 	local function part(parent, name, size, cf, color, material, collide)
 		local p = Instance.new("Part")
 		p.Name = name
 		p.Size = size
 		p.CFrame = typeof(cf) == "Vector3" and CFrame.new(cf) or cf
-		p.Color = color or P.concrete
+		p.Color = color or P.white
 		p.Material = material or Enum.Material.SmoothPlastic
 		p.Anchored = true
 		p.CanCollide = collide ~= false
@@ -144,7 +158,7 @@ function MapBuilder.Build(options)
 		p.CanQuery = p.CanCollide
 		p.TopSurface = Enum.SurfaceType.Smooth
 		p.BottomSurface = Enum.SurfaceType.Smooth
-		p.CastShadow = material ~= Enum.Material.Neon
+		p.CastShadow = material ~= Enum.Material.Neon and material ~= Enum.Material.Glass
 		p.Parent = parent
 		partCount += 1
 		return p
@@ -152,740 +166,1366 @@ function MapBuilder.Build(options)
 	local function box(parent, name, x, y, z, sx, sy, sz, color, material, collide)
 		return part(parent, name, Vector3.new(sx, sy, sz), Vector3.new(x, y, z), color, material, collide)
 	end
-	-- Art-only additions are mounted on solid facades or above head height. This explicit
-	-- flag lets geometry checks enforce that visual polish never changes chase collision.
+	-- Art never collides, so visual polish cannot change chase physics or vault targets.
 	local function art(parent, name, size, cf, color, material)
 		local p = part(parent, name, size, cf, color, material, false)
 		p:SetAttribute("VisualPolish", true)
 		return p
 	end
-	local function beamFrame(a, b)
-		local direction = b-a
-		assert(direction.Magnitude > 0.001, "Beam endpoints must differ")
-		-- A vertical beam is parallel to lookAt's default up axis, producing an
-		-- undefined rotation in data-only builders. Supply a perpendicular axis.
-		local up = math.abs(direction.Unit.Y) > 0.99 and Vector3.xAxis or Vector3.yAxis
-		return CFrame.lookAt((a+b)/2, b, up)
-	end
-	local function artBeam(parent, name, a, b, width, color, material)
-		return art(parent, name, Vector3.new(width, width, (b-a).Magnitude), beamFrame(a,b), color, material)
-	end
-	local function disc(parent, name, cf, diameter, thickness, color, material)
-		local p = art(parent, name, Vector3.new(thickness, diameter, diameter), cf * CFrame.Angles(0, math.pi/2, 0), color, material)
-		p.Shape = Enum.PartType.Cylinder
+	local function neon(parent, name, x, y, z, sx, sy, sz, color, pulse)
+		local p = art(parent, name, Vector3.new(sx, sy, sz), Vector3.new(x, y, z), color, Enum.Material.Neon)
+		if pulse then p:SetAttribute("Pulse", pulse) end
 		return p
 	end
-	local function beam(parent, name, a, b, width, color, material, collide)
-		local delta = b - a
-		return part(parent, name, Vector3.new(width, width, delta.Magnitude), beamFrame(a,b), color, material, collide)
+	local function glassBox(parent, name, x, y, z, sx, sy, sz, alpha, collide, color)
+		local p = part(parent, name, Vector3.new(sx, sy, sz), Vector3.new(x, y, z), color or P.glass, Enum.Material.Glass, collide)
+		p.Transparency = alpha or 0.55
+		if not collide then p:SetAttribute("VisualPolish", true) end
+		return p
+	end
+	local function beamFrame(a, b)
+		local direction = b - a
+		assert(direction.Magnitude > 0.001, "Beam endpoints must differ")
+		local up = math.abs(direction.Unit.Y) > 0.99 and Vector3.xAxis or Vector3.yAxis
+		return CFrame.lookAt((a + b) / 2, b, up)
+	end
+	local function artBeam(parent, name, a, b, width, color, material)
+		return art(parent, name, Vector3.new(width, width, (b - a).Magnitude), beamFrame(a, b), color, material)
 	end
 	local function cylinder(parent, name, center, diameter, height, color, material, collide)
 		local p = part(parent, name, Vector3.new(height, diameter, diameter), CFrame.new(center) * CFrame.Angles(0, 0, math.pi / 2), color, material, collide)
 		p.Shape = Enum.PartType.Cylinder
+		if collide == false then p:SetAttribute("VisualPolish", true) end
 		return p
 	end
-	local function sphere(parent, name, center, size, color)
-		local p = part(parent, name, size, center, color, Enum.Material.SmoothPlastic, false)
+	local function disc(parent, name, cf, diameter, thickness, color, material)
+		local p = art(parent, name, Vector3.new(thickness, diameter, diameter), cf * CFrame.Angles(0, math.pi / 2, 0), color, material)
+		p.Shape = Enum.PartType.Cylinder
+		return p
+	end
+	local function sphere(parent, name, center, size, color, material)
+		local p = part(parent, name, size, center, color, material or Enum.Material.SmoothPlastic, false)
 		p.Shape = Enum.PartType.Ball
+		p:SetAttribute("VisualPolish", true)
 		return p
 	end
-	local function sign(parent, text, center, width, height, accent, rotation)
-		local cf = CFrame.new(center) * CFrame.Angles(0, rotation or 0, 0)
-		local backing = part(parent, "Sign_" .. text, Vector3.new(width, height, 0.35), cf, P.ink, nil, false)
+	local function surfaceText(backing, face, text, color, ppu, scaleX, scaleY)
 		local gui = Instance.new("SurfaceGui")
-		gui.Face = Enum.NormalId.Front
+		gui.Face = face or Enum.NormalId.Front
 		gui.SizingMode = Enum.SurfaceGuiSizingMode.PixelsPerStud
-		gui.PixelsPerStud = 34
+		gui.PixelsPerStud = ppu or 30
 		gui.LightInfluence = 0
-		gui.MaxDistance = 210
+		gui.MaxDistance = 260
 		gui.Parent = backing
 		local label = Instance.new("TextLabel")
-		label.Size = UDim2.fromScale(0.94, 0.82)
-		label.Position = UDim2.fromScale(0.03, 0.09)
+		label.Size = UDim2.fromScale(scaleX or 0.94, scaleY or 0.82)
+		label.Position = UDim2.fromScale((1 - (scaleX or 0.94)) / 2, (1 - (scaleY or 0.82)) / 2)
 		label.BackgroundTransparency = 1
 		label.Text = text
-		label.TextColor3 = accent or P.white
+		label.TextColor3 = color or P.white
 		label.TextScaled = true
-		label.FontFace = Font.fromEnum(Enum.Font.GothamBold)
+		label.FontFace = Font.fromEnum(Enum.Font.GothamBlack)
 		label.Parent = gui
+		return label
+	end
+	-- Hollow ring from short beams (parts cannot be hollow discs). frame = CFrame at the center,
+	-- ring lies in its local XY plane.
+	local function ring(parent, name, frame, radius, width, color, material, segments)
+		segments = segments or 14
+		for i = 1, segments do
+			local a0, a1 = (i - 1) * 2 * math.pi / segments, i * 2 * math.pi / segments
+			local p0 = frame * Vector3.new(math.cos(a0) * radius, math.sin(a0) * radius, 0)
+			local p1 = frame * Vector3.new(math.cos(a1) * radius, math.sin(a1) * radius, 0)
+			artBeam(parent, name, p0, p1, width, color, material)
+		end
+	end
+	-- A lit sign: dark backing, glowing edge strips and a SurfaceGui on the +Z (Back) face at rotation 0.
+	local function sign(parent, text, center, width, height, accent, rotation, textColor)
+		local cf = CFrame.new(center) * CFrame.Angles(0, rotation or 0, 0)
+		local backing = part(parent, "Sign_" .. text, Vector3.new(width, height, 0.4), cf, P.ink, Enum.Material.SmoothPlastic, false)
+		backing:SetAttribute("VisualPolish", true)
+		surfaceText(backing, Enum.NormalId.Back, text, textColor or accent or P.white, 34)
 		for _, side in ipairs({ -1, 1 }) do
-			part(parent, "SignEdge", Vector3.new(width, 0.14, 0.16), cf * CFrame.new(0, side * height / 2, -0.22), accent, Enum.Material.Neon, false)
+			art(parent, "SignEdge", Vector3.new(width + 0.3, 0.16, 0.2), cf * CFrame.new(0, side * height / 2, 0.15), accent, Enum.Material.Neon)
 		end
 		return backing
 	end
 	local function light(parent, center, color, brightness, range)
-		local bulb = box(parent, "Lamp", center.X, center.Y, center.Z, 1.3, 0.25, 1.3, color, Enum.Material.Neon, false)
+		lightCount += 1
+		local bulb = art(parent, "Lamp", Vector3.new(1.2, 0.25, 1.2), center, color, Enum.Material.Neon)
 		local point = Instance.new("PointLight")
 		point.Color = color
-		point.Brightness = brightness or 0.6
-		point.Range = range or 16
+		point.Brightness = brightness or 0.8
+		point.Range = range or 22
 		point.Shadows = false
 		point.Parent = bulb
 	end
-	local function route(name, a, b, width, color, rails, trimStart, trimEnd)
-		-- These broad, continuous surfaces stay below the default humanoid slope limit.
-		local cf = CFrame.lookAt((a + b) / 2, b)
-		local length = (b - a).Magnitude
-		-- Sloped decks overlap their landings slightly. Level decks stop at the exact
-		-- roof edge: overlapping two opaque top faces at the same height z-fights.
-		-- Trimming removes only floor already supplied by a roof, never a route gap.
-		local direction = (b - a).Unit
-		local deckA = a + direction * (trimStart or -0.2)
-		local deckB = b - direction * (trimEnd or -0.2)
-		local deckFrame = CFrame.lookAt((deckA + deckB) / 2, deckB)
-		local deck = part(routes, name, Vector3.new(width, 0.7, (deckB - deckA).Magnitude), deckFrame * CFrame.new(0, -0.35, 0), P.steel, Enum.Material.Metal)
-		deck:SetAttribute("TraversalRoute", true)
-		for _, side in ipairs({ -1, 1 }) do
-			part(routes, name .. "_Edge", Vector3.new(0.18, 0.08, length), cf * CFrame.new(side * (width / 2 - 0.25), 0.07, 0), color or P.cyan, Enum.Material.Neon, false)
-			if rails then
-				part(routes, "Handrail", Vector3.new(0.18, 0.18, length), cf * CFrame.new(side * (width / 2 - 0.25), 2.8, 0), P.white, Enum.Material.Metal, false)
-				for _, along in ipairs({ -length * 0.45, 0, length * 0.45 }) do
-					part(routes, "RailPost", Vector3.new(0.2, 2.8, 0.2), cf * CFrame.new(side * (width / 2 - 0.25), 1.4, along), P.steel, Enum.Material.Metal, false)
+
+	-- Solid rectangle with rectangular holes removed (stairwells, voids): sweeps horizontal bands.
+	local function slab(parent, name, x1, x2, z1, z2, ytop, thick, color, material, holes)
+		holes = holes or {}
+		local zs = { z1, z2 }
+		for _, h in ipairs(holes) do
+			table.insert(zs, math.clamp(h[3], z1, z2))
+			table.insert(zs, math.clamp(h[4], z1, z2))
+		end
+		table.sort(zs)
+		for i = 1, #zs - 1 do
+			local za, zb = zs[i], zs[i + 1]
+			if zb - za > 0.01 then
+				local mid = (za + zb) / 2
+				local cuts = {}
+				for _, h in ipairs(holes) do
+					if mid > h[3] and mid < h[4] then table.insert(cuts, { h[1], h[2] }) end
 				end
+				table.sort(cuts, function(a, b) return a[1] < b[1] end)
+				local cursor = x1
+				local function emit(a, b)
+					if b - a > 0.01 then
+						box(parent, name, (a + b) / 2, ytop - thick / 2, mid, b - a, thick, zb - za, color, material)
+					end
+				end
+				for _, cut in ipairs(cuts) do
+					emit(cursor, math.min(cut[1], x2))
+					cursor = math.max(cursor, cut[2])
+				end
+				emit(cursor, x2)
 			end
 		end
+	end
+	-- Axis-aligned wall with door openings. axis "x": wall runs along X at fixed z.
+	local function wall(parent, name, axis, fixed, a1, a2, y0, y1, thick, color, material, gaps)
+		gaps = gaps or {}
+		table.sort(gaps, function(p, q) return p.c < q.c end)
+		local function seg(s, e, ylo, yhi)
+			if e - s < 0.05 or yhi - ylo < 0.05 then return end
+			if axis == "x" then
+				box(parent, name, (s + e) / 2, (ylo + yhi) / 2, fixed, e - s, yhi - ylo, thick, color, material)
+			else
+				box(parent, name, fixed, (ylo + yhi) / 2, (s + e) / 2, thick, yhi - ylo, e - s, color, material)
+			end
+		end
+		local cursor = a1
+		for _, gap in ipairs(gaps) do
+			seg(cursor, gap.c - gap.w / 2, y0, y1)
+			seg(gap.c - gap.w / 2, gap.c + gap.w / 2, y0 + gap.h, y1) -- lintel above the opening
+			cursor = gap.c + gap.w / 2
+		end
+		seg(cursor, a2, y0, y1)
+	end
+	local function ceilingStrip(parent, x, y, z, sx, sz, color)
+		neon(parent, "CeilingLight", x, y, z, sx, 0.2, sz, color or P.white)
+	end
+
+	-- Reusable dressing ----------------------------------------------------------------
+	local function planter(parent, x, y, z, length, rot, bloom)
+		local cf = CFrame.new(x, y, z) * CFrame.Angles(0, rot or 0, 0)
+		part(parent, "Planter", Vector3.new(length, 1.6, 3.4), cf * CFrame.new(0, 0.8, 0), P.cream, Enum.Material.Concrete)
+		art(parent, "PlanterTrim", Vector3.new(length + 0.3, 0.2, 3.7), cf * CFrame.new(0, 1.6, 0), P.gold, Enum.Material.Metal)
+		local n = math.max(2, math.floor(length / 2.8))
+		for i = 1, n do
+			local pos = (cf * CFrame.new(-length / 2 + i * length / (n + 1), 2.4, 0)).Position
+			sphere(parent, "Shrub", pos, Vector3.new(2.6, 2.2, 2.4), i % 2 == 0 and P.green or P.leaf)
+			if bloom then sphere(parent, "Blossom", pos + Vector3.new(0.3, 1, 0), Vector3.new(0.7, 0.6, 0.7), i % 2 == 0 and P.pink or P.gold) end
+		end
+	end
+	local function palm(parent, x, y, z, scale, tilt)
+		scale = scale or 1
+		local base = Vector3.new(x, y, z)
+		local lean = (tilt or 0.12)
+		local top = base
+		for i = 1, 3 do
+			local nextTop = base + Vector3.new(lean * i * 2.2, i * 3.6 * scale, 0)
+			local seg = part(parent, "PalmTrunk", Vector3.new(0.9 * scale, (nextTop - top).Magnitude + 0.1, 0.9 * scale),
+				CFrame.lookAt((top + nextTop) / 2, nextTop) * CFrame.Angles(math.pi / 2, 0, 0), P.wood, Enum.Material.Wood, i == 1)
+			seg.Shape = Enum.PartType.Cylinder
+			seg.Size = Vector3.new((nextTop - top).Magnitude + 0.1, 0.9 * scale, 0.9 * scale)
+			seg.CFrame = CFrame.lookAt((top + nextTop) / 2, nextTop) * CFrame.Angles(0, math.pi / 2, 0)
+			if i > 1 then seg:SetAttribute("VisualPolish", true) end
+			top = nextTop
+		end
+		for i = 1, 7 do
+			local yaw = i * (math.pi * 2 / 7)
+			local frond = art(parent, "PalmFrond", Vector3.new(0.7, 0.14, 7.4 * scale),
+				CFrame.new(top) * CFrame.Angles(0, yaw, 0) * CFrame.Angles(math.rad(-24), 0, 0) * CFrame.new(0, 0, -3.4 * scale), i % 2 == 0 and P.green or P.leaf, Enum.Material.Grass)
+			frond.CastShadow = false
+		end
+		sphere(parent, "Coconuts", top + Vector3.new(0, -0.5, 0), Vector3.new(1.3, 1.1, 1.3) * scale, P.wood)
+	end
+	local function bench(parent, x, y, z, rot, color)
+		local cf = CFrame.new(x, y, z) * CFrame.Angles(0, rot or 0, 0)
+		part(parent, "BenchSeat", Vector3.new(7, 0.6, 2.4), cf * CFrame.new(0, 1.4, 0), color or P.wood, Enum.Material.Wood)
+		art(parent, "BenchBack", Vector3.new(7, 1.4, 0.3), cf * CFrame.new(0, 2.6, 1.1), color or P.wood, Enum.Material.Wood)
+		for _, side in ipairs({ -1, 1 }) do part(parent, "BenchLeg", Vector3.new(0.4, 1.2, 2.2), cf * CFrame.new(side * 3, 0.6, 0), P.navy, Enum.Material.Metal) end
+		neon(parent, "BenchGlow", x, y + 0.15, z, 6.6, 0.1, 0.2, P.cyan)
+	end
+	-- Low tables/counters tagged Vaultable stay below the 4.5 stud vault height.
+	local function vaultTable(parent, x, y, z, sx, sz, color, rot, top)
+		local cf = CFrame.new(x, y + 1.6, z) * CFrame.Angles(0, rot or 0, 0)
+		local t = part(parent, "VaultTable", Vector3.new(sx, 3.2, sz), cf, color or P.wood, Enum.Material.Wood)
+		t:SetAttribute("Vaultable", true)
+		art(parent, "TableTop", Vector3.new(sx + 0.3, 0.2, sz + 0.3), cf * CFrame.new(0, 1.7, 0), top or P.white, Enum.Material.SmoothPlastic)
+		return t
+	end
+	local function chair(parent, x, y, z, color, rot)
+		local cf = CFrame.new(x, y, z) * CFrame.Angles(0, rot or 0, 0)
+		art(parent, "ChairSeat", Vector3.new(1.8, 0.3, 1.8), cf * CFrame.new(0, 1.5, 0), color, Enum.Material.SmoothPlastic)
+		art(parent, "ChairBack", Vector3.new(1.8, 1.7, 0.25), cf * CFrame.new(0, 2.4, 0.8), color, Enum.Material.SmoothPlastic)
+		art(parent, "ChairLeg", Vector3.new(0.3, 1.5, 0.3), cf * CFrame.new(0, 0.75, 0), P.steel, Enum.Material.Metal)
+	end
+	local function shelf(parent, x, y, z, sx, sz, height, color, accent, spine)
+		local s = part(parent, "Shelf", Vector3.new(sx, height, sz), Vector3.new(x, y + height / 2, z), color, Enum.Material.SmoothPlastic)
+		local alongX = sx > sz
+		for row = 1, math.max(1, math.floor(height / 2.4)) do
+			local yy = y + row * 2.3
+			if alongX then
+				neon(parent, "ShelfLight", x, yy, z + (sz / 2 + 0.06), sx - 0.6, 0.12, 0.08, accent)
+				neon(parent, "ShelfLight", x, yy, z - (sz / 2 + 0.06), sx - 0.6, 0.12, 0.08, accent)
+			else
+				neon(parent, "ShelfLight", x + (sx / 2 + 0.06), yy, z, 0.08, 0.12, sz - 0.6, accent)
+				neon(parent, "ShelfLight", x - (sx / 2 + 0.06), yy, z, 0.08, 0.12, sz - 0.6, accent)
+			end
+		end
+		if spine then
+			for i = 1, 4 do
+				local pos = alongX and Vector3.new(x - sx / 2 + i * sx / 5, y + height * 0.6, z) or Vector3.new(x, y + height * 0.6, z - sz / 2 + i * sz / 5)
+				art(parent, "Spine", alongX and Vector3.new(0.9, height * 0.5, sz + 0.12) or Vector3.new(sx + 0.12, height * 0.5, 0.9), pos, i % 2 == 0 and spine or accent)
+			end
+		end
+		return s
+	end
+	local function mannequin(parent, x, y, z, color)
+		cylinder(parent, "MannequinBase", Vector3.new(x, y + 0.15, z), 2.2, 0.3, P.ink, Enum.Material.Metal, false)
+		art(parent, "MannequinBody", Vector3.new(1.5, 2.8, 0.9), Vector3.new(x, y + 2.2, z), color, Enum.Material.SmoothPlastic)
+		art(parent, "MannequinLegs", Vector3.new(1.2, 1.9, 0.8), Vector3.new(x, y + 0.95, z), P.ink, Enum.Material.SmoothPlastic)
+		sphere(parent, "MannequinHead", Vector3.new(x, y + 4.0, z), Vector3.new(1, 1.1, 1), P.marble)
+	end
+
+	-- =====================================================================================
+	-- MALL SHELL, FLOORS, ROOF
+	-- =====================================================================================
+	local VX, VZ = 36, 28 -- atrium void half-size
+	local HX, HZ = 64, 48 -- hall half-size (wings and store rows lie outside)
+	local TOP = 32 -- top of perimeter walls
+	local stairHoles = { { -55, -45, -30, 8 }, { 45, 55, -8, 30 } }
+	local voidHole = { -VX, VX, -VZ, VZ }
+	local loungeHole = { -100, -76, -30, 30 }
+
+	box(floors, "Foundation", 0, -2.2, 0, 236, 3.6, 172, P.navy, Enum.Material.Concrete)
+	-- Ground floor: marble hall, tiled food court, carpeted arcade and two store rows.
+	box(floors, "HallMarble", 0, -0.2, 0, 2 * HX, 0.4, 2 * HZ, P.marble, Enum.Material.Marble)
+	box(floors, "FoodCourtFloor", -88, -0.2, 0, 48, 0.4, 96, Color3.fromRGB(246, 218, 178), Enum.Material.Marble)
+	box(floors, "ArcadeFloor", 88, -0.2, 0, 48, 0.4, 96, P.navy, Enum.Material.SmoothPlastic)
+	for _, zc in ipairs({ -64, 64 }) do box(floors, "StoreRowFloor", 0, -0.2, zc, 224, 0.4, 32, P.marble2, Enum.Material.Marble) end
+	-- Hall inlay: concentric rings and diagonal bands give the marble a designed pattern.
+	for i, d in ipairs({ 36, 28, 20 }) do
+		art(floors, "InlayRing", Vector3.new(0.12, d + 12, d + 12), CFrame.new(0, 0.07, 0) * CFrame.Angles(0, 0, math.pi / 2), i == 2 and P.gold or P.blue, i == 2 and Enum.Material.Metal or Enum.Material.SmoothPlastic).Shape = Enum.PartType.Cylinder
+	end
+	for _, z in ipairs({ -40, 40 }) do
+		art(floors, "AisleInlay", Vector3.new(120, 0.1, 0.8), Vector3.new(0, 0.06, z), P.gold, Enum.Material.Metal)
+		art(floors, "AisleInlay", Vector3.new(120, 0.1, 0.35), Vector3.new(0, 0.06, z + (z < 0 and 2 or -2)), P.cyan, Enum.Material.Neon)
+	end
+	-- Second floor slab, with the atrium void, stairwells, and lounge window cut away.
+	local function floor2(name, x1, x2, z1, z2, color, material, holes)
+		slab(floors, name, x1, x2, z1, z2, F2, 1.2, color, material, holes)
+	end
+	floor2("UpperStoreRow", -112, 112, -80, -48, P.marble2, Enum.Material.Marble)
+	floor2("UpperStoreRow", -112, 112, 48, 80, P.marble2, Enum.Material.Marble)
+	local ringHoles = { voidHole, stairHoles[1], stairHoles[2] }
+	floor2("UpperHall", -HX, HX, -HZ, HZ, P.marble, Enum.Material.Marble, ringHoles)
+	floor2("UpperWestLounge", -112, -HX, -HZ, HZ, Color3.fromRGB(246, 218, 178), Enum.Material.Marble, { loungeHole })
+	floor2("UpperEastDept", HX, 112, -HZ, HZ, P.marble2, Enum.Material.Marble)
+	-- Trim and underside lights on the balcony edge, visible from the whole ground floor.
+	local function edgeTrim(x1, x2, z1, z2)
+		local cx, cz = (x1 + x2) / 2, (z1 + z2) / 2
+		art(floors, "BalconyFascia", Vector3.new(x2 - x1 + 1, 1.8, z2 - z1 + 1), Vector3.new(cx, F2 - 1.6, cz), P.white, Enum.Material.SmoothPlastic)
+	end
+	for _, z in ipairs({ -VZ - 0.5, VZ + 0.5 }) do art(floors, "FasciaNeon", Vector3.new(2 * VX + 1, 0.25, 0.25), Vector3.new(0, F2 - 2.5, z), P.cyan, Enum.Material.Neon) end
+	for _, x in ipairs({ -VX - 0.5, VX + 0.5 }) do art(floors, "FasciaNeon", Vector3.new(0.25, 0.25, 2 * VZ + 1), Vector3.new(x, F2 - 2.5, 0), P.magenta, Enum.Material.Neon) end
+	for _, z in ipairs({ -VZ + 0.5, VZ - 0.5 }) do art(floors, "FasciaTrim", Vector3.new(2 * VX, 1.8, 0.8), Vector3.new(0, F2 - 1.5, z), P.white) end
+	for _, x in ipairs({ -VX + 0.5, VX - 0.5 }) do art(floors, "FasciaTrim", Vector3.new(0.8, 1.8, 2 * VZ), Vector3.new(x, F2 - 1.5, 0), P.white) end
+	-- Ground-floor ceiling lights under the second-floor ring.
+	for _, x in ipairs({ -56, 56 }) do for z = -40, 40, 16 do ceilingStrip(floors, x, F2 - 1.3, z, 6, 1.2, P.white) end end
+	for _, z in ipairs({ -40, 40 }) do for x = -24, 24, 16 do ceilingStrip(floors, x, F2 - 1.3, z, 6, 1.2, P.white) end end
+
+	-- Perimeter: solid walls with window bands and pilasters, roof slabs over stores.
+	local wallColor = P.cream
+	for _, x in ipairs({ -113, 113 }) do box(shell, "OuterWall", x, TOP / 2, 0, 2, TOP, 160, wallColor, Enum.Material.Concrete) end
+	for _, z in ipairs({ -81, 81 }) do box(shell, "OuterWall", 0, TOP / 2, z, 228, TOP, 2, wallColor, Enum.Material.Concrete) end
+	for _, z in ipairs({ -79.8, 79.8 }) do
+		for x = -100, 100, 25 do
+			glassBox(shell, "LoftWindow", x, 24, z, 14, 5, 0.3, 0.45, false)
+			glassBox(shell, "LoftWindow", x, 7.5, z, 14, 4, 0.3, 0.45, false)
+		end
+	end
+	for _, x in ipairs({ -111.8, 111.8 }) do
+		for z = -60, 60, 30 do
+			glassBox(shell, "LoftWindow", x, 24, z, 0.3, 5, 14, 0.45, false)
+		end
+	end
+	for _, zc in ipairs({ -64, 64 }) do
+		slab(shell, "StoreRowRoof", -112, 112, zc - 16, zc + 16, 31.2, 1.2, P.white, Enum.Material.Concrete)
+	end
+	-- Mall perimeter parapet cap and neon skyline line.
+	for _, z in ipairs({ -80, 80 }) do art(shell, "RoofNeon", Vector3.new(224, 0.3, 0.3), Vector3.new(0, TOP + 0.2, z), P.magenta, Enum.Material.Neon) end
+	slab(shell, "WestWingRoofSolid", -112, -HX, -HZ, HZ, 31.2, 1.2, P.white, Enum.Material.Concrete,
+		{ { -108, -68, -42, 42 } })
+	slab(shell, "EastWingRoofSolid", HX, 112, -HZ, HZ, 31.2, 1.2, P.white, Enum.Material.Concrete,
+		{ { 68, 108, -42, 42 } })
+	-- Wing skylights: glass between ribs, letting daylight reach the food court and department store.
+	for _, side in ipairs({ -1, 1 }) do
+		local cx = side * 88
+		glassBox(shell, "WingSkylight", cx, 32.2, 0, 40, 0.3, 84, 0.5, false)
+		for i = -2, 2 do artBeam(shell, "SkylightRib", Vector3.new(cx - 20, 32.7, i * 21), Vector3.new(cx + 20, 32.7, i * 21), 0.7, P.white, Enum.Material.Metal) end
+		for i = -2, 2 do artBeam(shell, "SkylightRib", Vector3.new(cx + i * 10, 32.7, -42), Vector3.new(cx + i * 10, 32.7, 42), 0.5, P.white, Enum.Material.Metal) end
+	end
+	-- Hall barrel-vault roof: arched ribs and glass panels, peak at y=44.
+	local R, rise, base = 176.7, 12, 32
+	local centerY = base + rise - R
+	local segments = 11
+	local halfAngle = math.asin(HX / R)
+	for s = 0, segments - 1 do
+		local a0 = -halfAngle + s * (2 * halfAngle / segments)
+		local a1 = a0 + 2 * halfAngle / segments
+		local p0 = Vector3.new(math.sin(a0) * R, centerY + math.cos(a0) * R, 0)
+		local p1 = Vector3.new(math.sin(a1) * R, centerY + math.cos(a1) * R, 0)
+		local mid = (p0 + p1) / 2
+		local angle = -math.atan2(p1.Y - p0.Y, p1.X - p0.X) * -1
+		local len = (p1 - p0).Magnitude
+		local glass = glassBox(shell, "VaultGlass", mid.X, mid.Y, 0, len + 0.05, 0.3, 2 * HZ + 2, 0.5, false, P.glass)
+		glass.CFrame = CFrame.new(mid) * CFrame.Angles(0, 0, angle)
+		for _, z in ipairs({ -HZ, -24, 0, 24, HZ }) do
+			local rib = artBeam(shell, "VaultRib", Vector3.new(p0.X, p0.Y + 0.1, z), Vector3.new(p1.X, p1.Y + 0.1, z), 0.7, P.white, Enum.Material.Metal)
+			rib.Size = Vector3.new(0.9, 0.9, len + 0.05)
+		end
+		for _, z in ipairs({ -HZ, HZ }) do
+			box(shell, "VaultGable", (p0.X + p1.X) / 2, (base + mid.Y) / 2, z, len + 0.05, math.max(mid.Y - base, 0.2), 0.6, P.white, Enum.Material.Concrete, false):SetAttribute("VisualPolish", true)
+		end
+	end
+	for _, x in ipairs({ -HX, HX }) do
+		art(shell, "VaultCornice", Vector3.new(1.4, 1.2, 2 * HZ), Vector3.new(x, base + 0.6, 0), P.gold, Enum.Material.Metal)
+	end
+	for s = -3, 3 do
+		neon(shell, "VaultLight", s * 16, 43.2 - math.abs(s) * 0.4 * 0.5, 0, 0.3, 0.2, 90, P.white)
+	end
+
+	-- Support columns on the balcony edge and glass balcony railings with designated gaps.
+	local columns = {}
+	for _, z in ipairs({ -VZ, -14, 14, VZ }) do for _, x in ipairs({ -VX, VX }) do table.insert(columns, { x, z }) end end
+	for _, z in ipairs({ -VZ, VZ }) do table.insert(columns, { 0, z }) end
+	for _, c in ipairs(columns) do
+		cylinder(atrium, "Column", Vector3.new(c[1], 17.5, c[2]), 2.4, 35, P.white, Enum.Material.Marble)
+		cylinder(atrium, "ColumnBase", Vector3.new(c[1], 0.6, c[2]), 3.4, 1.2, P.gold, Enum.Material.Metal, false)
+		cylinder(atrium, "ColumnCollar", Vector3.new(c[1], F2 + 0.3, c[2]), 3, 0.6, P.gold, Enum.Material.Metal, false)
+		neon(atrium, "ColumnLight", c[1], 10, c[2], 0.15, 12, 0.15, P.cyan)
+	end
+	local RAIL = 7.2
+	local function railing(axis, fixed, a1, a2, gaps)
+		local pieces = {}
+		wall(atrium, "BalconyGlass", axis, fixed, a1, a2, F2, F2 + RAIL, 0.35, P.glass, Enum.Material.Glass, gaps)
+		for _, g in ipairs(atrium:GetChildren()) do
+			if g.Name == "BalconyGlass" and not g:GetAttribute("Tinted") then
+				g:SetAttribute("Tinted", true)
+				g.Transparency = 0.6
+				g.CastShadow = false
+			end
+		end
+		-- Metal handrail along the full run (gaps leave openings below only).
+		local cx = (a1 + a2) / 2
+		if axis == "x" then art(atrium, "Handrail", Vector3.new(a2 - a1, 0.3, 0.6), Vector3.new(cx, F2 + RAIL, fixed), P.gold, Enum.Material.Metal)
+		else art(atrium, "Handrail", Vector3.new(0.6, 0.3, a2 - a1), Vector3.new(fixed, F2 + RAIL, cx), P.gold, Enum.Material.Metal) end
+	end
+	railing("x", -VZ + 0.4, -VX, VX, { { c = -20, w = 13, h = 12 }, { c = 20, w = 11, h = 12 } }) -- escalator top / drop zone
+	railing("x", VZ - 0.4, -VX, VX, { { c = 20, w = 13, h = 12 }, { c = -20, w = 11, h = 12 } })
+	railing("z", -VX + 0.4, -VZ, VZ, { { c = 0, w = 11, h = 12 } }) -- skybridge entrance
+	railing("z", VX - 0.4, -VZ, VZ, { { c = 0, w = 11, h = 12 } })
+	for _, z in ipairs({ -VZ, VZ }) do neon(atrium, "DropZoneMarker", z < 0 and 20 or -20, F2 + 0.07, z + (z < 0 and 1.2 or -1.2), 9, 0.06, 0.5, P.yellow, 1) end
+	-- Skybridge across the atrium, directly over the fountain.
+	slab(routes, "Skybridge", -VX, VX, -5, 5, F2, 1.2, P.marble2, Enum.Material.Marble)
+	for _, z in ipairs({ -5.2, 5.2 }) do
+		local g = part(routes, "BridgeGlass", Vector3.new(2 * VX, RAIL, 0.3), Vector3.new(0, F2 + RAIL / 2, z), P.glass, Enum.Material.Glass)
+		g.Transparency = 0.6
+		g.CastShadow = false
+		art(routes, "BridgeRail", Vector3.new(2 * VX, 0.3, 0.6), Vector3.new(0, F2 + RAIL, z), P.gold, Enum.Material.Metal)
+		neon(routes, "BridgeGlow", 0, F2 - 0.4, z * 0.9, 2 * VX, 0.2, 0.2, P.blue)
+	end
+	art(routes, "BridgeUnderside", Vector3.new(2 * VX, 0.8, 10.6), Vector3.new(0, F2 - 1.6, 0), P.white, Enum.Material.Metal)
+
+	-- =====================================================================================
+	-- VERTICAL ROUTES: two escalator ramps (walkable) and two stair runs
+	-- =====================================================================================
+	local function escalator(name, x, zLow, zTop, accent)
+		local a, b = Vector3.new(x, 0, zLow), Vector3.new(x, F2, zTop)
+		local length = (b - a).Magnitude
+		local frame = CFrame.lookAt((a + b) / 2, b)
+		local deck = part(routes, name, Vector3.new(10, 0.7, length), frame * CFrame.new(0, -0.35, 0), P.steel, Enum.Material.Metal)
+		deck:SetAttribute("TraversalRoute", true)
+		-- Tread bands and pulsing chevrons mark the direction of travel without moving collision.
+		for i = 1, 14 do
+			art(routes, "Tread", Vector3.new(9.2, 0.06, 0.5), frame * CFrame.new(0, 0.06, length / 2 - i * length / 15), P.ink, Enum.Material.Metal)
+		end
+		for i = 1, 5 do
+			local chev = neon(routes, "Chevron", 0, 0, 0, 3.2, 0.08, 0.5, accent, i)
+			chev.CFrame = frame * CFrame.new(0, 0.09, length / 2 - i * length / 6)
+		end
+		for _, side in ipairs({ -1, 1 }) do
+			local rail = part(routes, "EscalatorGlass", Vector3.new(0.3, 4.2, length), frame * CFrame.new(side * 5.1, 2.1, 0), P.glass, Enum.Material.Glass)
+			rail.Transparency = 0.5
+			rail.CastShadow = false
+			art(routes, "EscalatorHandrail", Vector3.new(0.5, 0.4, length), frame * CFrame.new(side * 5.1, 4.3, 0), accent, Enum.Material.Neon)
+			art(routes, "EscalatorSkirt", Vector3.new(0.6, 1.2, length), frame * CFrame.new(side * 5.1, -0.7, 0), P.white, Enum.Material.Metal)
+		end
+		art(routes, "EscalatorUnderside", Vector3.new(10, 0.6, length), frame * CFrame.new(0, -1.1, 0), P.white, Enum.Material.Metal)
 		return deck
 	end
-	local function stair(name, origin, width, rise, run, direction)
-		local steps = math.ceil(rise / 0.8)
-		local cf = CFrame.new(origin) * CFrame.Angles(0, direction or 0, 0)
+	escalator("EscalatorWest", -20, 2, -VZ, P.cyan)
+	escalator("EscalatorEast", 20, -2, VZ, P.magenta)
+	local function stair(name, x, zStart, zEnd, width, accent)
+		local steps = 20
+		local sign = zEnd > zStart and 1 or -1
+		local run = math.abs(zEnd - zStart) / steps
 		for i = 1, steps do
-			local h = rise * i / steps
-			part(routes, name, Vector3.new(width, h, run / steps + 0.05), cf * CFrame.new(0, h / 2, -run * (i - 0.5) / steps), P.concrete, Enum.Material.Concrete)
+			local h = 0.8 * i
+			local step = box(routes, name, x, h / 2, zStart + sign * run * (i - 0.5), width, h, run + 0.04, i % 2 == 0 and P.marble or P.marble2, Enum.Material.Marble)
+			step:SetAttribute("StairStep", true)
 		end
-	end
-	local function ladder(x, z, roof, rotation)
-		local cf = CFrame.new(x, roof / 2 + 0.25, z) * CFrame.Angles(0, rotation or 0, 0)
-		local climb = Instance.new("TrussPart")
-		climb.Name = "ServiceLadder"
-		climb.Size = Vector3.new(2, roof + 2.5, 2)
-		climb.CFrame = cf
-		climb.Color = P.gold
-		climb.Material = Enum.Material.Metal
-		climb.Anchored = true
-		climb.CanTouch = false
-		climb.Parent = routes
-		partCount += 1
-	end
-	local function planter(parent, x, y, z, length, orientation, flowers)
-		local cf = CFrame.new(x, y, z) * CFrame.Angles(0, orientation or 0, 0)
-		part(parent, "Planter", Vector3.new(length, 1.5, 3), cf * CFrame.new(0, 0.75, 0), P.cream, Enum.Material.Concrete)
-		part(parent, "PlantingSoil", Vector3.new(length - 0.5, 0.15, 2.5), cf * CFrame.new(0, 1.55, 0), P.soil, nil, false)
-		for i = 1, math.max(2, math.floor(length / 2.6)) do
-			local offset = -length / 2 + i * length / (math.floor(length / 2.6) + 1)
-			local pos = (cf * CFrame.new(offset, 2.1, 0)).Position
-			sphere(parent, "ClippedShrub", pos, Vector3.new(2.6, 2.2, 2.3), i % 2 == 0 and P.green or P.leaf)
-			if flowers then sphere(parent, "Blossom", pos + Vector3.new(0.3, 0.9, 0), Vector3.new(0.6, 0.55, 0.6), i % 2 == 0 and P.pink or P.gold) end
-		end
-	end
-	local function tree(parent, x, y, z, scale)
-		scale = scale or 1
-		cylinder(parent, "TreeWell", Vector3.new(x, y + 0.25, z), 7 * scale, 0.5, P.cream, Enum.Material.Concrete)
-		cylinder(parent, "TreeTrunk", Vector3.new(x, y + 4 * scale, z), 0.85 * scale, 8 * scale, P.soil, Enum.Material.Wood)
-		sphere(parent, "TreeCrown", Vector3.new(x, y + 9 * scale, z), Vector3.new(8, 7, 8) * scale, P.green)
-		sphere(parent, "TreeCrownLight", Vector3.new(x - 1.8 * scale, y + 10.5 * scale, z - 0.8 * scale), Vector3.new(6, 5, 6) * scale, P.leaf)
-	end
-	local function bench(parent, x, y, z, rotation)
-		local cf = CFrame.new(x, y, z) * CFrame.Angles(0, rotation or 0, 0)
-		for _, offset in ipairs({ -2.7, 2.7 }) do
-			part(parent, "BenchLeg", Vector3.new(0.5, 1.4, 2.5), cf * CFrame.new(offset, 0.7, 0), P.navy, Enum.Material.Metal)
-		end
-		for i = 1, 3 do
-			part(parent, "BenchSlat", Vector3.new(7, 0.3, 0.6), cf * CFrame.new(0, 1.5, -1.1 + i * 0.7), P.cream, Enum.Material.Wood)
-		end
-		part(parent, "BenchBack", Vector3.new(7, 1.6, 0.3), cf * CFrame.new(0, 2.65, 1.1), P.cream, Enum.Material.Wood)
-	end
-	local function acUnit(x, y, z, rotation)
-		local cf = CFrame.new(x, y, z) * CFrame.Angles(0, rotation or 0, 0)
-		part(props, "ClimateUnit", Vector3.new(6, 2.8, 4), cf * CFrame.new(0, 1.4, 0), P.concrete, Enum.Material.Metal)
-		part(props, "VentPanel", Vector3.new(5.2, 2, 0.12), cf * CFrame.new(0, 1.5, -2.07), P.ink, Enum.Material.Metal, false)
-		for i = 1, 5 do
-			part(props, "VentLouvre", Vector3.new(5, 0.12, 0.16), cf * CFrame.new(0, 0.5 + i * 0.32, -2.2), P.steel, Enum.Material.Metal, false)
-		end
-		cylinder(props, "FanRim", (cf * CFrame.new(0, 2.85, 0)).Position, 2.6, 0.2, P.ink, Enum.Material.Metal, false)
-		for _, angle in ipairs({ 0, math.pi / 2 }) do
-			part(props, "FanBlade", Vector3.new(2.3, 0.08, 0.5), cf * CFrame.new(0, 3, 0) * CFrame.Angles(0, angle, 0), P.steel, Enum.Material.Metal, false)
-		end
-	end
-	local function pipe(a, b, color)
-		beam(props, "ServicePipe", a, b, 0.65, color or P.coral, Enum.Material.Metal, false)
-	end
-	local function canopy(parent, x, y, z, width, depth, color, rotation)
-		local cf = CFrame.new(x, y, z) * CFrame.Angles(0, rotation or 0, 0)
-		part(parent, "Canopy", Vector3.new(width, 0.4, depth), cf * CFrame.Angles(math.rad(-8), 0, 0), color, Enum.Material.Fabric, false)
-		part(parent, "CanopyValance", Vector3.new(width, 0.9, 0.2), cf * CFrame.new(0, -0.6, -depth / 2), color, Enum.Material.Fabric, false)
-		local sections = math.floor(width / 3)
-		for i = 1, sections, 2 do
-			part(parent, "CanopyStripe", Vector3.new(width / sections, 0.04, depth), cf * CFrame.Angles(math.rad(-8), 0, 0) * CFrame.new(-width / 2 + (i - 0.5) * width / sections, 0.24, 0), P.cream, Enum.Material.Fabric, false)
-		end
-	end
-	local function building(name, x, z, w, d, h, color, accent)
-		local folder = Instance.new("Folder")
-		folder.Name = name
-		folder.Parent = district
-		box(folder, "Foundation", x, 0.7, z, w + 1.4, 1.4, d + 1.4, P.navy, Enum.Material.Concrete)
-		box(folder, "Facade", x, h / 2 - 0.2, z, w, h - 0.4, d, color, Enum.Material.Concrete)
-		box(folder, "GroundFloorBand", x, 4.2, z, w + 0.4, 6.4, d + 0.4, P.ink, Enum.Material.Brick)
-		box(folder, "StringCourse", x, 7.6, z, w + 0.8, 0.6, d + 0.8, P.cream, Enum.Material.Concrete)
-		-- The roof finishes at h. Its support cap ends at the roof's underside,
-		-- avoiding the previous cream/navy coplanar faces across the entire roof.
-		box(folder, "RoofCornice", x, h - 0.75, z, w + 1.6, 0.9, d + 1.6, P.cream, Enum.Material.Concrete)
-		box(folder, "WalkingRoof", x, h - 0.15, z, w, 0.3, d, P.navy, Enum.Material.Concrete)
 		for _, side in ipairs({ -1, 1 }) do
-			-- Layered corner pilasters and restrained neon cornices give every block depth.
-			for _, endSide in ipairs({ -1, 1 }) do
-				box(folder, "Pilaster", x + side * (w / 2 - 1.2), h / 2, z + endSide * (d / 2 + 0.25), 2.4, h - 1.2, 0.9, color, Enum.Material.Concrete)
-			end
-			box(folder, "CorniceLight", x, h - 1.35, z + side * (d / 2 + 0.85), w - 5, 0.13, 0.12, accent, Enum.Material.Neon, false)
-			local columns = math.floor((w - 8) / 10)
-			for i = 1, columns do
-				local wx = x - w / 2 + 5 + (i - 0.5) * (w - 10) / columns
-				box(folder, "ShopGlass", wx, 4.3, z + side * (d / 2 + 0.25), 6.2, 4.6, 0.2, P.glass, Enum.Material.Glass, false)
-				box(folder, "WarmDisplay", wx, 5.9, z + side * (d / 2 + 0.4), 5.2, 0.14, 0.12, i % 3 == 0 and accent or P.gold, Enum.Material.Neon, false)
-				if h > 15 then
-					box(folder, "UpperWindow", wx, h - 5.3, z + side * (d / 2 + 0.2), 4.6, 5.4, 0.22, P.glass, Enum.Material.Glass, false)
-					box(folder, "WindowSill", wx, h - 8.1, z + side * (d / 2 + 0.5), 5, 0.35, 0.8, P.cream, nil, false)
-					box(folder, "WindowMullion", wx, h - 5.3, z + side * (d / 2 + 0.35), 0.2, 5.4, 0.14, P.cream, nil, false)
-				end
-			end
-			for i = 1, math.floor(d / 12) do
-				local wz = z - d / 2 + 5 + (i - 0.5) * (d - 10) / math.floor(d / 12)
-				box(folder, "SideWindow", x + side * (w / 2 + 0.2), h > 15 and h - 5.3 or 4.4, wz, 0.2, 4.6, 5.6, P.glass, Enum.Material.Glass, false)
-				box(folder, "SideWindowGlow", x + side * (w / 2 + 0.32), h > 15 and h - 3.3 or 6.4, wz, 0.15, 0.13, 5, accent, Enum.Material.Neon, false)
-			end
+			local a = Vector3.new(x + side * (width / 2 + 0.25), 4.2, zStart)
+			local b = Vector3.new(x + side * (width / 2 + 0.25), 4.2 + 16, zEnd)
+			artBeam(routes, "StairHandrail", a, b, 0.4, accent, Enum.Material.Neon)
+			local g = art(routes, "StairGlass", Vector3.new(0.25, 3.6, (b - a).Magnitude), beamFrame(a, b) * CFrame.new(0, -1.6, 0), P.glass, Enum.Material.Glass)
+			g.Transparency = 0.6
+			g.CastShadow = false
 		end
-		-- Corner parapets leave the middle of every edge open for bridges and ladders.
-		for _, sx in ipairs({ -1, 1 }) do
-			for _, sz in ipairs({ -1, 1 }) do
-				box(folder, "CornerParapet", x + sx * (w / 2 - 7), h + 0.9, z + sz * (d / 2 - 0.25), 13, 1.8, 0.65, color, Enum.Material.Concrete)
-				box(folder, "CornerParapet", x + sx * (w / 2 - 0.25), h + 0.9, z + sz * (d / 2 - 7), 0.65, 1.8, 13, color, Enum.Material.Concrete)
-			end
+	end
+	stair("StairWest", -50, 8, -30, 10, P.gold)
+	stair("StairEast", 50, -8, 30, 10, P.gold)
+	sign(routes, "TO LEVEL 2", Vector3.new(-50, 12, 11), 12, 2.2, P.gold, 0)
+	sign(routes, "TO LEVEL 2", Vector3.new(50, 12, -11), 12, 2.2, P.gold, math.pi)
+
+	-- =====================================================================================
+	-- ATRIUM CENTERPIECE: tiered fountain, palms, kiosks
+	-- =====================================================================================
+	cylinder(atrium, "FountainStep", Vector3.new(0, 0.4, 0), 27, 0.8, P.marble2, Enum.Material.Marble)
+	cylinder(atrium, "FountainBasin", Vector3.new(0, 1.1, 0), 22, 1.8, P.white, Enum.Material.Marble)
+	disc(atrium, "FountainWater", CFrame.new(0, 2.05, 0), 20, 0.1, P.blue, Enum.Material.Glass).Transparency = 0.35
+	disc(atrium, "FountainGlow", CFrame.new(0, 0.9, 0), 28, 0.12, P.cyan, Enum.Material.Neon):SetAttribute("Pulse", 1)
+	cylinder(atrium, "FountainPedestal", Vector3.new(0, 4.6, 0), 4, 5.6, P.white, Enum.Material.Marble)
+	for i, tier in ipairs({ { 9, 8.4 }, { 6, 10.6 }, { 3.6, 12.2 } }) do
+		cylinder(atrium, "FountainTier" .. i, Vector3.new(0, tier[2], 0), tier[1], 0.7, P.white, Enum.Material.Marble, false)
+		disc(atrium, "TierWater", CFrame.new(0, tier[2] + 0.45, 0), tier[1] - 0.8, 0.08, P.cyan, Enum.Material.Glass).Transparency = 0.4
+	end
+	for i = 1, 8 do
+		local angle = i * math.pi / 4
+		local top = Vector3.new(math.cos(angle) * 8, 2.3, math.sin(angle) * 8)
+		artBeam(atrium, "WaterJet", top, Vector3.new(math.cos(angle) * 5.2, 5.8, math.sin(angle) * 5.2), 0.22, P.cyan, Enum.Material.Neon).Transparency = 0.35
+		neon(atrium, "FountainLamp", math.cos(angle) * 12.4, 1.1, math.sin(angle) * 12.4, 0.5, 0.5, 0.5, i % 2 == 0 and P.magenta or P.cyan)
+	end
+	local crown = sphere(atrium, "FountainCrown", Vector3.new(0, 14, 0), Vector3.new(3, 3, 3), P.gold, Enum.Material.Metal)
+	for i = 1, 4 do
+		local angle = i * math.pi / 2 + math.pi / 4
+		artBeam(atrium, "FountainSpike", Vector3.new(0, 14, 0), Vector3.new(math.cos(angle) * 2.2, 17.5, math.sin(angle) * 2.2), 0.3, P.gold, Enum.Material.Metal)
+	end
+	local spray = Instance.new("ParticleEmitter")
+	spray.Name = "FountainSpray"
+	spray.Rate = 22
+	spray.Lifetime = NumberRange.new(1.2, 1.8)
+	spray.Speed = NumberRange.new(5, 8)
+	spray.SpreadAngle = Vector2.new(18, 18)
+	spray.Acceleration = Vector3.new(0, -14, 0)
+	spray.Size = NumberSequence.new(0.5, 0.1)
+	spray.Transparency = NumberSequence.new(0.2, 1)
+	spray.Color = ColorSequence.new(P.white, P.cyan)
+	spray.LightEmission = 0.6
+	spray.Parent = crown
+	-- Corner palms planted in marble rings, rising toward the second-floor balcony.
+	for _, c in ipairs({ { -30, -21 }, { 30, -21 }, { -30, 21 }, { 30, 21 } }) do
+		cylinder(atrium, "PalmRing", Vector3.new(c[1], 0.7, c[2]), 7, 1.4, P.cream, Enum.Material.Concrete)
+		cylinder(atrium, "PalmSoil", Vector3.new(c[1], 1.45, c[2]), 6, 0.1, P.soil, Enum.Material.Grass, false)
+		palm(atrium, c[1], 1.4, c[2], 1.9, c[1] < 0 and 0.06 or -0.06)
+	end
+	for _, z in ipairs({ -16, 16 }) do bench(atrium, 0, 0, z * 1.05 + (z < 0 and -1 or 1) * 0.0, z < 0 and 0 or math.pi) end
+	-- Banners hang from the roof ribs; they stay above second-floor head height.
+	for _, c in ipairs({ { -VX + 3, -VZ + 1 }, { VX - 3, -VZ + 1 }, { -VX + 3, VZ - 1 }, { VX - 3, VZ - 1 } }) do
+		local face = c[2] < 0 and 0 or math.pi
+		local b = part(atrium, "AtriumBanner", Vector3.new(6, 18, 0.3), CFrame.new(c[1], 31, c[2]) * CFrame.Angles(0, face, 0), P.purple, Enum.Material.Fabric, false)
+		b:SetAttribute("VisualPolish", true)
+		surfaceText(b, Enum.NormalId.Back, "CATCH\nME IF\nYOU\nCAN", P.white, 30, 0.9, 0.9)
+		neon(atrium, "BannerTrim", c[1], 22, c[2] + (c[2] < 0 and 0.2 or -0.2), 6.2, 0.2, 0.2, P.cyan)
+	end
+	-- Perimeter palms and benches along the ground-floor corridors.
+	for _, c in ipairs({ { -60, -33 }, { 60, 33 }, { -60, 33 }, { 60, -33 }, { -30, -44 }, { 30, 44 } }) do
+		planter(decor, c[1], 0, c[2], 8, 0, true)
+		palm(decor, c[1], 1.4, c[2], 1.1, 0.1)
+	end
+	for _, c in ipairs({ { -40, -33 }, { 40, 33 }, { -40, 33 }, { 40, -33 } }) do bench(decor, c[1], 0, c[2], c[2] < 0 and 0 or math.pi) end
+	-- Kiosks: vaultable carts with parasol canopies, placed clear of every ramp and stair.
+	for _, c in ipairs({ { -50, 34, "SNACKS", P.coral }, { 50, -34, "TECH", P.cyan }, { -22, -42, "GIFTS", P.gold }, { 22, 42, "JUICE", P.green } }) do
+		local cart = vaultTable(decor, c[1], 0, c[2], 8, 4, P.white, 0, c[4])
+		sign(decor, c[3], Vector3.new(c[1], 6.4, c[2] + (c[2] < 0 and 2.8 or -2.8)), 6, 1.6, c[4], c[2] < 0 and 0 or math.pi)
+		for _, dx in ipairs({ -3.6, 3.6 }) do art(decor, "CartPost", Vector3.new(0.25, 5, 0.25), Vector3.new(c[1] + dx, 4.1, c[2]), P.steel, Enum.Material.Metal) end
+		art(decor, "CartCanopy", Vector3.new(9, 0.4, 5.4), Vector3.new(c[1], 7.2, c[2]), c[4], Enum.Material.Fabric)
+	end
+	-- Wayfinding screens double as pillars of color on the long corridors.
+	for _, c in ipairs({ { -42, -45 }, { 42, 45 }, { -42, 45 }, { 42, -45 } }) do
+		local pillar = box(decor, "DirectoryPillar", c[1], 5, c[2], 1.2, 10, 3, P.navy, Enum.Material.Metal)
+		sign(decor, "MALL MAP", Vector3.new(c[1] + (c[1] < 0 and 0.7 or -0.7), 5.5, c[2]), 2.6, 3.6, P.cyan, c[1] < 0 and math.pi / 2 or -math.pi / 2)
+	end
+
+	-- =====================================================================================
+	-- STORES: ten enterable shops with two or more exits each, plus dressed storefronts.
+	-- =====================================================================================
+	local boundariesX = { -112, -64, -21, 21, 64, 112 }
+	local function storeCtx(def, folder)
+		local north = def.row == "N"
+		local fy = def.floor
+		local ctx = { folder = folder, fy = fy, north = north, W = def.x2 - def.x1, accent = def.accent, color = def.color }
+		function ctx.X(u) return def.x1 + u end
+		function ctx.Z(v) return north and (-48 - v) or (48 + v) end
+		function ctx.B(u, v, w, d, h, color, material, collide)
+			return box(folder, "Prop", def.x1 + u, fy + h / 2, ctx.Z(v), w, h, d, color, material, collide)
 		end
+		function ctx.Vault(u, v, w, d, h, color, material)
+			local p = ctx.B(u, v, w, d, h, color, material, true)
+			p.Name = "VaultProp"
+			p:SetAttribute("Vaultable", true)
+			return p
+		end
+		function ctx.A(u, v, w, d, h, y, color, material)
+			return art(folder, "Detail", Vector3.new(w, h, d), Vector3.new(def.x1 + u, fy + y, ctx.Z(v)), color, material)
+		end
+		function ctx.N(u, v, w, d, h, y, color)
+			return neon(folder, "Glow", def.x1 + u, fy + y, ctx.Z(v), w, h, d, color)
+		end
+		function ctx.Sphere(u, v, y, size, color)
+			return sphere(folder, "Ball", Vector3.new(def.x1 + u, fy + y, ctx.Z(v)), Vector3.new(size, size, size), color)
+		end
+		function ctx.Cyl(u, v, y, dia, h, color, material, collide)
+			return cylinder(folder, "Round", Vector3.new(def.x1 + u, fy + y, ctx.Z(v)), dia, h, color, material, collide)
+		end
+		function ctx.Shelf(u, v, sx, sz, h, color, accent, spine)
+			return shelf(folder, def.x1 + u, fy, ctx.Z(v), sx, sz, h, color, accent, spine)
+		end
+		function ctx.Sign(text, u, v, y, w, h, color, backWall)
+			-- Faces the storefront opening.
+			return sign(folder, text, Vector3.new(def.x1 + u, fy + y, ctx.Z(v)), w, h, color, north and 0 or math.pi)
+		end
+		return ctx
+	end
+
+	local themes = {}
+	function themes.toy(c)
+		local rainbow = { P.coral, P.orange, P.yellow, P.green, P.cyan, P.purple }
+		for i = 1, 6 do c.A(c.W / 2, 8 + i * 3.2, 30, 1.2, 0.08, 0.14, rainbow[i], Enum.Material.SmoothPlastic) end
+		-- Ball pit with low walls and spheres.
+		c.B(9, 24, 13, 0.8, 1.6, P.pink); c.B(9, 30.5, 13, 0.8, 1.6, P.pink)
+		c.B(2.6, 27, 0.8, 5.8, 1.6, P.pink)
+		for i = 1, 10 do c.Sphere(4 + (i % 5) * 2.4, 25 + math.floor(i / 5) * 3, 1.3, 1.8, rainbow[(i % 6) + 1]) end
+		-- Big alphabet blocks (vaultable) and a teddy landmark.
+		for i, spec in ipairs({ { 36, 11, P.coral }, { 41, 21, P.cyan }, { 11, 9, P.yellow } }) do
+			local block = c.Vault(spec[1], spec[2], 3.6, 3.6, 3.6, spec[3], Enum.Material.SmoothPlastic)
+			c.N(spec[1], spec[2] - 1.85, 2.4, 0.1, 2.4, 1.8, P.white)
+		end
+		c.Sphere(40, 28, 3.4, 5.6, P.wood); c.Sphere(40, 28, 7, 3.6, P.wood)
+		c.Sphere(38.7, 28, 8.6, 1.3, P.wood); c.Sphere(41.3, 28, 8.6, 1.3, P.wood)
+		for i = 0, 3 do c.Shelf(14 + i * 9.5, 31, 8, 1.4, 6, P.white, rainbow[i + 1], rainbow[i + 3]) end
+		c.Sign("TOYS", c.W / 2, 30.2, 8.5, 12, 3, P.yellow)
+	end
+	function themes.sneaker(c)
+		c.Cyl(c.W / 2, 20, 1.1, 7.5, 2.2, P.white, Enum.Material.Marble)
+		c.N(c.W / 2, 20, 8, 8, 0.1, 2.25, P.cyan)
+		c.A(c.W / 2, 20, 4, 2, 1.3, 3, P.coral, Enum.Material.SmoothPlastic)
+		c.A(c.W / 2 + 1.3, 20, 1.8, 2, 2, 3.4, P.white, Enum.Material.SmoothPlastic)
+		for _, u in ipairs({ 8, 35 }) do c.B(u, 14, 8, 2.4, 1.4, P.navy, Enum.Material.SmoothPlastic); c.A(u, 14, 8, 2.4, 0.4, 1.5, P.cream, Enum.Material.Fabric) end
+		c.Vault(7, 26, 4, 3, 3.2, P.orange, Enum.Material.SmoothPlastic)
+		c.Vault(36, 8.5, 4, 3, 3.2, P.orange, Enum.Material.SmoothPlastic)
+		for i = 0, 3 do c.Shelf(8 + i * 9, 31, 8, 1.4, 8, P.ink, i % 2 == 0 and P.cyan or P.magenta) end
+		for _, v in ipairs({ 14, 21 }) do
+			c.Shelf(0.7, v + 4, 1.2, 8, 7, P.ink, P.cyan)
+			c.Shelf(c.W - 0.7, v + 4, 1.2, 8, 7, P.ink, P.magenta)
+		end
+		c.Sign("SNKR", c.W / 2, 30.2, 11, 14, 3.2, P.white)
+	end
+	function themes.electronics(c)
+		for _, u in ipairs({ 9, 34 }) do for _, v in ipairs({ 11, 23 }) do
+			local t = c.Vault(u, v, 8, 4, 3.2, P.white, Enum.Material.SmoothPlastic)
+			c.A(u, v, 3.2, 0.2, 1.8, 4.1, P.blue, Enum.Material.Neon)
+		end end
+		for i = 0, 4 do c.N(5 + i * 8.2, 31.2, 7, 0.15, 4.4, 7.5, i % 2 == 0 and P.blue or P.cyan) end
+		c.Vault(c.W / 2, 28, 12, 3, 3.4, P.ink, Enum.Material.Metal)
+		c.Shelf(0.7, 20, 1.2, 12, 7, P.ink, P.blue); c.Shelf(c.W - 0.7, 20, 1.2, 12, 7, P.ink, P.blue)
+		c.Sign("TECH+", c.W / 2, 30.2, 11.4, 14, 3, P.cyan)
+	end
+	function themes.clothing(c)
+		for i, spec in ipairs({ { 7, 9 }, { 7, 17 }, { 39, 9 }, { 39, 17 } }) do
+			c.A(spec[1], spec[2], 6, 0.3, 0.3, 4.4, P.steel, Enum.Material.Metal)
+			for k = 0, 3 do c.A(spec[1] - 2 + k * 1.3, spec[2], 1, 0.5, 2.6, 3, ({ P.coral, P.cyan, P.white, P.ink })[(k + i) % 4 + 1], Enum.Material.Fabric) end
+			c.A(spec[1] - 2.8, spec[2], 0.2, 0.2, 4.4, 2.2, P.steel, Enum.Material.Metal); c.A(spec[1] + 2.8, spec[2], 0.2, 0.2, 4.4, 2.2, P.steel, Enum.Material.Metal)
+		end
+		for _, u in ipairs({ 14, 24, 34 }) do mannequin(c.folder, c.X(u), c.fy, c.Z(26), u == 24 and P.coral or P.white) end
+		c.Vault(14, 14.5, 10, 4, 3, P.white, Enum.Material.SmoothPlastic)
+		c.Vault(34, 20, 10, 4, 3, P.white, Enum.Material.SmoothPlastic)
+		for i = 0, 2 do c.B(c.W - 1.6, 8 + i * 4.2, 1.2, 4, 8, P.navy, Enum.Material.SmoothPlastic); c.A(c.W - 2.3, 8 + i * 4.2, 0.2, 3.6, 7, 4, P.purple, Enum.Material.Fabric) end
+		c.Sign("NEXUS", c.W / 2, 30.2, 11, 14, 3, P.white)
+	end
+	function themes.book(c)
+		-- Tall shelving forms lanes at least six studs wide.
+		for _, u in ipairs({ 7, 36 }) do c.Shelf(u, 17, 1.6, 20, 9.5, P.wood, P.gold, P.coral) end
+		for _, u in ipairs({ 11, 32 }) do c.Shelf(u, 24, 6, 1.6, 8, P.wood, P.gold, P.teal) end
+		for i = 0, 3 do c.Shelf(7 + i * 9.8, 31, 8, 1.4, 11, P.wood, P.gold, P.purple) end
+		c.Vault(c.W / 2, 20, 6, 6, 3, P.cream, Enum.Material.Wood)
+		for _, d in ipairs({ { 17.5, 17 }, { 25.5, 23 } }) do c.A(d[1], d[2], 2.5, 2.5, 1.4, 1, P.coral, Enum.Material.Fabric) end
+		c.Sign("PAGES", c.W / 2, 30.2, 12.2, 12, 2.8, P.gold)
+	end
+	function themes.convenience(c)
+		for i = 0, 3 do
+			c.B(6 + i * 9.4, 31, 8, 1.6, 7.6, P.white, Enum.Material.Metal)
+			c.N(6 + i * 9.4, 30.1, 7.2, 0.1, 6.8, 4, P.cyan)
+		end
+		c.Vault(12, 15, 12, 2, 4.2, P.coral, Enum.Material.SmoothPlastic)
+		c.Vault(32, 21, 12, 2, 4.2, P.yellow, Enum.Material.SmoothPlastic)
+		c.Vault(c.W - 6, 6, 8, 3, 3.4, P.white, Enum.Material.SmoothPlastic)
+		c.A(c.W - 6, 6, 1.4, 1.2, 1, 3.8, P.cyan, Enum.Material.Neon)
+		c.Sign("QUIK", c.W / 2, 30.2, 11, 12, 3, P.yellow)
+	end
+	function themes.sports(c)
+		for i, h in ipairs({ 2.2, 3.4, 4.4 }) do c.Vault(8 + i * 8, 14 + (i % 2) * 5, 6, 5, h, i == 2 and P.orange or P.blue, Enum.Material.SmoothPlastic) end
+		c.B(c.W - 3, 24, 1, 8, 7, P.ink, Enum.Material.SmoothPlastic)
+		for i = 1, 6 do c.A(c.W - 3.7, 21 + i * 1.1, 0.3, 1.1, 1.1, 2 + i * 0.9, ({ P.coral, P.yellow, P.cyan })[i % 3 + 1], Enum.Material.SmoothPlastic) end
+		-- Basketball hoop on the back wall.
+		c.A(c.W / 2, 31.4, 5, 0.3, 3.4, 11, P.white, Enum.Material.SmoothPlastic)
+		c.Cyl(c.W / 2, 29.8, 10, 2.2, 0.15, P.orange, Enum.Material.Neon, false)
+		for _, v in ipairs({ 14, 22 }) do c.Shelf(0.9, v, 1.2, 6, 6, P.ink, P.orange) end
+		c.Sign("APEX", c.W / 2, 31.4, 13.5, 12, 2.8, P.orange)
+	end
+	function themes.jewelry(c)
+		for _, spec in ipairs({ { 8, 10, 3, 10 }, { c.W - 8, 10, 3, 10 }, { c.W / 2, 25, 14, 3 } }) do
+			local case = c.Vault(spec[1], spec[2], spec[3], spec[4], 3.4, P.white, Enum.Material.SmoothPlastic)
+			c.A(spec[1], spec[2], spec[3] - 0.4, spec[4] - 0.4, 0.2, 3.6, P.glass, Enum.Material.Glass).Transparency = 0.5
+			c.N(spec[1], spec[2], 0.8, 0.8, 0.12, 3.8, P.gold)
+		end
+		c.Cyl(c.W / 2, 17, 11.6, 9, 0.3, P.gold, Enum.Material.Neon, false)
+		c.Cyl(c.W / 2, 17, 11.2, 5.5, 0.3, P.cyan, Enum.Material.Neon, false)
+		c.Sphere(c.W / 2, 17, 10.2, 2, P.glass)
+		c.A(c.W / 2, 31.4, 20, 0.3, 8, 7, P.purple, Enum.Material.Fabric)
+		c.Sign("LUXE", c.W / 2, 30.9, 12.2, 12, 2.8, P.gold)
+	end
+	function themes.beauty(c)
+		for _, spec in ipairs({ { 9, 11 }, { c.W - 9, 11 }, { c.W / 2, 23 } }) do
+			c.Vault(spec[1], spec[2], 5, 5, 3.2, P.pink, Enum.Material.SmoothPlastic)
+			c.Cyl(spec[1], spec[2], 3.4, 4.2, 0.2, P.white, Enum.Material.Metal, false)
+			c.N(spec[1], spec[2], 0.7, 0.7, 0.4, 3.8, P.magenta)
+		end
+		for i = 0, 3 do
+			local mirror = disc(c.folder, "Mirror", CFrame.new(c.X(7 + i * 9.4), c.fy + 8, c.Z(31.3)) * CFrame.Angles(0, c.north and 0 or math.pi, 0), 4.6, 0.3, P.white, Enum.Material.Glass)
+			neon(c.folder, "MirrorGlow", c.X(7 + i * 9.4), c.fy + 8, c.Z(31.0), 5, 5, 0.1, P.pink)
+		end
+		c.Cyl(c.W - 4, 27, 3.6, 1.8, 7.2, P.magenta, Enum.Material.SmoothPlastic, true)
+		c.Cyl(c.W - 4, 27, 8.2, 1.6, 2.6, P.red, Enum.Material.SmoothPlastic, false)
+		c.Sign("GLOW", c.W / 2, 30.2, 12.2, 12, 2.8, P.pink)
+	end
+
+	local function buildStore(def)
+		local folder = Instance.new("Folder")
+		folder.Name = def.name
+		folder.Parent = storesF
+		local north = def.row == "N"
+		local fy = def.floor
+		local ceil = fy == 0 and F2 - 1.2 or 30
+		local frontZ = north and -48 or 48
+		local dir = north and -1 or 1
+		local W = def.x2 - def.x1
+		local cx = (def.x1 + def.x2) / 2
+		local faceRot = north and 0 or math.pi
+		if not def.enter then
+			-- Dressed storefront: a solid block with glazing, display lighting, and a bold sign.
+			box(folder, "ShopBlock", cx, fy + (ceil - fy) / 2, frontZ + dir * 16, W - 1, ceil - fy, 32, P.white, Enum.Material.Concrete)
+			box(folder, "ShopPlinth", cx, fy + 0.6, frontZ - dir * 0.5, W - 1, 1.2, 1.2, def.color, Enum.Material.Marble, false):SetAttribute("VisualPolish", true)
+			for i = 0, 2 do
+				local gx = def.x1 + 5 + i * (W - 10) / 3 + (W - 10) / 6
+				glassBox(folder, "DisplayGlass", gx, fy + 6.4, frontZ - dir * 0.2, (W - 12) / 3, 9, 0.3, 0.35, false, P.glass)
+				neon(folder, "DisplayGlow", gx, fy + 11.2, frontZ - dir * 0.55, (W - 12) / 3, 0.2, 0.2, i % 2 == 0 and def.accent or P.gold)
+				art(folder, "DisplayBox", Vector3.new(3, 3, 1), Vector3.new(gx, fy + 2.8, frontZ - dir * 1.4), def.color, Enum.Material.SmoothPlastic)
+			end
+			sign(folder, def.sign, Vector3.new(cx, fy + 13, frontZ - dir * 0.6), math.min(W - 8, 24), 3.2, def.accent, faceRot)
+			return folder
+		end
+		local ctx = storeCtx(def, folder)
+		-- Carpet and ceiling lights.
+		art(folder, "Carpet", Vector3.new(W - 1.2, 0.1, 31), Vector3.new(cx, fy + 0.1, frontZ + dir * 16.2), def.color, Enum.Material.Fabric)
+		art(folder, "CarpetBorder", Vector3.new(W - 1.2, 0.12, 1), Vector3.new(cx, fy + 0.11, frontZ + dir * 3), def.accent, Enum.Material.SmoothPlastic)
+		for i = 1, 3 do ceilingStrip(folder, cx, ceil - 0.2, frontZ + dir * (6 + i * 7.5), W - 8, 0.8, i % 2 == 0 and def.accent or P.white) end
+		-- Front: kick wall, glazing either side of a 16 stud opening, and a header band.
+		local open = 16
+		for _, side in ipairs({ -1, 1 }) do
+			local mid = cx + side * (open / 2 + (W / 2 - open / 2) / 2)
+			local span = W / 2 - open / 2
+			box(folder, "KickWall", mid, fy + 0.6, frontZ, span, 1.2, 0.8, def.color, Enum.Material.Marble)
+			glassBox(folder, "ShopWindow", mid, fy + 6.6, frontZ, span - 0.6, 10, 0.3, 0.45, true, P.glass)
+			artBeam(folder, "Mullion", Vector3.new(mid, fy + 1.2, frontZ), Vector3.new(mid, fy + 11.6, frontZ), 0.3, def.accent, Enum.Material.Metal)
+			neon(folder, "OpeningGlow", cx + side * (open / 2 + 0.2), fy + 6, frontZ, 0.2, 10.4, 0.5, def.accent)
+		end
+		neon(folder, "OpeningTopGlow", cx, fy + 11.4, frontZ, open + 0.6, 0.25, 0.5, def.accent)
+		box(folder, "HeaderBand", cx, (fy + 11.6 + ceil) / 2, frontZ, W, ceil - fy - 11.6, 0.8, P.white, Enum.Material.Concrete)
+		sign(folder, def.sign, Vector3.new(cx, fy + 13, frontZ - dir * 0.6), 18, 3.2, def.accent, faceRot)
+		-- Projecting blade sign for sightlines along the corridor.
+		local blade = box(folder, "BladeSign", def.x1 + 1.5, fy + 8, frontZ - dir * 1.8, 0.4, 5, 3, P.ink, Enum.Material.SmoothPlastic, false)
+		blade:SetAttribute("VisualPolish", true)
+		surfaceText(blade, Enum.NormalId.Right, string.sub(def.sign, 1, 1), def.accent, 40, 0.9, 0.9)
+		surfaceText(blade, Enum.NormalId.Left, string.sub(def.sign, 1, 1), def.accent, 40, 0.9, 0.9)
+		local theme = themes[def.theme]
+		if theme then theme(ctx) end
 		return folder
 	end
 
-	-- The arena is a raised city island. Streets form a cross plus a complete outer loop.
-	-- Keep the road at zero, with its supporting island ending below the asphalt.
-	box(terrain, "CityIsland", 0, -3.15, 0, 310, 5.7, 280, P.navy, Enum.Material.Concrete)
-	box(terrain, "Asphalt", 0, -0.15, 0, 302, 0.3, 272, P.road, Enum.Material.Asphalt)
-	box(terrain, "PlazaPaving", 0, 0.08, -1, 40, 0.16, 36, P.concrete, Enum.Material.Concrete)
-	for _, x in ipairs({ -138, 138 }) do
-		box(terrain, "OuterFootpath", x, 0.15, 0, 12, 0.3, 268, P.concrete, Enum.Material.Concrete)
-	end
-	for _, z in ipairs({ -126, 126 }) do
-		-- Butt-join the north/south strips to the east/west strips at x = +/-132.
-		box(terrain, "OuterFootpath", 0, 0.15, z, 264, 0.3, 12, P.concrete, Enum.Material.Concrete)
-	end
-	for i = -6, 6 do
-		if math.abs(i) > 1 then
-			box(terrain, "RoadDash", i * 20, 0.025, -7, 7, 0.05, 0.24, P.gold, nil, false)
-			box(terrain, "RoadDash", 7, 0.025, i * 19, 0.24, 0.05, 6, P.gold, nil, false)
-		end
-	end
-	for _, x in ipairs({ -27, 27 }) do
-		for i = -3, 3 do box(terrain, "Crosswalk", x, 0.04, i * 2.3 - 1, 7, 0.07, 1.1, P.cream, nil, false) end
-	end
-	for _, x in ipairs({ -151, 151 }) do
-		box(terrain, "IslandWall", x, 2.2, 0, 2, 4.4, 276, P.navy, Enum.Material.Concrete)
-		box(terrain, "IslandLight", x, 4.45, 0, 0.22, 0.12, 276, P.cyan, Enum.Material.Neon, false)
-	end
-	for _, z in ipairs({ -137, 137 }) do
-		box(terrain, "IslandWall", 0, 2.2, z, 300, 4.4, 2, P.navy, Enum.Material.Concrete)
-		box(terrain, "IslandLight", 0, 4.45, z, 302, 0.12, 0.22, P.cyan, Enum.Material.Neon, false)
-	end
-	for _, edge in ipairs({ { -154, 0, 2, 280 }, { 154, 0, 2, 280 }, { 0, -139, 310, 2 }, { 0, 139, 310, 2 } }) do
-		local wall = box(terrain, "ArenaBoundary", edge[1], 45, edge[2], edge[3], 100, edge[4], P.ink)
-		wall.Transparency = 1
-		wall.CastShadow = false
-	end
-
-	local arcade = building("01_CitrusArcade", -84, -79, 72, 58, 16, P.teal, P.cyan)
-	local noodle = building("02_MoonNoodle", -85, 53, 70, 64, 20, P.coral, P.pink)
-	local greenhouse = building("03_CloudGarden", 81, -78, 82, 60, 24, P.cream, P.cyan)
-	local laundry = building("04_PolarLaundry", 86, 58, 72, 66, 14, P.purple, P.cyan)
-	local market = building("05_EmberMarket", 0, 78, 50, 52, 14, P.cream, P.gold)
-	-- Signs face both the chase streets and the outside loop for instant orientation.
-	sign(arcade, "CITRUS / ARCADE", Vector3.new(-84, 11.3, -49.45), 35, 4.4, P.cyan, math.pi)
-	sign(noodle, "MOON NOODLE", Vector3.new(-85, 13.3, 20.45), 35, 4.6, P.gold)
-	sign(greenhouse, "CLOUD GARDEN", Vector3.new(81, 11.3, -47.4), 38, 4.8, P.cyan, math.pi)
-	sign(laundry, "POLAR / LAUNDRY", Vector3.new(86, 9.9, 24.4), 40, 4.3, P.cyan)
-	sign(market, "EMBER MARKET", Vector3.new(0, 10.2, 51.4), 36, 4.2, P.gold)
-	canopy(noodle, -85, 8, 17.3, 47, 6, P.coral)
-	canopy(arcade, -84, 7.5, -46.5, 44, 6, P.teal, math.pi)
-	canopy(market, 0, 7.6, 48.5, 40, 6, P.coral)
-	canopy(laundry, 86, 7.5, 21.8, 49, 5.5, P.purple)
-
-	-- A sixth traversable roof is the station under the signature clock crown.
-	local clock = building("06_MeridianStation", 0, -81, 38, 48, 24, P.navy, P.gold)
-	sign(clock, "MERIDIAN", Vector3.new(0, 11.2, -56.5), 28, 4.4, P.gold, math.pi)
-	box(clock, "ClockPillar", 0, 35, -91, 12, 22, 12, P.teal, Enum.Material.Concrete)
-	box(clock, "ClockCollar", 0, 44.5, -91, 15, 2, 15, P.cream, Enum.Material.Concrete)
-	box(clock, "ClockHousing", 0, 50, -91, 15, 9, 15, P.navy, Enum.Material.Metal)
-	box(clock, "ClockCrown", 0, 55.2, -91, 19, 1.4, 19, P.gold, Enum.Material.Metal)
-	box(clock, "CrownLight", 0, 56, -91, 17.5, 0.18, 17.5, P.gold, Enum.Material.Neon, false)
-	box(clock, "Spire", 0, 60, -91, 1.3, 8, 1.3, P.gold, Enum.Material.Metal, false)
-	sphere(clock, "SpireBeacon", Vector3.new(0, 64, -91), Vector3.new(2.8, 2.8, 2.8), P.gold)
-	for _, turn in ipairs({ 0, math.pi / 2, math.pi, -math.pi / 2 }) do
-		local cf = CFrame.new(0, 50, -91) * CFrame.Angles(0, turn, 0) * CFrame.new(0, 0, -7.6)
-		local dial = part(clock, "ClockDial", Vector3.new(6.7, 6.7, 0.15), cf, P.cream, Enum.Material.Neon, false)
-		for tick = 1, 12 do
-			local angle = tick * math.pi / 6
-			part(clock, "HourMark", Vector3.new(0.23, 0.6, 0.08), cf * CFrame.new(math.sin(angle) * 2.7, math.cos(angle) * 2.7, -0.13) * CFrame.Angles(0, 0, -angle), P.navy, nil, false)
-		end
-		part(clock, "MinuteHand", Vector3.new(0.2, 2.5, 0.1), dial.CFrame * CFrame.new(0, 1.1, -0.18), P.navy, nil, false)
-		part(clock, "HourHand", Vector3.new(1.8, 0.28, 0.1), dial.CFrame * CFrame.new(0.75, 0, -0.2), P.navy, nil, false)
-	end
-
-	-- Complete elevated loop, with a north cross route and a southern interception route.
-	route("CitrusToMoon", Vector3.new(-85, 16, -51), Vector3.new(-85, 20, 22), 12, P.pink, true)
-	route("GardenToPolar", Vector3.new(86, 24, -49), Vector3.new(86, 14, 26), 12, P.cyan, true)
-	route("MoonToEmber", Vector3.new(-51, 20, 67), Vector3.new(-24, 14, 67), 12, P.gold, true)
-	route("EmberToPolar", Vector3.new(24, 14, 78), Vector3.new(51, 14, 78), 12, P.cyan, true, 1, 1)
-	route("CitrusToMeridian", Vector3.new(-49, 16, -75), Vector3.new(-18, 24, -75), 12, P.gold, true)
-	route("MeridianToGarden", Vector3.new(18, 24, -75), Vector3.new(41, 24, -75), 12, P.cyan, true, 1, 1)
-	-- Ground-access ramps: around the west arcade, garden's north facade, and south market.
-	route("WestStreetRamp", Vector3.new(-126, 0.4, -36), Vector3.new(-126, 16, -82), 11, P.cyan, true)
-	route("WestRampLanding", Vector3.new(-126, 16, -82), Vector3.new(-115, 16, -82), 11, P.cyan, false, -0.2, 5)
-	route("GardenStreetRamp", Vector3.new(43, 0.4, -116), Vector3.new(98, 24, -116), 11, P.cyan, true)
-	route("GardenRampLanding", Vector3.new(98, 24, -116), Vector3.new(98, 24, -103), 11, P.cyan, false, -0.2, 5)
-	route("MarketStreetRamp", Vector3.new(36, 0.4, 111), Vector3.new(0, 14, 111), 11, P.gold, true)
-	route("MarketRampLanding", Vector3.new(0, 14, 111), Vector3.new(0, 14, 100), 11, P.gold, false, -0.2, 4)
-	ladder(-48.5, 40, 20, math.pi / 2)
-	ladder(123, 58, 14, math.pi / 2)
-	ladder(38.5, -63, 24, math.pi / 2)
-	ladder(-84, -109, 16)
-	ladder(-20, -64, 24, math.pi / 2)
-	ladder(-26, 89, 14, math.pi / 2)
-	-- Visible footings carry the long bridges without obstructing the central streets.
-	for _, x in ipairs({ -89.5, -80.5, 81.5, 90.5 }) do
-		box(routes, "BridgePier", x, 8.5, -25, 1.1, 17, 1.1, P.steel, Enum.Material.Metal)
-		box(routes, "BridgePier", x, 9.2, 7, 1.1, 18.4, 1.1, P.steel, Enum.Material.Metal)
-	end
-	-- Roof-level vent jumps are optional; broad routes stay clear through every roof.
-	acUnit(-108, 16, -93)
-	acUnit(-100, 16, -93)
-	acUnit(-104, 20, 72)
-	acUnit(111, 14, 42, math.pi / 2)
-	acUnit(111, 14, 52, math.pi / 2)
-	acUnit(13, 14, 94)
-	pipe(Vector3.new(-111, 17, -91), Vector3.new(-111, 17, -61))
-	pipe(Vector3.new(-111, 17, -61), Vector3.new(-111, 2, -48))
-	pipe(Vector3.new(108, 15, 44), Vector3.new(108, 15, 77), P.cyan)
-	pipe(Vector3.new(108, 15, 77), Vector3.new(124, 15, 77), P.cyan)
-
-	-- Citrus roof: illuminated arcade marquee, tiered water tank, and generous chase lanes.
-	box(arcade, "RoofMarqueeFrame", -101, 22, -104, 30, 8, 0.8, P.ink, Enum.Material.Metal, false)
-	sign(arcade, "PLAY / RUN / REPEAT", Vector3.new(-101, 22, -103.4), 28, 6, P.cyan, math.pi)
-	for _, x in ipairs({ -113, -89 }) do box(arcade, "MarqueeLeg", x, 19, -104, 0.6, 6, 0.6, P.steel, Enum.Material.Metal) end
-	cylinder(arcade, "WaterTankBase", Vector3.new(-60, 17, -93), 11, 2, P.steel, Enum.Material.Metal)
-	cylinder(arcade, "WaterTank", Vector3.new(-60, 21.5, -93), 9, 7, P.teal, Enum.Material.Metal)
-	for _, h in ipairs({ 18.8, 23.8 }) do cylinder(arcade, "TankBand", Vector3.new(-60, h, -93), 9.3, 0.3, P.cream, Enum.Material.Metal) end
-	cylinder(arcade, "TankLid", Vector3.new(-60, 25.2, -93), 10, 0.4, P.navy, Enum.Material.Metal)
-	planter(arcade, -106, 16, -58, 14, 0, true)
-	box(arcade, "VaultVent", -69, 17.35, -60, 9, 2.7, 3, P.steel, Enum.Material.Metal)
-
-	-- Moon rooftop: a lantern restaurant terrace with a climbable central pergola deck.
-	box(noodle, "TerraceDeck", -86, 20.15, 49, 27, 0.3, 20, P.soil, Enum.Material.WoodPlanks)
-	for _, x in ipairs({ -98, -74 }) do
-		for _, z in ipairs({ 40, 58 }) do box(noodle, "PergolaPost", x, 24.5, z, 0.55, 9, 0.55, P.navy, Enum.Material.Wood) end
-	end
-	for i = 0, 6 do box(noodle, "PergolaLath", -99 + i * 4.3, 29, 49, 0.8, 0.6, 23, P.coral, Enum.Material.Wood, false) end
-	for _, z in ipairs({ 39, 59 }) do box(noodle, "PergolaBeam", -86, 28.8, z, 30, 0.8, 0.7, P.cream, Enum.Material.Wood, false) end
-	for _, x in ipairs({ -95, -86, -77 }) do
-		cylinder(noodle, "PaperLantern", Vector3.new(x, 27.3, 41), 2.2, 2.4, P.gold, Enum.Material.Neon, false)
-	end
-	planter(noodle, -111, 20, 44, 14, math.pi / 2, true)
-	planter(noodle, -60, 20, 44, 14, math.pi / 2, true)
-	bench(noodle, -92, 20, 58)
-	bench(noodle, -79, 20, 58)
-	-- A large bowl silhouette makes Moon readable from the skyline, without asset meshes.
-	cylinder(noodle, "BowlFoot", Vector3.new(-105, 22, 27), 3.7, 3, P.cream, Enum.Material.SmoothPlastic)
-	cylinder(noodle, "NoodleBowl", Vector3.new(-105, 25, 27), 9, 3.5, P.coral, Enum.Material.SmoothPlastic)
-	cylinder(noodle, "BowlRim", Vector3.new(-105, 27, 27), 10, 0.5, P.cream, Enum.Material.SmoothPlastic)
-	beam(noodle, "Chopstick", Vector3.new(-108, 27.4, 27), Vector3.new(-102, 33, 27), 0.3, P.gold, Enum.Material.Wood, false)
-	beam(noodle, "Chopstick", Vector3.new(-106, 27.4, 27.8), Vector3.new(-100, 33, 27.8), 0.3, P.gold, Enum.Material.Wood, false)
-
-	-- Cloud Garden: transparent pitched greenhouse plus an open, planted running circuit.
-	box(greenhouse, "GardenPaving", 81, 24.13, -78, 76, 0.26, 54, P.concrete, Enum.Material.Concrete)
-	local gx, gz = 80, -85
-	for _, x in ipairs({ gx - 13, gx + 13 }) do
-		for _, z in ipairs({ gz - 12, gz, gz + 12 }) do box(greenhouse, "GreenhousePost", x, 28, z, 0.4, 8, 0.4, P.cream, Enum.Material.Metal, false) end
-		local glass = box(greenhouse, "GreenhouseGlass", x, 28, gz, 0.15, 7.6, 24, P.cyan, Enum.Material.Glass, false)
-		glass.Transparency = 0.76
-		beam(greenhouse, "GreenhouseEave", Vector3.new(x, 32, gz - 12), Vector3.new(x, 32, gz + 12), 0.45, P.cream, Enum.Material.Metal, false)
-	end
-	beam(greenhouse, "GreenhouseRidge", Vector3.new(gx, 37, gz - 12), Vector3.new(gx, 37, gz + 12), 0.5, P.cream, Enum.Material.Metal, false)
-	for _, z in ipairs({ gz - 12, gz, gz + 12 }) do
-		for _, x in ipairs({ gx - 13, gx + 13 }) do beam(greenhouse, "GreenhouseRafter", Vector3.new(x, 32, z), Vector3.new(gx, 37, z), 0.4, P.cream, Enum.Material.Metal, false) end
-	end
-	for _, side in ipairs({ -1, 1 }) do
-		local roof = part(greenhouse, "GreenhouseRoof", Vector3.new(13.9, 0.14, 24), CFrame.new(gx + side * 6.5, 34.5, gz) * CFrame.Angles(0, 0, -side * math.atan(5 / 13)), P.cyan, Enum.Material.Glass, false)
-		roof.Transparency = 0.82
-	end
-	planter(greenhouse, 71, 24, -85, 16, math.pi / 2, true)
-	planter(greenhouse, 89, 24, -85, 16, math.pi / 2, true)
-	planter(greenhouse, 53, 24, -96, 14, 0, true)
-	planter(greenhouse, 109, 24, -96, 12, 0, true)
-	planter(greenhouse, 108, 24, -59, 15, 0, true)
-	bench(greenhouse, 56, 24, -58)
-	tree(greenhouse, 109, 24, -79, 0.75)
-	box(greenhouse, "GardenVault", 64, 25.3, -61, 8, 2.6, 2.2, P.green, Enum.Material.Concrete)
-	sign(greenhouse, "BREATHE / THEN RUN", Vector3.new(80, 34, -72.5), 20, 2.7, P.cyan, math.pi)
-
-	-- Polar roof: blue water reservoir and laundry lines, all cloth above head height.
-	box(laundry, "ReservoirFoot", 69, 14.3, 46, 18, 0.6, 14, P.concrete, Enum.Material.Concrete)
-	box(laundry, "Reservoir", 69, 16, 46, 16, 3.2, 12, P.teal, Enum.Material.Metal)
-	box(laundry, "ReservoirInset", 69, 17.65, 46, 14.8, 0.08, 10.8, P.cyan, Enum.Material.Glass, false)
-	for _, x in ipairs({ 64, 101 }) do box(laundry, "LaundryMast", x, 18.5, 83, 0.3, 9, 0.3, P.cream, Enum.Material.Metal, false) end
-	beam(laundry, "LaundryLine", Vector3.new(64, 22.6, 83), Vector3.new(101, 22.6, 83), 0.08, P.ink, nil, false)
-	for i = 1, 6 do box(laundry, "HangingBanner", 65 + i * 5.1, 20.9, 83, 3.1, 3.2, 0.08, i % 2 == 0 and P.cream or P.coral, Enum.Material.Fabric, false) end
-	planter(laundry, 102, 14, 70, 11, math.pi / 2, false)
-	box(laundry, "VaultDuct", 89, 15.35, 53, 3, 2.7, 11, P.steel, Enum.Material.Metal)
-	sign(laundry, "SPIN / CITY", Vector3.new(116, 21, 87), 19, 4, P.pink, math.pi)
-
-	-- Ember roof: miniature food garden and solar pergola leave a broad east-west shortcut.
-	planter(market, -15, 14, 93, 12, 0, true)
-	planter(market, 15, 14, 59, 10, 0, true)
-	for _, x in ipairs({ -17, 17 }) do box(market, "SolarPost", x, 18.5, 86, 0.5, 9, 0.5, P.steel, Enum.Material.Metal, false) end
-	part(market, "SolarCanopy", Vector3.new(37, 0.4, 7), CFrame.new(0, 23, 86) * CFrame.Angles(math.rad(-10), 0, 0), P.navy, Enum.Material.Metal, false)
-	for i = -3, 3 do part(market, "SolarCell", Vector3.new(4.4, 0.05, 6), CFrame.new(i * 5, 23.3, 86) * CFrame.Angles(math.rad(-10), 0, 0), P.glass, Enum.Material.Glass, false) end
-
-	-- A deliberately different silhouette for every rooftop. These canopy surfaces sit
-	-- well above standing avatars; the original walking decks, routes and cover remain.
-	-- The city-facing side is +Z, matching the arcade marquee below it.
-	local citrus = CFrame.new(-101, 31.5, -104.9) * CFrame.Angles(0, math.pi, 0)
-	disc(arcade, "CitrusMarqueeHalo", citrus, 13, 0.55, P.gold, Enum.Material.Metal)
-	disc(arcade, "CitrusMarqueeFruit", citrus * CFrame.new(0,0,-0.36), 10.5, 0.24, P.coral, Enum.Material.SmoothPlastic)
-	for spoke=1,6 do
-		art(arcade,"CitrusSegment",Vector3.new(0.28,4.1,0.14),citrus*CFrame.new(0,0,-0.55)*CFrame.Angles(0,0,spoke*math.pi/3)*CFrame.new(0,2.25,0),P.cream)
-	end
-	art(arcade,"CitrusLeaf",Vector3.new(4.8,1.5,0.4),citrus*CFrame.new(4.2,6,-0.1)*CFrame.Angles(0,0,math.rad(28)),P.leaf)
-	for _,side in ipairs({-1,1}) do
-		local endcap=disc(arcade,"MarqueeRoundedEnd",CFrame.new(-101+side*15,22,-104),8,0.8,P.ink,Enum.Material.Metal)
-		endcap:SetAttribute("DistrictLandmark","Citrus")
-	end
-	artBeam(arcade,"TankFeedPipe",Vector3.new(-60,25.5,-93),Vector3.new(-60,29,-93),0.55,P.cream,Enum.Material.Metal)
-	art(arcade,"TankRainCap",Vector3.new(2.5,0.3,2.5),Vector3.new(-60,29,-93),P.gold,Enum.Material.Metal)
-
-	for _,side in ipairs({-1,1}) do
-		local roof=art(noodle,"MoonSweptRoof",Vector3.new(16.4,0.55,27),CFrame.new(-86+side*7.4,31,49)*CFrame.Angles(0,0,-side*math.rad(18)),P.coral,Enum.Material.Metal)
-		roof:SetAttribute("DistrictLandmark","Moon")
-		art(noodle,"MoonEaveLip",Vector3.new(3.4,0.35,28),CFrame.new(-86+side*16,29.1,49)*CFrame.Angles(0,0,side*math.rad(12)),P.cream,Enum.Material.Metal)
-		for _,z in ipairs({35,63}) do
-			artBeam(noodle,"MoonRoofFascia",Vector3.new(-86,33.7,z),Vector3.new(-86+side*17,28.9,z),0.35,P.gold,Enum.Material.Metal)
-		end
-	end
-	artBeam(noodle,"MoonRidge",Vector3.new(-86,33.8,34),Vector3.new(-86,33.8,64),0.65,P.navy,Enum.Material.Metal)
-	-- Steam ribbons are static graphic curves, with no particles or per-frame work.
-	for _,x in ipairs({-108,-104}) do
-		artBeam(noodle,"NoodleSteam",Vector3.new(x,28,26),Vector3.new(x-1.2,30,26),0.24,P.cream)
-		artBeam(noodle,"NoodleSteam",Vector3.new(x-1.2,30,26),Vector3.new(x,32,26),0.24,P.cream)
-	end
-
-	-- Garden's crest and hanging foliage contrast with the industrial roofs. Open
-	-- transparent glazing retains visibility through the greenhouse chase route.
-	for _,x in ipairs({67,93}) do
-		for _,z in ipairs({-97,-73}) do
-			local hanging=sphere(greenhouse,"HangingGarden",Vector3.new(x,30.6,z),Vector3.new(3.5,2.3,3.5),P.green)
-			hanging:SetAttribute("VisualPolish",true)
-			art(greenhouse,"HangingVine",Vector3.new(0.45,3.5,0.45),Vector3.new(x,29,z),P.leaf,Enum.Material.Grass)
-		end
-	end
-	local gardenCrest=disc(greenhouse,"BotanicalCrest",CFrame.new(80,39.5,-85),6,0.4,P.gold,Enum.Material.Metal)
-	gardenCrest:SetAttribute("DistrictLandmark","Garden")
-	for _,side in ipairs({-1,1}) do
-		art(greenhouse,"BotanicalLeaf",Vector3.new(1.8,4.2,0.3),CFrame.new(80+side*1.5,39.5,-85.3)*CFrame.Angles(0,0,side*math.rad(35)),P.green)
-		art(greenhouse,"GardenSunshade",Vector3.new(18,0.22,5),CFrame.new(80+side*7,35.7,-85)*CFrame.Angles(0,0,-side*math.rad(21)),P.cream,Enum.Material.Fabric)
-	end
-
-	-- A giant washer dial forms Polar's instantly recognizable round skyline sign.
-	local dialCf=CFrame.new(111,30,88) * CFrame.Angles(0, math.pi, 0)
-	local washer=disc(laundry,"PolarWasherHalo",dialCf,13,1.1,P.cream,Enum.Material.Metal)
-	washer:SetAttribute("DistrictLandmark","Polar")
-	disc(laundry,"PolarWasherDrum",dialCf*CFrame.new(0,0,-0.62),10.2,0.3,P.teal,Enum.Material.Metal)
-	disc(laundry,"PolarWasherGlass",dialCf*CFrame.new(0,0,-0.82),7.9,0.12,P.glass,Enum.Material.Glass)
-	for _,side in ipairs({-1,1}) do
-		art(laundry,"PolarDialPointer",Vector3.new(0.55,3.5,0.18),dialCf*CFrame.new(side*2.2,side*1.2,-0.95)*CFrame.Angles(0,0,math.rad(45)),P.cyan,Enum.Material.Neon)
-		art(laundry,"PolarSignLeg",Vector3.new(0.6,5,0.6),Vector3.new(111+side*3,21,88),P.steel,Enum.Material.Metal)
-	end
-	for _,z in ipairs({40.8,46,51.2}) do
-		art(laundry,"ReservoirBrace",Vector3.new(16.2,0.25,0.4),Vector3.new(69,16.3,z),P.cream,Enum.Material.Metal)
-	end
-
-	-- The market is a copper butterfly pavilion; lifted outer edges frame the solar
-	-- roof without adding a wall that runners could disappear behind.
-	for _,side in ipairs({-1,1}) do
-		local wing=art(market,"MarketButterflyRoof",Vector3.new(20,0.5,11),CFrame.new(side*9.5,25.7,86)*CFrame.Angles(0,0,side*math.rad(13)),P.coral,Enum.Material.Metal)
-		wing:SetAttribute("DistrictLandmark","Ember")
-		artBeam(market,"MarketRoofEdge",Vector3.new(side*19,27.9,80.3),Vector3.new(side*19,27.9,91.7),0.4,P.gold,Enum.Material.Metal)
-	end
-	for _,x in ipairs({-12,0,12}) do
-		artBeam(market,"PendantWire",Vector3.new(x,24,81),Vector3.new(x,21.5,81),0.06,P.navy)
-		local pendant=disc(market,"MarketPendant",CFrame.new(x,21.5,81)*CFrame.Angles(math.pi/2,0,0),2.2,0.8,P.gold,Enum.Material.Neon)
-		pendant.CastShadow=false
-	end
-	-- Meridian receives an Art Deco crown; its four clock faces remain readable.
-	for _,side in ipairs({-1,1}) do
-		for _,front in ipairs({-1,1}) do
-			art(clock,"MeridianCrownFin",Vector3.new(1.3,13,1.3),Vector3.new(side*7,54,-91+front*7),P.gold,Enum.Material.Metal)
-			artBeam(clock,"MeridianCrownSlope",Vector3.new(side*7,60.5,-91+front*7),Vector3.new(0,64,-91),0.65,P.cream,Enum.Material.Metal)
-		end
-	end
-	clock.ClockCrown:SetAttribute("DistrictLandmark","Meridian")
-
-	-- Ground-level detail is deliberately concentrated on solid facade planes: framed
-	-- shop portals, projecting lintels, shutter fins and balcony rails give depth while
-	-- preserving every original street and spawn. The bold color bands aid wayfinding.
-	for _,entry in ipairs({
-		{arcade,-84,-49.1,72,16,P.teal,P.cyan,math.pi},
-		{noodle,-85,20.1,70,20,P.coral,P.gold,0},
-		{greenhouse,81,-47.1,82,24,P.cream,P.green,math.pi},
-		{laundry,86,24.1,72,14,P.purple,P.cyan,0},
-		{market,0,51.1,50,14,P.cream,P.coral,0},
-		{clock,0,-56.1,38,24,P.teal,P.gold,math.pi},
-	}) do
-		local parent,x,z,width,height,color,accent,rotation=table.unpack(entry)
-		local frame=CFrame.new(x,0,z)*CFrame.Angles(0,rotation,0)
-		for _,side in ipairs({-1,1}) do
-			local offset=side*(width/2-5)
-			art(parent,"FacadePierInlay",Vector3.new(1.4,height-3,0.25),frame*CFrame.new(offset,height/2,-0.16),accent,Enum.Material.Brick)
-			art(parent,"ShopLintel",Vector3.new(9,0.5,1.1),frame*CFrame.new(side*width*0.27,7.1,-0.3),P.cream,Enum.Material.Concrete)
-			art(parent,"ShopDoorFrame",Vector3.new(0.3,5.5,0.55),frame*CFrame.new(side*3.1,3.7,-0.2),color,Enum.Material.Metal)
-			if height>15 then
-				art(parent,"BalconyShelf",Vector3.new(7.3,0.45,2),frame*CFrame.new(side*width*0.31,height-7.5,-0.7),P.cream,Enum.Material.Concrete)
-				art(parent,"BalconyRail",Vector3.new(7.2,1.4,0.15),frame*CFrame.new(side*width*0.31,height-6.6,-1.5),accent,Enum.Material.Metal)
+	-- Row layouts: slot index -> store definition.
+	local slotX = {}
+	for i = 1, 5 do slotX[i] = { boundariesX[i], boundariesX[i + 1] } end
+	local layout = {
+		{ floor = 0, row = "N", list = {
+			{ "TOYS", "TOYS", "toy", P.coral, P.yellow, true }, { "SNKR", "SNKR", "sneaker", P.navy, P.cyan, true },
+			{ "TECH", "TECH+", "electronics", P.ink, P.blue, true }, { "VOLT", "VOLT", nil, P.purple, P.cyan, false },
+			{ "AURORA", "AURORA", nil, P.teal, P.gold, false } } },
+		{ floor = 0, row = "S", list = {
+			{ "NEXUS", "NEXUS", "clothing", P.navy, P.white, true }, { "PAGES", "PAGES", "book", P.wood, P.gold, true },
+			{ "QUIK", "QUIK", "convenience", P.cream, P.coral, true }, { "NOVA", "NOVA", nil, P.magenta, P.cyan, false },
+			{ "MINT", "MINT", nil, P.green, P.white, false } } },
+		{ floor = F2, row = "N", list = {
+			{ "APEX", "APEX", "sports", P.blue, P.orange, true }, { "LUXE", "LUXE", "jewelry", P.purple, P.gold, true },
+			{ "GLOW", "GLOW", "beauty", P.pink, P.magenta, true }, { "PRIME", "PRIME", nil, P.ink, P.white, false },
+			{ "DRIP", "DRIP", nil, P.coral, P.white, false } } },
+		{ floor = F2, row = "S", list = {
+			{ "ORBIT", "ORBIT", nil, P.teal, P.white, false }, { "PULSE", "PULSE", nil, P.magenta, P.yellow, false },
+			{ "ECHO", "ECHO", nil, P.navy, P.cyan, false }, { "HALO", "HALO", nil, P.gold, P.white, false },
+			{ "AXIS", "AXIS", nil, P.green, P.cyan, false } } },
+	}
+	local storeCount = 0
+	for _, rowDef in ipairs(layout) do
+		local fy, north = rowDef.floor, rowDef.row == "N"
+		local ceil = fy == 0 and F2 - 1.2 or 30
+		local z1, z2 = north and -80 or 48, north and -48 or 80
+		local stores = {}
+		for i, entry in ipairs(rowDef.list) do
+			local def = { name = rowDef.row .. fy .. "_" .. entry[1], sign = entry[2], theme = entry[3], color = entry[4], accent = entry[5], enter = entry[6],
+				x1 = slotX[i][1], x2 = slotX[i][2], floor = fy, row = rowDef.row }
+			stores[i] = def
+			if def.enter then
+				buildStore(def)
+				storeCount += 1
+			else
+				buildStore(def)
 			end
 		end
-		art(parent,"DoorTransom",Vector3.new(6.4,0.6,0.45),frame*CFrame.new(0,6.8,-0.2),accent,Enum.Material.Metal)
+		-- Dividing walls: enterable neighbours connect with an offset side door, so stores chain into loops.
+		for i = 2, 5 do
+			local x = boundariesX[i]
+			local gaps = {}
+			if stores[i - 1].enter and stores[i].enter then
+				local v = (i % 2 == 0) and 8 or 24
+				local zc = north and (-48 - v) or (48 + v)
+				table.insert(gaps, { c = zc, w = 8, h = 10 })
+				neon(storesF, "DoorGlow", x, fy + 10.2, zc, 0.3, 0.2, 8.4, stores[i].accent)
+				if i == 3 or i == 4 then
+					-- Timing shutter on the chain's inner door: a low barrier that lifts periodically.
+				end
+			end
+			wall(storesF, "DividerWall", "z", x, z1, z2, fy, ceil, 0.8, P.white, Enum.Material.Concrete, gaps)
+		end
 	end
-	-- Two high roof antennas, visible duct elbows, and street service panels break up
-	-- the skyline at medium distance without a field of expensive animated detail.
-	for _,entry in ipairs({{arcade,-116,27,-89},{laundry,118,25,66}}) do
-		local parent,x,y,z=table.unpack(entry)
-		art(parent,"AerialMast",Vector3.new(0.24,12,0.24),Vector3.new(x,y,z),P.steel,Enum.Material.Metal)
-		for i=1,3 do art(parent,"AerialCrossbar",Vector3.new(6-i,0.16,0.16),Vector3.new(x,y+i*1.7,z),P.cream,Enum.Material.Metal) end
-	end
-	for _,entry in ipairs({{arcade,-120.8,-66,P.cyan},{noodle,-120.8,66,P.gold},{laundry,122.8,73,P.pink}}) do
-		local parent,x,z,color=table.unpack(entry)
-		local service=art(parent,"ServiceCabinet",Vector3.new(0.5,4.4,5),Vector3.new(x,3.1,z),P.steel,Enum.Material.Metal)
-		for i=1,3 do art(parent,"ServiceVent",Vector3.new(0.1,0.18,3.5),service.CFrame*CFrame.new(x<0 and -0.3 or 0.3,i*0.55-1.1,0),P.ink,Enum.Material.Metal) end
-		art(parent,"ServiceIndicator",Vector3.new(0.15,0.25,0.7),service.CFrame*CFrame.new(x<0 and -0.35 or 0.35,1.5,-1),color,Enum.Material.Neon)
-	end
-
-	-- Central landmark: a dry fountain ring with a clear crossing, four district wayfinders.
-	cylinder(terrain, "CompassInset", Vector3.new(0, 0.2, 0), 22, 0.3, P.navy, Enum.Material.Concrete)
-	cylinder(terrain, "CompassCenter", Vector3.new(0, 0.4, 0), 13, 0.3, P.teal, Enum.Material.Concrete)
-	for _, angle in ipairs({ 0, math.pi / 2, math.pi, -math.pi / 2 }) do
-		part(terrain, "CompassSpoke", Vector3.new(0.25, 0.06, 18), CFrame.new(0, 0.59, 0) * CFrame.Angles(0, angle + math.pi / 4, 0), P.gold, Enum.Material.Neon, false)
-	end
-	for _, item in ipairs({ { -22, -23, "CITRUS", P.cyan }, { 24, -23, "GARDEN", P.cyan }, { -22, 25, "MOON", P.pink }, { 24, 25, "POLAR", P.cyan } }) do
-		box(props, "WayfindingPost", item[1], 5, item[2], 0.4, 10, 0.4, P.navy, Enum.Material.Metal)
-		sign(props, item[3], Vector3.new(item[1], 9, item[2]), 9, 2.7, item[4])
-	end
-	-- A little street life anchors scale without obstructing the primary routes.
-	for _, point in ipairs({ { -139, -99 }, { -139, 42 }, { 138, -24 }, { 138, 98 }, { -46, 125 }, { 70, 125 }, { -29, -119 } }) do
-		tree(props, point[1], 0.3, point[2], 0.85)
-	end
-	for _, point in ipairs({ { -36, -15 }, { 37, 12 }, { -131, 8 }, { 131, -87 }, { -12, 120 }, { 123, 115 }, { -121, -119 }, { 119, -119 } }) do
-		box(props, "StreetLampPole", point[1], 7, point[2], 0.35, 14, 0.35, P.navy, Enum.Material.Metal, false)
-		box(props, "StreetLampHead", point[1], 14, point[2], 3.2, 0.35, 1.8, P.navy, Enum.Material.Metal, false)
-		light(props, Vector3.new(point[1], 13.7, point[2]), P.gold, 0.75, 19)
-	end
-	bench(props, -139, 0.3, 68, math.pi / 2)
-	bench(props, 139, 0.3, 4, -math.pi / 2)
-	bench(props, -64, 0.3, 126)
-	-- Low service obstacles teach vaulting; each has more than ten studs of side clearance.
-	for _, position in ipairs({ Vector3.new(-43, 1.35, 2), Vector3.new(41, 1.35, -4), Vector3.new(-31, 1.35, 107), Vector3.new(130, 1.35, 31) }) do
-		local obstacle = part(props, "VaultBarrier", Vector3.new(9, 2.7, 2.2), position, P.teal, Enum.Material.Concrete)
-		obstacle:SetAttribute("Vaultable", true)
-		part(props, "VaultHighlight", Vector3.new(8.7, 0.1, 2.1), position + Vector3.new(0, 1.4, 0), P.cyan, Enum.Material.Neon, false)
-	end
-	-- Optional timing shortcuts: shutters lift; the open street around them always remains.
-	for index, gateInfo in ipairs({ { -34, 39, P.pink }, { 34, -37, P.cyan } }) do
-		local x, z, accent = gateInfo[1], gateInfo[2], gateInfo[3]
-		for _, dx in ipairs({ -6.2, 6.2 }) do box(routes, "TimingGatePost", x + dx, 5, z, 0.65, 10, 0.65, P.navy, Enum.Material.Metal) end
-		box(routes, "TimingGateHeader", x, 10, z, 13, 0.6, 0.9, P.navy, Enum.Material.Metal)
-		local gate = box(routes, "MovingShortcutGate", x, 2.5, z, 11.8, 4.5, 0.7, accent, Enum.Material.Metal)
+	-- The two shutters sit in the Sneaker/Electronics and Bookstore/Convenience connecting doors.
+	for index, spec in ipairs({ { -21, -48 - 24, P.cyan }, { -21, 48 + 24, P.magenta } }) do
+		local x, z, accent = spec[1], spec[2], spec[3]
+		local gate = box(routes, "MovingShortcutGate", x, 2.25, z, 0.7, 4.5, 7.6, accent, Enum.Material.Metal)
 		gate:SetAttribute("DynamicObstacle", true)
 		gate:SetAttribute("MovementTolerance", 8)
-		sign(routes, "TIMING / BYPASS", Vector3.new(x, 11.5, z - 0.1), 12.5, 2, accent)
 		gate:SetAttribute("GateClosedCFrame", gate.CFrame)
 		gate:SetAttribute("GateCycle", 2.4 + index * 0.3)
 		table.insert(gates, gate)
 	end
 
-	-- Carefully placed silhouettes frame the arena, with restrained lit-window bands.
-	box(skyline, "CityBelow", 0, -18, -25, 950, 8, 950, P.ink, Enum.Material.Concrete, false)
-	local towers = {
-		{ -218, -163, 40, 44, 90, P.navy }, { -165, -187, 37, 46, 120, P.purple },
-		{ -103, -191, 38, 42, 73, P.teal }, { -48, -206, 35, 45, 105, P.steel },
-		{ 14, -209, 48, 47, 82, P.navy }, { 77, -190, 36, 40, 118, P.purple },
-		{ 136, -191, 40, 43, 79, P.teal }, { 206, -158, 43, 45, 102, P.navy },
-		{ -205, -63, 38, 46, 65, P.steel }, { -215, 24, 42, 48, 88, P.navy },
-		{ -204, 109, 42, 39, 54, P.purple }, { 206, -64, 42, 38, 79, P.navy },
-		{ 211, 21, 39, 45, 104, P.teal }, { 207, 112, 45, 44, 61, P.navy },
-	}
-	for i, t in ipairs(towers) do
-		local x, z, w, d, h, c = table.unpack(t)
-		local profile=i%4
-		if profile==2 then
-			-- Rounded hotel towers interrupt the straight rooflines.
-			cylinder(skyline,"RoundTower",Vector3.new(x,h/2-14,z),w,h,c,Enum.Material.Concrete,false)
-			cylinder(skyline,"RoundCrown",Vector3.new(x,h-12,z),w+2,3,P.steel,Enum.Material.Metal,false)
-			cylinder(skyline,"RoundPenthouse",Vector3.new(x,h-6,z),w*0.65,9,c,Enum.Material.Glass,false)
-		elseif profile==3 then
-			-- Twin shafts and an open sky bridge read clearly even through atmosphere.
-			for _,side in ipairs({-1,1}) do
-				box(skyline,"TwinTower",x+side*w*0.28,h/2-14,z,w*0.43,h,d,c,Enum.Material.Concrete,false)
-			end
-			box(skyline,"SkyBridge",x,h*0.72-14,z,w,7,d*0.7,P.steel,Enum.Material.Metal,false)
-			box(skyline,"TwinCrown",x,h-12,z,w+2,2,d+2,P.cream,Enum.Material.Metal,false)
-		else
-			-- Offset terraces avoid the repeated box-and-lid silhouette.
-			box(skyline,"TowerPodium",x,h*0.35-14,z,w,h*0.7,d,c,Enum.Material.Concrete,false)
-			box(skyline,"TowerSetback",x+w*0.11,h*0.8-14,z-d*0.1,w*0.72,h*0.4,d*0.72,c,Enum.Material.Concrete,false)
-			art(skyline,"TowerSlopedCrown",Vector3.new(w*0.78,2,d*0.79),CFrame.new(x+w*0.11,h-12,z-d*0.1)*CFrame.Angles(0,0,math.rad(i%2==0 and 8 or -8)),P.steel,Enum.Material.Metal)
-		end
-		for row = 1, math.floor(h / 13) do
-			local y = row * 11 - 7
-			local glow = (row + i) % 3 == 0 and P.gold or P.cyan
-			if profile==2 then
-				cylinder(skyline,"RoundWindowBand",Vector3.new(x,y,z),w+0.1,0.4,glow,Enum.Material.Neon,false)
-			elseif profile==3 then
-				-- Separate window clusters preserve the open slot between twin towers.
-				box(skyline,"SkylineWindowBand",x+((row%2==0) and 1 or -1)*w*0.28,y,z+d/2+0.1,w*0.34,0.6,0.12,glow,Enum.Material.Neon,false)
-			else
-				local upper=y>h*0.7-14
-				box(skyline,"SkylineWindowBand",x+(upper and w*0.11 or 0),y,z+(upper and d*0.26 or d/2)+0.1,upper and w*0.58 or w-8,0.55,0.12,glow,Enum.Material.Neon,false)
-			end
-		end
-		if profile~=2 then
-			for _,side in ipairs({-1,1}) do
-				art(skyline,"TowerFacadeFin",Vector3.new(0.7,h*0.65,0.8),Vector3.new(x+side*(w/2-2),h*0.325-14,z+d/2+0.35),P.steel,Enum.Material.Metal)
-			end
+	-- =====================================================================================
+	-- FOOD COURT (west wing, ground floor): stalls, dining sets, three open sides
+	-- =====================================================================================
+	local ceil1 = F2 - 1.2
+	for _, z in ipairs({ -40, -24, -8, 8, 24, 40 }) do
+		cylinder(court, "CourtPillar", Vector3.new(-64, ceil1 / 2, z), 2.4, ceil1, P.white, Enum.Material.Marble)
+		cylinder(court, "PillarRing", Vector3.new(-64, 0.5, z), 3.4, 1, P.gold, Enum.Material.Metal, false)
+		neon(court, "PillarGlow", -64, 10, z, 0.2, 8, 0.2, P.orange)
+	end
+	local stalls = { { -36, "RAMEN", P.red }, { -18, "PIZZA", P.orange }, { 0, "SUSHI", P.teal }, { 18, "BURGER", P.yellow }, { 36, "TACO", P.green } }
+	for _, s in ipairs(stalls) do
+		local z, name, color = s[1], s[2], s[3]
+		box(court, "StallBlock", -108, 1.9, z, 8, 3.8, 14.4, P.white, Enum.Material.Concrete)
+		art(court, "StallCounterTop", Vector3.new(8.4, 0.3, 14.8), Vector3.new(-108, 3.95, z), color, Enum.Material.SmoothPlastic)
+		box(court, "StallBack", -111.2, 7.4, z, 1.6, 14.8, 15, color, Enum.Material.Concrete)
+		art(court, "StallCanopy", Vector3.new(7, 0.4, 14.8), CFrame.new(-107.6, 10.2, z) * CFrame.Angles(0, 0, math.rad(-6)), color, Enum.Material.Fabric)
+		sign(court, name, Vector3.new(-110.2, 11.4, z), 12, 3.2, color, math.pi / 2)
+		neon(court, "StallMenuGlow", -110.3, 7.2, z, 0.15, 3.4, 11, P.white)
+		for i = -1, 1 do art(court, "StallLamp", Vector3.new(0.5, 0.5, 0.5), Vector3.new(-103.6, 5.4, z + i * 4.5), P.gold, Enum.Material.Neon) end
+	end
+	for _, col in ipairs({ -94, -76 }) do
+		for _, z in ipairs({ -32, -11, 11, 32 }) do
+			local color = ({ P.coral, P.teal, P.gold, P.purple })[(z > 0 and 1 or 0) + (col == -94 and 1 or 3)]
+			vaultTable(court, col, 0, z, 6, 4, P.wood, 0, color)
+			for _, c in ipairs({ { -4.4, 0 }, { 4.4, 0 } }) do chair(court, col + c[1], 0, z + c[2], color, c[1] < 0 and -math.pi / 2 or math.pi / 2) end
+			for _, c in ipairs({ { 0, -3.6 }, { 0, 3.6 } }) do chair(court, col + c[1], 0, z + c[2], color, c[2] < 0 and math.pi or 0) end
 		end
 	end
-	-- A quieter, desaturated second skyline layer gives genuine parallax and depth.
-	for i,entry in ipairs({{-292,-237,51,88},{-205,-284,54,145},{-114,-297,60,94},{-17,-310,57,129},{94,-296,61,158},{190,-276,53,111},{282,-223,61,139}}) do
-		local x,z,width,height=table.unpack(entry)
-		art(skyline,"FarSilhouette",Vector3.new(width,height,width*0.8),Vector3.new(x,height/2-26,z),i%2==0 and P.navy or P.steel,Enum.Material.Concrete)
-		art(skyline,"FarSteppedRoof",Vector3.new(width*0.45,15,width*0.5),Vector3.new(x-width*0.18,height-20,z),P.navy,Enum.Material.Concrete)
+	for _, z in ipairs({ -24, 0, 24 }) do
+		for _, ring in ipairs({ { 9, 0.3 }, { 6, 0.5 } }) do
+			art(court, "PendantRing", Vector3.new(0.3, ring[1], ring[1]), CFrame.new(-86, 12.4 - ring[2], z) * CFrame.Angles(0, 0, math.pi / 2), ring[2] < 0.4 and P.orange or P.yellow, Enum.Material.Neon).Shape = Enum.PartType.Cylinder
+		end
+		artBeam(court, "PendantWire", Vector3.new(-86, 12.4, z), Vector3.new(-86, ceil1, z), 0.1, P.ink)
 	end
-	-- Scenery outside the arena contributes silhouette, not playable cover or shadow
-	-- detail. Avoid spending mobile shadow rendering on these distant structures.
-	for _,scenery in ipairs(skyline:GetChildren()) do
-		if scenery:IsA("BasePart") then scenery.CastShadow=false end
+	sign(court, "FOOD COURT", Vector3.new(-66.2, 12.6, 0), 22, 3.6, P.orange, math.pi / 2)
+	for _, z in ipairs({ -46, 46 }) do
+		planter(court, -84, 0, z, 16, 0, true)
+		palm(court, -88, 1.4, z, 1.1, 0.1)
 	end
+	for _, c in ipairs({ { -104, -44 }, { -104, 44 } }) do palm(court, c[1], 0, c[2], 1.0, 0.1) end
 
-	-- Social deck: a separate, safe viewing terrace with a stage and welcoming little rooms.
-	box(lobby, "SocialIsland", 0, 1.5, 245, 114, 9, 88, P.navy, Enum.Material.Concrete)
-	box(lobby, "SocialDeck", 0, 6.15, 245, 108, 0.3, 82, P.concrete, Enum.Material.Concrete)
-	box(lobby, "DeckInlay", 0, 6.33, 251, 58, 0.06, 43, P.ink, Enum.Material.Concrete, false)
-	for _, x in ipairs({ -53, 53 }) do
-		box(lobby, "SocialRail", x, 8, 245, 0.8, 3.7, 80, P.navy, Enum.Material.Metal)
-		box(lobby, "SocialRailLight", x, 10, 245, 0.2, 0.12, 80, P.cyan, Enum.Material.Neon, false)
+	-- =====================================================================================
+	-- ARCADE (east wing, ground floor): neon cabinets, three entrances
+	-- =====================================================================================
+	wall(arcade, "ArcadeWall", "z", HX, -HZ, HZ, 0, ceil1, 0.8, P.navy, Enum.Material.Concrete,
+		{ { c = -30, w = 14, h = 11 }, { c = 0, w = 14, h = 11 }, { c = 30, w = 14, h = 11 } })
+	for _, z in ipairs({ -30, 0, 30 }) do
+		neon(arcade, "EntranceGlow", HX, 11.4, z, 0.4, 0.25, 14.6, P.magenta)
+		for _, side in ipairs({ -1, 1 }) do neon(arcade, "EntranceGlow", HX, 5.5, z + side * 7.3, 0.4, 11, 0.25, P.cyan) end
 	end
-	for _, z in ipairs({ 205, 285 }) do
-		box(lobby, "SocialRail", 0, 8, z, 106, 3.7, 0.8, P.navy, Enum.Material.Metal)
-		box(lobby, "SocialRailLight", 0, 10, z, 106, 0.12, 0.2, P.cyan, Enum.Material.Neon, false)
+	sign(arcade, "ARCADE", Vector3.new(HX - 0.6, 13, -15), 14, 2.4, P.magenta, -math.pi / 2)
+	sign(arcade, "PLAY", Vector3.new(HX - 0.6, 13, 15), 14, 2.4, P.cyan, -math.pi / 2)
+	local cabColors = { P.magenta, P.cyan, P.yellow, P.green, P.coral, P.purple }
+	local function cabinet(x, z, facing, i)
+		local cf = CFrame.new(x, 0, z) * CFrame.Angles(0, facing, 0)
+		local color = cabColors[i % 6 + 1]
+		part(arcade, "Cabinet", Vector3.new(3.2, 6.6, 2.6), cf * CFrame.new(0, 3.3, 0), P.ink, Enum.Material.SmoothPlastic)
+		neon(arcade, "CabScreen", 0, 0, 0, 2.4, 2.2, 0.1, color).CFrame = cf * CFrame.new(0, 4.4, -1.35)
+		neon(arcade, "CabMarquee", 0, 0, 0, 3.2, 0.8, 0.1, color).CFrame = cf * CFrame.new(0, 6.2, -1.35)
+		art(arcade, "CabPanel", Vector3.new(3, 0.6, 1.2), cf * CFrame.new(0, 2.8, -1.5) * CFrame.Angles(math.rad(-20), 0, 0), color, Enum.Material.SmoothPlastic)
 	end
-	box(lobby, "PodiumStage", 0, 6.7, 224, 47, 1.1, 19, P.navy, Enum.Material.Concrete)
-	stair("StageStair", Vector3.new(0, 6.3, 237), 38, 1, 4, 0)
-	local podiums = {}
-	for i, item in ipairs({ { 0, 2.3, "01", P.gold }, { -14, 1.3, "02", P.cyan }, { 14, 0.8, "03", P.pink } }) do
-		local x, height, numeral, accent = table.unpack(item)
-		cylinder(lobby, "WinnerPodium_" .. numeral, Vector3.new(x, 7.25 + height / 2, 224), 10.5, height, P.steel, Enum.Material.Metal)
-		cylinder(lobby, "PodiumLight", Vector3.new(x, 7.3 + height, 224), 10.6, 0.12, accent, Enum.Material.Neon, false)
-		sign(lobby, numeral, Vector3.new(x, 8.1, 229.4), 4, 1.7, accent, math.pi)
-		podiums[i] = CFrame.lookAt(Vector3.new(x, 10.4 + height, 224), Vector3.new(x, 10.4 + height, 260))
-	end
-	sign(lobby, "THE ROOFTOPS ARE YOURS", Vector3.new(0, 16.5, 213), 47, 4.4, P.cream, math.pi)
-	for _, x in ipairs({ -25, 25 }) do box(lobby, "StageBannerPole", x, 12, 213, 0.5, 11.5, 0.5, P.steel, Enum.Material.Metal, false) end
-	-- Rear entry arch and typography compose the first spawn camera's backdrop.
-	for _, x in ipairs({ -29, 29 }) do box(lobby, "EntryPylon", x, 13.5, 280, 1.6, 15, 1.6, P.teal, Enum.Material.Metal) end
-	box(lobby, "EntryHeader", 0, 21, 280, 60, 1.1, 2.5, P.teal, Enum.Material.Metal)
-	sign(lobby, "CATCH ME IF YOU CAN", Vector3.new(0, 17.7, 279), 55, 5, P.cyan)
-	sign(lobby, "NEON HEIGHTS / SOCIAL DECK", Vector3.new(0, 13.4, 279), 36, 2, P.cream)
-	-- The arrival canopy borrows the station's warm metal and the city's mint rails.
-	-- Its folded shell stays above the existing entry sign, spawn and camera corridor.
-	for _,side in ipairs({-1,1}) do
-		art(lobby,"ArrivalCanopyWing",Vector3.new(32,0.65,18),CFrame.new(side*15,25,276)*CFrame.Angles(0,0,side*math.rad(10)),P.teal,Enum.Material.Metal)
-		artBeam(lobby,"ArrivalCanopyRim",Vector3.new(side*31,27.9,267),Vector3.new(side*31,27.9,285),0.4,P.cream,Enum.Material.Metal)
-		artBeam(lobby,"ArrivalCanopyBrace",Vector3.new(side*29,21,280),Vector3.new(side*13,25,276),0.4,P.gold,Enum.Material.Metal)
-		for i=1,4 do
-			art(lobby,"ArrivalCeilingSlat",Vector3.new(0.4,0.22,15),CFrame.new(side*i*6.4,23.8+i*0.9,275.5),P.cream,Enum.Material.Wood)
+	for i = 0, 7 do cabinet(110.2, -42 + i * 12, math.pi / 2, i) end
+	local idx = 0
+	for _, z0 in ipairs({ -36, 16 }) do
+		for k = 0, 3 do
+			idx += 1
+			cabinet(98, z0 + k * 6.4, -math.pi / 2, idx)
+			cabinet(101.4, z0 + k * 6.4, math.pi / 2, idx + 2)
 		end
 	end
-	-- Frame the champion stage with a large sunrise medallion and two inset panels.
-	local champion=disc(lobby,"ChampionHalo",CFrame.new(0,25,212.3),13,0.6,P.gold,Enum.Material.Metal)
-	champion:SetAttribute("DistrictLandmark","Social")
-	disc(lobby,"ChampionHaloInset",CFrame.new(0,25,212.75),10.7,0.25,P.navy,Enum.Material.Metal)
-	for _,side in ipairs({-1,1}) do
-		art(lobby,"ChampionBolt",Vector3.new(1.6,7.3,0.3),CFrame.new(side*1.8,25,213.05)*CFrame.Angles(0,0,math.rad(-32)),P.cream,Enum.Material.Metal)
-		art(lobby,"StageBackdropWing",Vector3.new(12,12,0.5),CFrame.new(side*34,14,213)*CFrame.Angles(0,side*math.rad(-12),0),P.teal,Enum.Material.Metal)
-		art(lobby,"StageBackdropInset",Vector3.new(0.25,10,0.25),Vector3.new(side*34,14,213.6),P.gold,Enum.Material.Neon)
+	for _, z in ipairs({ -42, 42 }) do
+		vaultTable(arcade, 80, 0, z, 9, 5, P.ink, 0, P.cyan)
+		neon(arcade, "HockeyLine", 80, 3.5, z, 0.2, 0.1, 5, P.magenta)
 	end
-	for _, x in ipairs({ -40, 40 }) do
-		planter(lobby, x, 6.3, 277, 18, 0, true)
-		tree(lobby, x, 6.3, 213, 0.85)
-		bench(lobby, x, 6.3, 246, x < 0 and math.pi / 2 or -math.pi / 2)
-		bench(lobby, x, 6.3, 259, x < 0 and math.pi / 2 or -math.pi / 2)
-		light(lobby, Vector3.new(x, 15, 248), P.cyan, 0.65, 22)
+	-- Rhythm stage: a low neon platform with a step all round.
+	box(arcade, "DanceStage", 82, 0.4, 0, 14, 0.8, 14, P.ink, Enum.Material.SmoothPlastic)
+	for i = -1, 1 do for j = -1, 1 do neon(arcade, "DanceTile", 82 + i * 4.4, 0.85, j * 4.4, 3.6, 0.08, 3.6, (i + j) % 2 == 0 and P.magenta or P.cyan) end end
+	for z = -44, 44, 11 do for x = 72, 108, 12 do
+		art(arcade, "CarpetZig", Vector3.new(7, 0.06, 0.6), CFrame.new(x, 0.1, z) * CFrame.Angles(0, math.rad(35), 0), (x + z) % 2 == 0 and P.magenta or P.cyan, Enum.Material.Neon)
+	end end
+	for x = 72, 108, 12 do ceilingStrip(arcade, x, ceil1 - 0.2, 0, 0.6, 90, x % 24 == 0 and P.magenta or P.cyan) end
+	sign(arcade, "INSERT COIN", Vector3.new(110.4, 10, 0), 22, 3, P.yellow, -math.pi / 2)
+
+	-- =====================================================================================
+	-- SECOND FLOOR WINGS: Department store (east) and Sky Lounge (west)
+	-- =====================================================================================
+	wall(storesF, "DeptWall", "z", HX, -HZ, HZ, F2, 30, 0.8, P.white, Enum.Material.Concrete,
+		{ { c = -30, w = 14, h = 12 }, { c = 0, w = 14, h = 12 }, { c = 30, w = 14, h = 12 } })
+	for _, z in ipairs({ -30, 0, 30 }) do
+		neon(storesF, "DeptDoorGlow", HX, F2 + 12.2, z, 0.4, 0.25, 14.6, P.gold)
 	end
-	cylinder(lobby, "EmoteCircle", Vector3.new(0, 6.4, 252), 18, 0.12, P.teal, Enum.Material.SmoothPlastic, false)
-	cylinder(lobby, "EmoteCircleInset", Vector3.new(0, 6.5, 252), 16.5, 0.08, P.navy, Enum.Material.SmoothPlastic, false)
-	sign(lobby, "YOUR NEXT GREAT ESCAPE", Vector3.new(0, 7.2, 265), 27, 1.7, P.cream)
-	local lobbySpawn = CFrame.lookAt(Vector3.new(0, 10, 264), Vector3.new(0, 10, 223))
+	sign(storesF, "ZENITH", Vector3.new(HX - 0.6, F2 + 14.6, 0), 26, 3.6, P.gold, -math.pi / 2)
+	art(storesF, "DeptCarpet", Vector3.new(46, 0.1, 94), Vector3.new(88, F2 + 0.1, 0), P.cream, Enum.Material.Fabric)
+	cylinder(storesF, "MannequinStage", Vector3.new(88, F2 + 0.5, 0), 15, 1, P.white, Enum.Material.Marble)
+	for i = 1, 6 do
+		local a = i * math.pi / 3
+		mannequin(storesF, 88 + math.cos(a) * 5, F2 + 1, math.sin(a) * 5, i % 2 == 0 and P.coral or P.blue)
+	end
+	cylinder(storesF, "StageGlow", Vector3.new(88, F2 + 1.05, 0), 15.4, 0.08, P.gold, Enum.Material.Neon, false)
+	for _, spec in ipairs({ { 76, -30 }, { 100, -30 }, { 76, 30 }, { 100, 30 }, { 76, -12 }, { 100, 12 } }) do
+		vaultTable(storesF, spec[1], F2, spec[2], 10, 4, P.white, 0, P.pink)
+		art(storesF, "FoldedStack", Vector3.new(7, 0.8, 2.6), Vector3.new(spec[1], F2 + 3.8, spec[2]), ({ P.coral, P.cyan, P.gold })[(spec[2] > 0 and 1 or 2) + (spec[1] > 80 and 1 or 0)], Enum.Material.Fabric)
+	end
+	for _, z in ipairs({ -42, 42 }) do for _, x in ipairs({ 74, 88, 102 }) do
+		box(storesF, "RackSection", x, F2 + 3.5, z, 8, 7, 1.4, P.ink, Enum.Material.SmoothPlastic)
+		neon(storesF, "RackGlow", x, F2 + 5, z + (z < 0 and 0.75 or -0.75), 7, 0.15, 0.1, P.gold)
+	end end
+	for _, z in ipairs({ -42, 42 }) do for x = -1, 1 do mannequin(storesF, 88 + x * 8, F2, z + (z < 0 and 1.6 or -1.6), P.white) end end
+	sign(storesF, "ZENITH", Vector3.new(111, F2 + 12, 0), 28, 4, P.gold, -math.pi / 2)
+	-- Sky Lounge window onto the food court: railing around the cutaway.
+	local lx1, lx2, lz1, lz2 = loungeHole[1], loungeHole[2], loungeHole[3], loungeHole[4]
+	local function loungeRail(axis, fixed, a1, a2)
+		local g = wall(atrium, "LoungeGlass", axis, fixed, a1, a2, F2, F2 + RAIL, 0.35, P.glass, Enum.Material.Glass)
+		if axis == "x" then art(atrium, "Handrail", Vector3.new(a2 - a1, 0.3, 0.6), Vector3.new((a1 + a2) / 2, F2 + RAIL, fixed), P.gold, Enum.Material.Metal)
+		else art(atrium, "Handrail", Vector3.new(0.6, 0.3, a2 - a1), Vector3.new(fixed, F2 + RAIL, (a1 + a2) / 2), P.gold, Enum.Material.Metal) end
+	end
+	loungeRail("x", lz1 + 0.4, lx1, lx2); loungeRail("x", lz2 - 0.4, lx1, lx2)
+	loungeRail("z", lx1 + 0.4, lz1, lz2); loungeRail("z", lx2 - 0.4, lz1, lz2)
+	for _, child in ipairs(atrium:GetChildren()) do
+		if child.Name == "LoungeGlass" then child.Transparency = 0.6; child.CastShadow = false end
+	end
+	sign(storesF, "SKY LOUNGE", Vector3.new(-111.4, F2 + 14, 0), 22, 3.4, P.cyan, math.pi / 2)
+	for _, spec in ipairs({ { -106, -38 }, { -106, 38 }, { -70, -38 }, { -70, 38 } }) do
+		planter(decor, spec[1], F2, spec[2], 8, spec[1] < -90 and math.pi / 2 or math.pi / 2, true)
+		palm(decor, spec[1], F2 + 1.4, spec[2], 1.0, 0.1)
+	end
+	for _, spec in ipairs({ { -106, 0 }, { -70, 0 } }) do bench(decor, spec[1], F2, spec[2], spec[1] < -90 and math.pi / 2 or -math.pi / 2) end
+	for _, x in ipairs({ -64 }) do
+		for _, z in ipairs({ -40, -24, -8, 8, 24, 40 }) do
+			cylinder(court, "UpperPillar", Vector3.new(x, F2 + 7.4, z), 2.2, 14.8, P.white, Enum.Material.Marble)
+		end
+	end
+	-- Upper hall furniture: benches and planters on the balcony ring.
+	for _, spec in ipairs({ { -50, 40 }, { 50, -40 }, { -50, -40 }, { 50, 40 } }) do
+		planter(decor, spec[1], F2, spec[2], 10, 0, true)
+		bench(decor, spec[1] + (spec[1] < 0 and 12 or -12), F2, spec[2], spec[2] < 0 and 0 or math.pi)
+	end
+	for _, spec in ipairs({ { -58, 20 }, { 58, -20 } }) do palm(decor, spec[1], F2 + 0, spec[2], 1.2, 0.1) end
+
+	-- =====================================================================================
+	-- SPAWNS (runners spread over both floors; hunters start on the ground floor)
+	-- =====================================================================================
+	local function spawnFacing(x, y, z)
+		return CFrame.lookAt(Vector3.new(x, y + 3.3, z), Vector3.new(0, y + 3.3, 0))
+	end
+	local runnerSpawns = {
+		spawnFacing(-88, F2, -55), spawnFacing(-42, F2, -55), spawnFacing(0, F2, -55), spawnFacing(-88, F2, -34),
+		spawnFacing(88, F2, -22), spawnFacing(88, F2, 30), spawnFacing(0, F2, 38), spawnFacing(-58, F2, 28),
+		spawnFacing(88, 0, -24), spawnFacing(-88, 0, 26), spawnFacing(-88, 0, 66), spawnFacing(0, 0, 66),
+	}
+	local hunterSpawns = { spawnFacing(-8, 0, -38), spawnFacing(8, 0, 38) }
+
+	-- =====================================================================================
+	-- PLAZA HUB: a separate, safe social area. Nobody is chased here.
+	-- =====================================================================================
+	local HC = 262 -- hub center Z
+	box(hub, "HubIsland", 0, -5, HC, 164, 9, 132, P.navy, Enum.Material.Concrete)
+	box(hub, "PlazaFloor", 0, -0.2, HC, 156, 0.4, 124, P.marble, Enum.Material.Marble)
+	for i, d in ipairs({ 44, 34, 24 }) do
+		local ring = art(hub, "PlazaInlay", Vector3.new(0.12, d, d), CFrame.new(0, 0.08, 248) * CFrame.Angles(0, 0, math.pi / 2), i == 2 and P.gold or (i == 1 and P.magenta or P.blue), i == 2 and Enum.Material.Metal or Enum.Material.Neon)
+		ring.Shape = Enum.PartType.Cylinder
+		if i ~= 2 then ring.Transparency = 0.25 end
+	end
+	for i = -3, 3 do
+		art(hub, "PlazaStripe", Vector3.new(0.3, 0.1, 118), Vector3.new(i * 20, 0.06, HC), i % 2 == 0 and P.marble2 or P.cream, Enum.Material.Marble)
+	end
+	-- Backdrop: the mall entrance building with a recessed PLAY entrance.
+	local bz1, bz2 = 196, 212
+	box(hub, "EntranceBlock", -42.5, 15, 204, 71, 30, 16, P.cream, Enum.Material.Concrete)
+	box(hub, "EntranceBlock", 42.5, 15, 204, 71, 30, 16, P.cream, Enum.Material.Concrete)
+	box(hub, "EntranceBack", 0, 15, 200, 14, 30, 8, P.cream, Enum.Material.Concrete)
+	box(hub, "EntranceLintel", 0, 21, 208, 14, 18, 8, P.cream, Enum.Material.Concrete)
+	box(hub, "EntranceTower", 0, 45, 205, 66, 30, 12, P.white, Enum.Material.Concrete)
+	for _, side in ipairs({ -1, 1 }) do
+		box(hub, "TowerWing", side * 52, 38, 205, 22, 16, 12, P.white, Enum.Material.Concrete)
+		art(hub, "TowerFin", Vector3.new(1.2, 32, 2), Vector3.new(side * 33.5, 46, 211.4), P.gold, Enum.Material.Metal)
+	end
+	for i = -6, 6 do
+		if math.abs(i) > 1 then
+			glassBox(hub, "ShopFront", i * 11.5, 6.5, 212.2, 8.6, 9.5, 0.3, 0.45, false, P.glass)
+			neon(hub, "ShopFrontGlow", i * 11.5, 11.6, 212.4, 8.8, 0.25, 0.25, i % 2 == 0 and P.cyan or P.magenta)
+			art(hub, "ShopFrontWarm", Vector3.new(8.2, 8.6, 0.3), Vector3.new(i * 11.5, 6.2, 211.6), P.gold, Enum.Material.Neon).Transparency = 0.55
+		end
+		glassBox(hub, "UpperWindow", i * 11.5, 21, 212.2, 8.6, 6.5, 0.3, 0.4, false, P.glass)
+		art(hub, "UpperWarm", Vector3.new(8.2, 6, 0.3), Vector3.new(i * 11.5, 21, 211.7), P.cream, Enum.Material.Neon).Transparency = 0.7
+	end
+	art(hub, "RoofNeon", Vector3.new(156, 0.3, 0.3), Vector3.new(0, 30.4, 212.3), P.magenta, Enum.Material.Neon)
+	art(hub, "RoofNeon", Vector3.new(66, 0.3, 0.3), Vector3.new(0, 60.4, 211.3), P.cyan, Enum.Material.Neon)
+	-- Recess glow, red carpet, and the arch.
+	art(hub, "RecessGlow", Vector3.new(13, 11, 0.3), Vector3.new(0, 6, 196.4), P.gold, Enum.Material.Neon).Transparency = 0.35
+	art(hub, "RedCarpet", Vector3.new(9, 0.1, 62), Vector3.new(0, 0.1, 232), P.red, Enum.Material.Fabric)
+	for _, z in ipairs({ 203, 224, 245 }) do art(hub, "CarpetStud", Vector3.new(9.6, 0.12, 0.5), Vector3.new(0, 0.12, z), P.gold, Enum.Material.Metal) end
+	for _, side in ipairs({ -1, 1 }) do
+		box(hub, "ArchPylon", side * 9.5, 8, 216, 3, 16, 3, P.ink, Enum.Material.Metal)
+		neon(hub, "ArchGlow", side * 8, 8, 214.4, 0.25, 15, 0.25, P.cyan)
+		neon(hub, "ArchGlow", side * 11, 8, 214.4, 0.25, 15, 0.25, P.magenta)
+	end
+	box(hub, "ArchHeader", 0, 17, 216, 24, 5, 3.4, P.ink, Enum.Material.Metal)
+	sign(hub, "PLAY", Vector3.new(0, 17.6, 217.9), 11, 3.6, P.white, 0, P.white)
+	sign(hub, "ENTER THE MALL", Vector3.new(0, 15, 217.9), 11, 1.4, P.cyan, 0)
+	for _, side in ipairs({ -1, 1 }) do neon(hub, "ArchArrow", side * 9.3, 17.2, 217.9, 0.8, 2.2, 0.2, P.cyan) end
+	neon(hub, "ArchTopGlow", 0, 19.7, 216, 24, 0.3, 3.5, P.magenta)
+	-- PLAY portal: a shimmering field plus a prompt and a touch trigger.
+	local portal = part(hub, "PlayPortal", Vector3.new(14, 11, 0.4), Vector3.new(0, 6, 211), P.cyan, Enum.Material.Neon, false)
+	portal.Transparency = 0.7
+	portal.CanTouch = true
+	portal.CanQuery = false
+	portal.CastShadow = false
+	portal:SetAttribute("Pulse", 3)
+	portal:SetAttribute("HubTouch", "Play")
+	local function addPrompt(host, action, actionText, objectText, distance)
+		local prompt = Instance.new("ProximityPrompt")
+		prompt.ActionText = actionText
+		prompt.ObjectText = objectText
+		prompt.HoldDuration = 0
+		prompt.MaxActivationDistance = distance or 14
+		prompt.RequiresLineOfSight = false
+		prompt.KeyboardKeyCode = Enum.KeyCode.E
+		prompt.GamepadKeyCode = Enum.KeyCode.ButtonX
+		prompt:SetAttribute("HubAction", action)
+		prompt.Parent = host
+		return prompt
+	end
+	addPrompt(portal, "Play", "PLAY", "Enter the mall", 22)
+	-- Giant title sign above the entrance, with a neon runner.
+	local title1 = part(hub, "TitleTop", Vector3.new(58, 11, 1.6), Vector3.new(0, 49, 211.6), P.ink, Enum.Material.SmoothPlastic, false)
+	local title2 = part(hub, "TitleBottom", Vector3.new(58, 11, 1.6), Vector3.new(0, 38.6, 211.6), P.ink, Enum.Material.SmoothPlastic, false)
+	title1:SetAttribute("VisualPolish", true); title2:SetAttribute("VisualPolish", true)
+	surfaceText(title1, Enum.NormalId.Back, "CATCH ME", P.cyan, 28, 0.74, 0.92)
+	surfaceText(title2, Enum.NormalId.Back, "IF YOU CAN", P.coral, 28, 0.74, 0.92)
+	neon(hub, "TitleFrame", 0, 54.6, 212.5, 58.6, 0.4, 0.3, P.blue)
+	neon(hub, "TitleFrame", 0, 33.0, 212.5, 58.6, 0.4, 0.3, P.magenta)
+	for _, side in ipairs({ -1, 1 }) do neon(hub, "TitleFrame", side * 29.2, 43.8, 212.5, 0.4, 22, 0.3, side < 0 and P.blue or P.magenta) end
+	-- Neon runner pictogram.
+	local rx, ry = 24, 44
+	local function limb(a, b) artBeam(hub, "RunnerLimb", Vector3.new(rx + a[1], ry + a[2], 212.6), Vector3.new(rx + b[1], ry + b[2], 212.6), 0.9, P.white, Enum.Material.Neon) end
+	sphere(hub, "RunnerHead", Vector3.new(rx + 1.5, ry + 6, 212.6), Vector3.new(2.2, 2.2, 2.2), P.white, Enum.Material.Neon)
+	limb({ 0, 3 }, { -1, -1 }); limb({ -1, -1 }, { -4, -4.5 }); limb({ -1, -1 }, { 2.5, -4 }); limb({ 2.5, -4 }, { 2, -7 })
+	limb({ 0, 3 }, { 3.5, 1 }); limb({ 0, 3 }, { -3, 1.5 })
+	-- Side billboards.
+	local function billboard(cx, title, subtitle, accent)
+		local b = part(hub, "Billboard", Vector3.new(38, 17, 1), Vector3.new(cx, 22, 212.9), P.ink, Enum.Material.SmoothPlastic, false)
+		b:SetAttribute("VisualPolish", true)
+		local gui = surfaceText(b, Enum.NormalId.Back, title, P.white, 28, 0.9, 0.46)
+		gui.Position = UDim2.fromScale(0.05, 0.08)
+		local sub = surfaceText(b, Enum.NormalId.Back, subtitle, accent, 28, 0.9, 0.2)
+		sub.Position = UDim2.fromScale(0.05, 0.62)
+		sub.Size = UDim2.fromScale(0.9, 0.22)
+		for _, s in ipairs({ -1, 1 }) do
+			neon(hub, "BillboardFrame", cx, 22 + s * 8.6, 213.3, 38.6, 0.35, 0.3, accent)
+			neon(hub, "BillboardFrame", cx + s * 19.2, 22, 213.3, 0.35, 17.2, 0.3, accent)
+		end
+	end
+	-- Back-facing SurfaceGuis face the plaza (-Z side of a part is "Back" when unrotated: use Back).
+	billboard(-52, "NEW SKINS", "COLLECT. UNLOCK. STAND OUT.", P.cyan)
+	billboard(52, "DAILY REWARDS", "PLAY. EARN. UNLOCK.", P.gold)
+	for _, x in ipairs({ -26, 26 }) do
+		for k = 0, 1 do
+			local banner = part(hub, "Banner", Vector3.new(5, 20, 0.3), Vector3.new(x + (x < 0 and -5 or 5) * k, 26, 213.4), P.purple, Enum.Material.Fabric, false)
+			banner:SetAttribute("VisualPolish", true)
+			surfaceText(banner, Enum.NormalId.Back, k == 0 and "PLAY" or "RUN", P.white, 30, 0.9, 0.3)
+			neon(hub, "BannerGlow", banner.CFrame.Position.X, 16.2, 213.6, 5, 0.25, 0.25, P.cyan)
+		end
+	end
+	-- Fountain centerpiece with a running statue.
+	local FZ = 248
+	cylinder(hub, "HubFountainStep", Vector3.new(0, 0.4, FZ), 28, 0.8, P.marble2, Enum.Material.Marble)
+	cylinder(hub, "HubFountainBasin", Vector3.new(0, 1.2, FZ), 22, 2, P.white, Enum.Material.Marble)
+	disc(hub, "HubFountainWater", CFrame.new(0, 2.25, FZ), 20, 0.1, P.blue, Enum.Material.Glass).Transparency = 0.3
+	disc(hub, "HubFountainRing", CFrame.new(0, 2.4, FZ), 21.4, 0.1, P.cyan, Enum.Material.Neon):SetAttribute("Pulse", 2)
+	disc(hub, "HubFountainRing", CFrame.new(0, 0.9, FZ), 29.5, 0.12, P.magenta, Enum.Material.Neon):SetAttribute("Pulse", 4)
+	cylinder(hub, "StatuePedestal", Vector3.new(0, 4.6, FZ), 8, 5, P.ink, Enum.Material.Metal)
+	cylinder(hub, "StatueCap", Vector3.new(0, 7.3, FZ), 8.6, 0.5, P.gold, Enum.Material.Metal, false)
+	sign(hub, "CATCH ME IF YOU CAN", Vector3.new(0, 4.8, FZ + 4.3), 6.4, 1.8, P.cyan, 0)
+	-- Heroic runner statue assembled from metal blocks.
+	local sx, sy = 0, 7.6
+	local statue = { { 0, 3.2, 0, 2.6, 3.4, 1.5 }, { 0, 5.6, 0.3, 1.8, 1.8, 1.8 }, { -1.6, 1.2, -1.0, 1.1, 3.4, 1.1 }, { 1.1, 1.0, 1.1, 1.1, 3.6, 1.1 },
+		{ -2.1, 3.6, 1.4, 0.9, 3, 0.9 }, { 2.3, 4.2, -1.1, 0.9, 3, 0.9 } }
+	for i, s in ipairs(statue) do
+		local piece = part(hub, "StatuePiece", Vector3.new(s[4], s[5], s[6]), CFrame.new(sx + s[1], sy + s[2], FZ + s[3]) * CFrame.Angles(math.rad(i == 1 and -14 or 0), 0, math.rad((i - 3) * 4)), P.steel, Enum.Material.Metal, false)
+		piece:SetAttribute("VisualPolish", true)
+	end
+	for i = 1, 3 do
+		ring(hub, "StatueOrbit", CFrame.new(0, sy + 3 + i * 1.3, FZ) * CFrame.Angles(math.rad(14 * i), math.rad(i * 40), 0), 6 + i * 1.8, 0.25, i == 2 and P.magenta or P.cyan, Enum.Material.Neon, 16)
+	end
+	for i = 1, 8 do
+		local a = i * math.pi / 4
+		neon(hub, "HubFountainLamp", math.cos(a) * 12.4, 1.2, FZ + math.sin(a) * 12.4, 0.5, 0.5, 0.5, i % 2 == 0 and P.magenta or P.cyan)
+	end
+	local hubSpray = Instance.new("ParticleEmitter")
+	hubSpray.Name = "HubFountainSpray"
+	hubSpray.Rate = 26
+	hubSpray.Lifetime = NumberRange.new(1.2, 1.8)
+	hubSpray.Speed = NumberRange.new(5, 8)
+	hubSpray.SpreadAngle = Vector2.new(25, 25)
+	hubSpray.Acceleration = Vector3.new(0, -14, 0)
+	hubSpray.Size = NumberSequence.new(0.5, 0.1)
+	hubSpray.Transparency = NumberSequence.new(0.2, 1)
+	hubSpray.Color = ColorSequence.new(P.white, P.cyan)
+	hubSpray.LightEmission = 0.6
+	hubSpray.Parent = hub:FindFirstChild("StatueCap")
+
+	-- Interactive displays ------------------------------------------------------------
+	local function console(x, z, width, color, rot)
+		local c = box(hub, "Console", x, 1.6, z, width, 3.2, 2.4, P.ink, Enum.Material.Metal)
+		c.CFrame = CFrame.new(x, 1.6, z) * CFrame.Angles(0, rot or 0, 0)
+		neon(hub, "ConsoleGlow", x, 3.3, z, width - 0.4, 0.14, 2.2, color)
+		return c
+	end
+	-- SKINS booth (west): four lit pedestals with real outfit previews.
+	box(hub, "SkinsBackWall", -72, 8, 248, 2, 16, 52, P.ink, Enum.Material.Concrete)
+	box(hub, "SkinsRoof", -66, 16.6, 248, 14, 0.8, 52, P.navy, Enum.Material.Metal, false):SetAttribute("VisualPolish", true)
+	sign(hub, "SKINS", Vector3.new(-70.6, 13.4, 248), 20, 4, P.cyan, math.pi / 2)
+	neon(hub, "SkinsFrame", -70.8, 16, 248, 0.2, 0.3, 52, P.cyan)
+	neon(hub, "SkinsFrame", -70.8, 0.4, 248, 0.2, 0.3, 52, P.cyan)
+	local showcase = {
+		{ "skin_courier", "mask_street" }, { "skin_golden", "mask_skull" }, { "skin_neon", "mask_visor" }, { "skin_crimson", "mask_kitsune" },
+	}
+	local Appearance = options and options.Appearance
+	if not Appearance then
+		local okAppearance, module = pcall(function() return require(game:GetService("ReplicatedStorage").CatchShared.Appearance) end)
+		if okAppearance then Appearance = module end
+	end
+	for i, look in ipairs(showcase) do
+		local z = 230 + (i - 1) * 12
+		cylinder(hub, "SkinPedestal", Vector3.new(-62, 0.9, z), 6.4, 1.8, P.white, Enum.Material.Marble)
+		cylinder(hub, "SkinPedestalGlow", Vector3.new(-62, 1.85, z), 6.8, 0.12, i % 2 == 0 and P.magenta or P.cyan, Enum.Material.Neon, false)
+		light(hub, Vector3.new(-66, 12, z), P.white, 1.2, 18)
+		if Appearance then
+			local ok, rig = pcall(Appearance.BuildPreview, look[1], look[2], {})
+			if ok and rig then
+				rig.Name = "SkinShowcase_" .. look[1]
+				local humanoid = rig:FindFirstChildOfClass("Humanoid")
+				if humanoid then humanoid:Destroy() end
+				local root = rig:FindFirstChild("HumanoidRootPart")
+				local target = CFrame.new(-62, 1.8 + 3.1, z) * CFrame.Angles(0, -math.pi / 2, 0)
+				if root then
+					local inverse = root.CFrame:Inverse()
+					for _, descendant in ipairs(rig:GetDescendants()) do
+						if descendant:IsA("BasePart") then descendant.CFrame = target * (inverse * descendant.CFrame) end
+					end
+				end
+				for _, descendant in ipairs(rig:GetDescendants()) do
+					if descendant:IsA("BasePart") then
+						descendant.Anchored = true
+						descendant.CanCollide = false
+						descendant.CanQuery = false
+						descendant.CanTouch = false
+						descendant.CastShadow = false
+						partCount += 1
+					elseif descendant:IsA("Script") or descendant:IsA("LocalScript") then
+						descendant:Destroy()
+					end
+				end
+				rig.Parent = hub
+			end
+		end
+	end
+	local skinsKiosk = console(-57, 248, 6, P.cyan, math.pi / 2)
+	skinsKiosk.Name = "SkinsKiosk"
+	addPrompt(skinsKiosk, "Locker", "OPEN LOCKER", "Skins & masks", 16)
+	sign(hub, "LOCKER", Vector3.new(-57, 5.2, 248), 5, 1.2, P.cyan, math.pi / 2)
+	-- SHOP (east): three glowing vending pods.
+	box(hub, "ShopBackWall", 72, 8, 248, 2, 16, 52, P.ink, Enum.Material.Concrete)
+	box(hub, "ShopRoof", 66, 16.6, 248, 14, 0.8, 52, P.navy, Enum.Material.Metal, false):SetAttribute("VisualPolish", true)
+	sign(hub, "SHOP", Vector3.new(70.6, 13.4, 248), 20, 4, P.magenta, -math.pi / 2)
+	neon(hub, "ShopFrame", 70.8, 16, 248, 0.2, 0.3, 52, P.magenta)
+	neon(hub, "ShopFrame", 70.8, 0.4, 248, 0.2, 0.3, 52, P.magenta)
+	for i, pod in ipairs({ { "GAMEPASSES", P.purple }, { "COINS", P.gold }, { "EFFECTS", P.cyan } }) do
+		local z = 232 + (i - 1) * 16
+		local base = box(hub, "ShopPod", 64, 2, z, 7, 4, 9, P.ink, Enum.Material.Metal)
+		art(hub, "PodScreen", Vector3.new(0.3, 9, 9), Vector3.new(60.4, 8.4, z), P.ink, Enum.Material.SmoothPlastic)
+		neon(hub, "PodGlow", 60.2, 8.4, z, 0.15, 8.4, 8.4, pod[2]).Transparency = 0.35
+		if i == 1 then
+			for k = -1, 1 do art(hub, "CrownSpike", Vector3.new(0.4, 3 + (k == 0 and 1.4 or 0), 1.4), Vector3.new(60, 8 + (k == 0 and 0.7 or 0), z + k * 2.2), P.gold, Enum.Material.Neon) end
+			art(hub, "CrownBand", Vector3.new(0.4, 1.2, 6), Vector3.new(60, 6.2, z), P.gold, Enum.Material.Neon)
+		elseif i == 2 then
+			for k = 0, 2 do disc(hub, "ShopCoin", CFrame.new(59.9, 6.4 + k * 1.2, z) * CFrame.Angles(0, math.pi / 2, 0) , 4.6 - k * 0.4, 0.5, P.gold, Enum.Material.Neon) end
+		else
+			for _, d in ipairs({ { 0, 8.4, 4.5 }, { 2.6, 6, 2 }, { -2.6, 10.8, 2 } }) do
+				art(hub, "Sparkle", Vector3.new(0.4, d[3], d[3]), CFrame.new(60, d[2], z + d[1]) * CFrame.Angles(math.pi / 4, 0, 0), P.cyan, Enum.Material.Neon)
+			end
+		end
+		sign(hub, pod[1], Vector3.new(60.3, 3.1, z), 8, 1.4, pod[2], -math.pi / 2)
+		addPrompt(base, "Shop", "BROWSE", pod[1] == "COINS" and "Coin items" or (pod[1] == "EFFECTS" and "Trails & effects" or "Game passes"), 16)
+	end
+	-- QUESTS board and LEADERBOARD board flank the PLAY arch.
+	local questBoard = part(hub, "QuestBoard", Vector3.new(19, 11, 0.6), Vector3.new(-34, 9.5, 220), P.ink, Enum.Material.SmoothPlastic, false)
+	questBoard:SetAttribute("VisualPolish", true)
+	local qtitle = surfaceText(questBoard, Enum.NormalId.Back, "QUESTS", P.gold, 30, 0.8, 0.26)
+	qtitle.Parent.Name = "QuestGui"
+	qtitle.Position = UDim2.fromScale(0.1, 0.06)
+	for i, line in ipairs({ "Play 3 rounds", "Tag 5 runners", "Win 1 round" }) do
+		local row = Instance.new("TextLabel")
+		row.Size = UDim2.fromScale(0.84, 0.15)
+		row.Position = UDim2.fromScale(0.08, 0.3 + i * 0.19)
+		row.BackgroundTransparency = 1
+		row.TextXAlignment = Enum.TextXAlignment.Left
+		row.TextScaled = true
+		row.Text = "*  " .. line
+		row.TextColor3 = P.white
+		row.FontFace = Font.fromEnum(Enum.Font.GothamBold)
+		row.Parent = qtitle.Parent
+	end
+	local qhint = Instance.new("TextLabel")
+	qhint.Size = UDim2.fromScale(0.84, 0.09)
+	qhint.Position = UDim2.fromScale(0.08, 0.9)
+	qhint.BackgroundTransparency = 1
+	qhint.Text = "NEW CHALLENGES EVERY DAY"
+	qhint.TextColor3 = P.cyan
+	qhint.TextScaled = true
+	qhint.FontFace = Font.fromEnum(Enum.Font.GothamBold)
+	qhint.Parent = qtitle.Parent
+	for _, s in ipairs({ -1, 1 }) do
+		neon(hub, "QuestFrame", -34, 9.5 + s * 5.6, 219.6, 19.6, 0.3, 0.3, P.gold)
+		neon(hub, "QuestFrame", -34 + s * 9.8, 9.5, 219.6, 0.3, 11.2, 0.3, P.gold)
+	end
+	for _, x in ipairs({ -42, -26 }) do box(hub, "BoardLeg", x, 2.2, 220, 0.8, 4.4, 0.8, P.ink, Enum.Material.Metal) end
+	local questConsole = console(-34, 224, 8, P.gold)
+	questConsole.Name = "QuestsKiosk"
+	addPrompt(questConsole, "Quests", "OPEN QUESTS", "Daily dispatch", 16)
+	-- Leaderboard: rows are updated by HubService from the live server roster.
+	local board = part(hub, "LeaderboardBoard", Vector3.new(21, 11.5, 0.6), Vector3.new(34, 9.7, 220), P.ink, Enum.Material.SmoothPlastic, false)
+	board:SetAttribute("VisualPolish", true)
+	local gui = surfaceText(board, Enum.NormalId.Back, "LEADERBOARD", P.cyan, 30, 0.84, 0.2)
+	gui.Position = UDim2.fromScale(0.08, 0.04)
+	for i = 1, 5 do
+		local name = Instance.new("TextLabel")
+		name.Name = "Row" .. i
+		name.Size = UDim2.fromScale(0.56, 0.13)
+		name.Position = UDim2.fromScale(0.08, 0.2 + (i - 1) * 0.15)
+		name.BackgroundTransparency = 1
+		name.TextXAlignment = Enum.TextXAlignment.Left
+		name.TextScaled = true
+		name.Text = i .. "  ---"
+		name.TextColor3 = i == 1 and P.gold or P.white
+		name.FontFace = Font.fromEnum(Enum.Font.GothamBold)
+		name.Parent = gui.Parent
+		local score = Instance.new("TextLabel")
+		score.Name = "Score" .. i
+		score.Size = UDim2.fromScale(0.28, 0.13)
+		score.Position = UDim2.fromScale(0.64, 0.2 + (i - 1) * 0.15)
+		score.BackgroundTransparency = 1
+		score.TextXAlignment = Enum.TextXAlignment.Right
+		score.TextScaled = true
+		score.Text = ""
+		score.TextColor3 = P.cyan
+		score.FontFace = Font.fromEnum(Enum.Font.GothamBold)
+		score.Parent = gui.Parent
+	end
+	for _, s in ipairs({ -1, 1 }) do
+		neon(hub, "BoardFrame", 34, 9.7 + s * 5.9, 219.6, 21.6, 0.3, 0.3, P.cyan)
+		neon(hub, "BoardFrame", 34 + s * 10.8, 9.7, 219.6, 0.3, 12.2, 0.3, P.cyan)
+	end
+	for _, x in ipairs({ 25, 43 }) do box(hub, "BoardLeg", x, 2, 220, 0.8, 4, 0.8, P.ink, Enum.Material.Metal) end
+	local boardConsole = console(34, 224, 8, P.cyan)
+	boardConsole.Name = "LeaderboardKiosk"
+	addPrompt(boardConsole, "Roster", "VIEW CREW", "Server leaderboard", 16)
+	-- Daily rewards gift kiosk.
+	local gift = box(hub, "RewardsKiosk", 56, 2, 226, 6, 4, 6, P.red, Enum.Material.SmoothPlastic)
+	art(hub, "GiftRibbon", Vector3.new(6.2, 4.2, 1), Vector3.new(56, 2, 226), P.gold, Enum.Material.Neon)
+	art(hub, "GiftRibbon", Vector3.new(1, 4.2, 6.2), Vector3.new(56, 2, 226), P.gold, Enum.Material.Neon)
+	box(hub, "GiftLid", 56, 4.5, 226, 6.8, 1, 6.8, P.red, Enum.Material.SmoothPlastic, false):SetAttribute("VisualPolish", true)
+	art(hub, "GiftBowL", Vector3.new(3, 1.5, 0.8), CFrame.new(54.6, 5.7, 226) * CFrame.Angles(0, 0, math.rad(30)), P.gold, Enum.Material.Neon)
+	art(hub, "GiftBowR", Vector3.new(3, 1.5, 0.8), CFrame.new(57.4, 5.7, 226) * CFrame.Angles(0, 0, math.rad(-30)), P.gold, Enum.Material.Neon)
+	sign(hub, "DAILY GIFT", Vector3.new(56, 8.4, 226), 8, 1.6, P.gold, 0)
+	addPrompt(gift, "Rewards", "CLAIM REWARD", "7-day streak", 16)
+	-- Winner podiums face the arrival point; CosmeticService stages the champions here.
+	box(hub, "PodiumStage", 0, 0.7, 292, 48, 1.4, 14, P.navy, Enum.Material.Concrete)
+	neon(hub, "PodiumStageGlow", 0, 1.45, 285.2, 48, 0.12, 0.3, P.magenta)
+	local podiums = {}
+	for i, item in ipairs({ { 0, 2.4, "1", P.gold }, { -14, 1.4, "2", P.cyan }, { 14, 0.9, "3", P.pink } }) do
+		local x, h, numeral, accent = item[1], item[2], item[3], item[4]
+		cylinder(hub, "WinnerPodium_" .. numeral, Vector3.new(x, 1.4 + h / 2, 292), 10.5, h, P.steel, Enum.Material.Metal)
+		cylinder(hub, "PodiumLight", Vector3.new(x, 1.45 + h, 292), 10.6, 0.12, accent, Enum.Material.Neon, false)
+		sign(hub, numeral, Vector3.new(x, 2.6, 286.4), 3, 1.4, accent, 0)
+		podiums[i] = CFrame.lookAt(Vector3.new(x, 4.6 + h, 292), Vector3.new(x, 4.6 + h, 310))
+	end
+	sign(hub, "CHAMPIONS", Vector3.new(0, 12, 298.6), 24, 3.6, P.gold, math.pi)
+	for _, x in ipairs({ -26, 26 }) do box(hub, "StagePole", x, 6, 298.6, 0.6, 12, 0.6, P.steel, Enum.Material.Metal) end
+	-- Social lounges: seating clusters, planters, palms. Plenty of room to hang out.
+	for _, spot in ipairs({ { -44, 290 }, { 44, 290 }, { -50, 270 }, { 50, 270 } }) do
+		local x, z = spot[1], spot[2]
+		cylinder(hub, "LoungeRug", Vector3.new(x, 0.12, z), 16, 0.1, x < 0 and P.purple or P.teal, Enum.Material.Fabric, false)
+		cylinder(hub, "LoungeTable", Vector3.new(x, 1, z), 3, 2, P.white, Enum.Material.Marble)
+		neon(hub, "LoungeTableGlow", x, 2.05, z, 2.6, 0.08, 2.6, P.cyan).Shape = Enum.PartType.Cylinder
+		bench(hub, x, 0, z - 5, 0, P.coral)
+		bench(hub, x, 0, z + 5, math.pi, P.coral)
+		planter(hub, x + (x < 0 and -9 or 9), 0, z, 8, math.pi / 2, true)
+	end
+	local palmSpots = { { -66, 205 }, { 66, 205 }, { -66, 232 }, { 66, 232 }, { -20, 214 }, { 20, 214 }, { -66, 300 }, { 66, 300 }, { -30, 316 }, { 30, 316 }, { -18, 262 }, { 18, 262 }, { -66, 316 }, { 66, 316 }, { -12, 230 }, { 12, 230 } }
+	for _, spot in ipairs(palmSpots) do
+		cylinder(hub, "PalmRing", Vector3.new(spot[1], 0.6, spot[2]), 6, 1.2, P.cream, Enum.Material.Concrete)
+		palm(hub, spot[1], 1.2, spot[2], 1.7 + (spot[2] % 3) * 0.1, spot[1] < 0 and 0.08 or -0.08)
+	end
+	-- Light poles with warm lamps and string lights across the plaza.
+	for _, spot in ipairs({ { -30, 236 }, { 30, 236 }, { -30, 282 }, { 30, 282 }, { -62, 214 }, { 62, 214 }, { -62, 312 }, { 62, 312 } }) do
+		box(hub, "LightPole", spot[1], 6, spot[2], 0.5, 12, 0.5, P.ink, Enum.Material.Metal)
+		sphere(hub, "LightGlobe", Vector3.new(spot[1], 12.6, spot[2]), Vector3.new(1.8, 1.8, 1.8), P.gold, Enum.Material.Neon)
+		light(hub, Vector3.new(spot[1], 11.8, spot[2]), P.gold, 0.9, 26)
+	end
+	for _, z in ipairs({ 236, 282 }) do
+		for i = -8, 8 do
+			local x = i * 3.6
+			sphere(hub, "StringBulb", Vector3.new(x, 12.2 - (1 - (i / 8) ^ 2) * 1.2 * -1 - 1.2, z), Vector3.new(0.6, 0.6, 0.6), i % 2 == 0 and P.gold or P.pink, Enum.Material.Neon)
+		end
+	end
+	-- Plaza edge: low wall, neon curb and invisible containment.
+	for _, e in ipairs({ { -78, HC, 2, 124 }, { 78, HC, 2, 124 }, { 0, 324, 154, 2 } }) do
+		box(hub, "PlazaWall", e[1], 1.6, e[2], e[3], 3.2, e[4], P.navy, Enum.Material.Concrete)
+		neon(hub, "PlazaWallGlow", e[1], 3.3, e[2], e[3] > 3 and e[3] or 0.3, 0.16, e[4] > 3 and e[4] or 0.3, P.cyan)
+	end
+	for _, e in ipairs({ { -80, HC, 2, 130 }, { 80, HC, 2, 130 }, { 0, 326, 162, 2 }, { 0, 194, 162, 2 } }) do
+		local w = box(hub, "HubBoundary", e[1], 30, e[2], e[3], 60, e[4], P.ink)
+		w.Transparency = 1
+		w.CastShadow = false
+	end
 	local spawn = Instance.new("SpawnLocation")
-	spawn.Name = "SocialSpawn"
+	spawn.Name = "PlazaSpawn"
 	spawn.Size = Vector3.new(8, 0.2, 8)
-	spawn.CFrame = CFrame.new(0, 6.5, 264)
+	spawn.CFrame = CFrame.new(0, 0.1, 312)
 	spawn.Transparency = 1
 	spawn.Anchored = true
 	spawn.CanCollide = false
 	spawn.CanTouch = false
 	spawn.Neutral = true
 	spawn.Duration = 0
-	spawn.Parent = lobby
+	spawn.Parent = hub
 	partCount += 1
-	-- Lobby containment is transparent above the visible rail; reset remains a safe escape.
-	for _, edge in ipairs({ { -55, 245, 2, 84 }, { 55, 245, 2, 84 }, { 0, 203, 112, 2 }, { 0, 287, 112, 2 } }) do
-		local wall = box(lobby, "SocialBoundary", edge[1], 28, edge[2], edge[3], 50, edge[4], P.ink)
-		wall.Transparency = 1
-		wall.CastShadow = false
+	cylinder(hub, "SpawnRing", Vector3.new(0, 0.1, 312), 22, 0.1, P.cyan, Enum.Material.Neon, false):SetAttribute("Pulse", 2)
+	sign(hub, "WELCOME TO THE PLAZA", Vector3.new(0, 6, 322.8), 24, 2.4, P.white, math.pi)
+	local lobbySpawn = CFrame.lookAt(Vector3.new(0, 3.4, 312), Vector3.new(0, 3.4, 215))
+
+	-- =====================================================================================
+	-- SKYLINE: distant towers frame the mall and the Plaza. No collision, no shadows.
+	-- =====================================================================================
+	box(skyline, "CityBelow", 0, -30, 130, 1100, 8, 1100, P.ink, Enum.Material.Concrete, false)
+	local towers = {
+		{ -170, -110, 40, 44, 95, P.navy }, { -168, -30, 38, 44, 70, P.purple }, { -172, 60, 42, 42, 110, P.teal }, { -170, 150, 40, 40, 80, P.navy },
+		{ 172, -105, 40, 44, 105, P.purple }, { 170, -20, 40, 42, 75, P.navy }, { 168, 70, 42, 44, 120, P.teal }, { 172, 150, 40, 40, 85, P.purple },
+		{ -90, -140, 42, 40, 90, P.teal }, { 0, -150, 46, 40, 120, P.navy }, { 90, -140, 42, 40, 80, P.purple },
+		{ -130, 190, 36, 40, 65, P.purple }, { 130, 190, 36, 40, 75, P.teal }, { -140, 270, 40, 42, 100, P.navy }, { 140, 270, 40, 42, 90, P.purple },
+		{ -100, 370, 44, 40, 110, P.teal }, { 0, 380, 48, 40, 130, P.navy }, { 100, 370, 44, 40, 95, P.purple },
+	}
+	for i, t in ipairs(towers) do
+		local x, z, w, d, h, c = table.unpack(t)
+		box(skyline, "Tower", x, h / 2 - 30, z, w, h, d, c, Enum.Material.Concrete, false).CastShadow = false
+		box(skyline, "TowerSetback", x + w * 0.1, h - 26, z, w * 0.7, 8, d * 0.7, P.white, Enum.Material.Concrete, false).CastShadow = false
+		for row = 1, math.floor(h / 22) do
+			local glow = (row + i) % 3 == 0 and P.gold or ((row + i) % 3 == 1 and P.cyan or P.magenta)
+			local band = box(skyline, "WindowBand", x, row * 18 - 22, z + ((z < 100) and 1 or -1) * (d / 2 + 0.1), w - 6, 0.7, 0.12, glow, Enum.Material.Neon, false)
+			band.CastShadow = false
+		end
+	end
+	for _, scenery in ipairs(skyline:GetChildren()) do
+		if scenery:IsA("BasePart") then scenery.CastShadow = false end
 	end
 
+	-- =====================================================================================
+	-- FINISH: metadata, spawns, bounds
+	-- =====================================================================================
 	applyLighting()
 	model:SetAttribute("StaticPartCount", partCount)
-	model:SetAttribute("ElevatedRouteCount", 12)
+	model:SetAttribute("ElevatedRouteCount", 6)
 	model:SetAttribute("DynamicObstacleCount", #gates)
+	model:SetAttribute("StoreCount", 10)
 	model.Parent = workspace
-	local function spawnFacing(x, y, z)
-		return CFrame.lookAt(Vector3.new(x, y + 3.3, z), Vector3.new(0, y + 3.3, 0))
-	end
 	built = {
 		Model = model,
 		LobbySpawn = lobbySpawn,
-		RunnerSpawns = {
-			spawnFacing(-84, 16, -80), spawnFacing(-103, 16, -72),
-			spawnFacing(-84, 20, 32), spawnFacing(-68, 20, 72),
-			spawnFacing(51, 24, -77), spawnFacing(100, 24, -65),
-			spawnFacing(97, 14, 38), spawnFacing(68, 14, 69),
-			spawnFacing(-12, 14, 78), spawnFacing(12, 14, 70),
-			spawnFacing(-9, 24, -65), spawnFacing(9, 24, -76),
-		},
-		HunterSpawns = { spawnFacing(-6, 0.6, 0), spawnFacing(6, 0.6, 0) },
+		RunnerSpawns = runnerSpawns,
+		HunterSpawns = hunterSpawns,
 		Podiums = podiums,
-		Bounds = { min = Vector3.new(-155, -25, -140), max = Vector3.new(155, 100, 145) },
+		Bounds = { min = Vector3.new(-122, -25, -92), max = Vector3.new(122, 70, 92) },
 	}
 	model:SetAttribute("CatchMapVersion", MAP_VERSION)
 	model:SetAttribute("LobbySpawn", built.LobbySpawn)
 	model:SetAttribute("BoundsMin", built.Bounds.min)
 	model:SetAttribute("BoundsMax", built.Bounds.max)
-	for _, kind in ipairs({"Runner", "Hunter", "Podium"}) do
-		local values = kind == "Podium" and built.Podiums or built[kind.."Spawns"]
-		model:SetAttribute(kind.."Count", #values)
-		for i, transform in ipairs(values) do model:SetAttribute(kind.."Spawn"..i, transform) end
+	for _, kind in ipairs({ "Runner", "Hunter", "Podium" }) do
+		local values = kind == "Podium" and built.Podiums or built[kind .. "Spawns"]
+		model:SetAttribute(kind .. "Count", #values)
+		for i, transform in ipairs(values) do model:SetAttribute(kind .. "Spawn" .. i, transform) end
 	end
 	if not static then activateObstacles(model) end
 	return built

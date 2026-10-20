@@ -123,7 +123,8 @@ function RoundService:Snapshot()
 		winners = table.clone(self.winners),
 		resultText = self.resultText,
 		modifier = self.ctx.Modifiers.Public(self.modifier),
-		mapName = "NEON HEIGHTS",
+		mapName = "NEON MALL",
+		queued = self:_queuedCount(),
 	}
 end
 
@@ -253,11 +254,34 @@ function RoundService:_onPlayer(player)
 	self:_broadcast()
 end
 
+-- The Plaza hub is a safe social area: only players who pressed PLAY join rounds.
+function RoundService:IsQueued(player)
+	return not self.ctx.Config.Round.RequireQueue or player:GetAttribute("CatchQueued") == true
+end
+
+function RoundService:Queue(player, on)
+	if player.Parent ~= Players or self.departing[player] then return false end
+	if self.roster[player.UserId] and self:_playingPhase() and not on then return false end
+	if (player:GetAttribute("CatchQueued") == true) == (on == true) then return true end
+	player:SetAttribute("CatchQueued", on == true)
+	self:_notice(player, { kind = "toast", text = on and "You're in the queue. The next chase starts automatically." or "You left the queue. Enjoy the Plaza!" })
+	self:_broadcast()
+	return true
+end
+
+function RoundService:_queuedCount()
+	local count = 0
+	for _, player in ipairs(Players:GetPlayers()) do
+		if not self.departing[player] and self:IsQueued(player) then count += 1 end
+	end
+	return count
+end
+
 function RoundService:_eligible()
 	local eligible = {}
 	local data = self.ctx.Services.DataService
 	for _, player in ipairs(Players:GetPlayers()) do
-		if not self.departing[player] and data:Ready(player) and liveCharacter(player) then
+		if not self.departing[player] and data:Ready(player) and liveCharacter(player) and self:IsQueued(player) then
 			table.insert(eligible, player)
 		end
 	end

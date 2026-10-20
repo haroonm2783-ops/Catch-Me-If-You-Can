@@ -1,11 +1,13 @@
 -- Shared tunables. Prices and pass IDs live in Catalog.lua.
 local Config = {
 	GameName = "CATCH ME IF YOU CAN",
-	Version = "0.3.0",
+	Version = "0.4.0",
 	Round = {
 		MaxPlayers = 12, MinimumPlayers = 2, Duration = 180, Intermission = 16,
 		ResultsDuration = 10, HeadStart = 5, FinalSeconds = 30, RespawnDelay = 2,
 		StudioSolo = true,
+		-- Players wait in the Plaza hub until they press PLAY. Set false to auto-queue everyone.
+		RequireQueue = true, TrackingPulseAfter = 28, TrackingPulseCooldown = 40,
 	},
 	Movement = {
 		WalkSpeed = 17, RunnerSprint = 26, HunterSprint = 27, Acceleration = 7,

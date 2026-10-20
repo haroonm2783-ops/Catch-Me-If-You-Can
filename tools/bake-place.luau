@@ -9,7 +9,7 @@ local input = process.args[1] or "dist/CatchMeIfYouCan.sources.rbxlx"
 local place = roblox.deserializePlace(fs.readFile(input))
 local world = place:GetService("Workspace")
 local env = {game=place,workspace=world}
-for _, name in ipairs({"Instance","Vector3","Vector2","Color3","CFrame","Enum","UDim2","UDim","BrickColor","NumberSequence","NumberSequenceKeypoint","ColorSequence","ColorSequenceKeypoint","NumberRange","Rect","Font"}) do env[name]=roblox[name] end
+for key, value in pairs(roblox) do env[key]=value end
 -- Check exact embedded script contents, including every module behind bootstraps.
 local function verifySources(folder, directory)
 	for _, child in ipairs(folder:GetChildren()) do
@@ -27,7 +27,8 @@ local builder=luau.load(fs.readFile("src/server/World/MapBuilder.lua"),{environm
 local config=luau.load(fs.readFile("src/shared/Config.lua"),{environment=env,debugName="Config"})()
 -- DataModel attributes are not retained by place serialization; Workspace is.
 world:SetAttribute("CatchGameVersion",config.Version)
-local map=builder.Build({Static=true})
+local Appearance=luau.load(fs.readFile("src/shared/Appearance.lua"),{environment=env,debugName="Appearance"})()
+local map=builder.Build({Static=true,Appearance=Appearance})
 assert(map.Model.Parent==world,"Map must be in Workspace")
 local count, lights, neon, signs, routes = 0,0,0,0,0
 local parts={}
@@ -50,15 +51,15 @@ for _, instance in ipairs(map.Model:GetDescendants()) do
 	elseif instance:IsA("SurfaceGui") then signs+=1 end
 end
 assert(count==map.Model:GetAttribute("StaticPartCount"),"Part budget metadata matches geometry")
-assert(count<1800,"Mobile map budget")
+assert(count<6500,"Mobile map budget")
 assert(#map.RunnerSpawns>=10 and #map.HunterSpawns==2 and #map.Podiums==3,"Complete spawn roster")
-assert(routes>=12 and neon>=100 and signs>=20,"Map landmarks and connected routes present")
-assert(world:FindFirstChild("NeonHeights")~=nil,"Baked map is attached")
+assert(routes>=2 and neon>=300 and signs>=40,"Map landmarks and connected routes present")
+assert(world:FindFirstChild("CatchMall")~=nil,"Baked map is attached")
 -- Starting viewport: direct Studio open shows the city instead of an empty baseplate.
 local camera=world:FindFirstChildOfClass("Camera") or roblox.Instance.new("Camera")
 camera.Name="Camera"
-camera.CFrame=roblox.CFrame.lookAt(roblox.Vector3.new(240,185,325),roblox.Vector3.new(0,25,15))
-camera.Focus=roblox.CFrame.new(0,25,15)
+camera.CFrame=roblox.CFrame.lookAt(roblox.Vector3.new(230,150,230),roblox.Vector3.new(0,10,0))
+camera.Focus=roblox.CFrame.new(0,10,0)
 camera.CameraType=roblox.Enum.CameraType.Custom
 camera.Parent=world
 world.CurrentCamera=camera
@@ -77,12 +78,12 @@ for path, contents in pairs(deliverables) do fs.writeFile(path,contents) end
 fs.writeFile("dist/map-geometry.json",serde.encode("json",{parts=parts,partCount=count,routes=routes,version=config.Version},true))
 local scripts=0
 for _, object in ipairs(place:GetDescendants()) do if object:IsA("LuaSourceContainer") then scripts+=1; assert(#object.Source>0,"No empty script") end end
-print(string.format("Baked Neon Heights: %d parts, %d neon accents, %d signs, %d lights, %d traversal routes, %d scripts.",count,neon,signs,lights,routes,scripts))
+print(string.format("Baked Neon Mall: %d parts, %d neon accents, %d signs, %d lights, %d traversal routes, %d scripts.",count,neon,signs,lights,routes,scripts))
 -- Deserialize both formats under both filenames; assert content, not extension.
 for path in pairs(deliverables) do
 	local reopened=roblox.deserializePlace(fs.readFile(path))
 	assert(reopened:GetService("Workspace"):GetAttribute("CatchGameVersion")==config.Version,"Game version identifies the updated artifact")
-	assert(reopened:GetService("Workspace"):FindFirstChild("NeonHeights"),"Missing baked city")
+	assert(reopened:GetService("Workspace"):FindFirstChild("CatchMall"),"Missing baked mall")
 	assert(reopened:GetService("Workspace").StreamingEnabled == false,"Whole arena remains available to spectators")
 	verifySources(reopened:GetService("ServerScriptService").CatchServer,"src/server")
 	verifySources(reopened:GetService("ReplicatedStorage").CatchShared,"src/shared")

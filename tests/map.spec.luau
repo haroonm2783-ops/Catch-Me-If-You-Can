@@ -5,7 +5,7 @@ local process=require("@lune/process")
 local placePath=process.args[1] or "dist/CatchMeIfYouCan.rbxl"
 local place=roblox.deserializePlace(fs.readFile(placePath))
 local world=place:GetService("Workspace")
-local map=world:FindFirstChild("NeonHeights")
+local map=world:FindFirstChild("CatchMall")
 local checks=0
 local function expect(value,message) checks+=1; assert(value,message) end
 local function sameTransform(a,b)
@@ -14,31 +14,35 @@ local function sameTransform(a,b)
 	return true
 end
 local env={game=place,workspace=world}
-for _, k in ipairs({"Instance","CFrame","Vector3","Color3","UDim2","Enum","Font"}) do env[k]=roblox[k] end
+for key,value in pairs(roblox) do env[key]=value end
 local builder=luau.load(fs.readFile("src/server/World/MapBuilder.lua"),{environment=env})()
 local result=builder.Build({Static=true})
-expect(map:GetAttribute("CatchMapVersion")==4,"Current map version (bright palette) is baked into the delivered map")
+expect(map~=nil,"Baked mall present")
+expect(map:GetAttribute("CatchMapVersion")==5,"Current mall map version is baked into the delivered map")
 expect(result.Model==map,"Baked map reused in place")
 expect(builder.Build({Static=true})==result,"Repeat Build is idempotent")
 local sameName=0
-for _, child in ipairs(world:GetChildren()) do if child.Name=="NeonHeights" then sameName+=1 end end
-expect(sameName==1,"No duplicate map")
+for _, child in ipairs(world:GetChildren()) do if child.Name=="CatchMall" then sameName+=1 end end
+expect(sameName==1 and world:FindFirstChild("NeonHeights")==nil,"No duplicate map and the old city is not loaded")
 local colliders={}
 for _, part in ipairs(map:GetDescendants()) do
 	if part:IsA("BasePart") then
 		for _, value in ipairs({part.CFrame:GetComponents()}) do
 			expect(value==value and math.abs(value)<math.huge,"Serialized transform must be finite: "..part.Name)
 		end
+		for _, v in ipairs({part.Size.X,part.Size.Y,part.Size.Z}) do expect(v>0,"Positive size: "..part.Name) end
 		if part.CanCollide then table.insert(colliders,part) end
 	end
 end
-expect(#colliders==310,"Art pass preserves the 310 original gameplay colliders")
 -- Analytic OBB ray intersections validate authored geometry; this is not a physics simulation.
 local function rayBox(origin,direction,part,edgeTolerance)
 	local o=part.CFrame:PointToObjectSpace(origin)
 	local d=part.CFrame:VectorToObjectSpace(direction)
 	local tolerance=edgeTolerance or 0
-	local half=part.Size/2+roblox.Vector3.new(tolerance,tolerance,tolerance)
+	-- A negative marker means: inflate only the local X/Z footprint (avatar radius), never height.
+	local half
+	if tolerance<0 then half=part.Size/2+roblox.Vector3.new(-tolerance,0,-tolerance)
+	else half=part.Size/2+roblox.Vector3.new(tolerance,tolerance,tolerance) end
 	local near,far=0,math.huge
 	for _,axis in ipairs({"X","Y","Z"}) do
 		if math.abs(d[axis])<0.000001 then
@@ -49,17 +53,12 @@ local function rayBox(origin,direction,part,edgeTolerance)
 			if near>far then return nil end
 		end
 	end
-	return near
+	return near,far
 end
 
--- The Studio report showed dark triangles flickering across roofs. Each roof cap
--- previously finished at exactly the same height as its walking panel. Check all
--- broad, visible, horizontal block faces, including rotated level bridges and the
--- street/lobby; narrow neon strips, mullions and trim are not walking surfaces.
+-- Coplanar visible block tops z-fight in Roblox. Check every broad horizontal face pair.
 local function topHeight(part) return part.CFrame.Position.Y+part.Size.Y/2 end
 local function horizontalOverlap(a,b)
-	-- Separating-axis test in the horizontal plane, rather than axis-aligned bounds
-	-- that would incorrectly report collisions for diagonal rectangular decks.
 	local delta=b.CFrame.Position-a.CFrame.Position
 	for _,axis in ipairs({a.CFrame.RightVector,a.CFrame.LookVector,b.CFrame.RightVector,b.CFrame.LookVector}) do
 		local ar=math.abs(a.CFrame.RightVector:Dot(axis))*a.Size.X/2+math.abs(a.CFrame.LookVector:Dot(axis))*a.Size.Z/2
@@ -68,174 +67,259 @@ local function horizontalOverlap(a,b)
 	end
 	return true
 end
-local topFaces,walkingRoofs={},{}
+local topFaces={}
 for _,part in ipairs(map:GetDescendants()) do
 	if part:IsA("Part") and part.Shape==roblox.Enum.PartType.Block and part.Transparency<0.95
-		and part.Size.X>=2 and part.Size.Z>=2 and part.CFrame.UpVector.Y>0.99999 then
+		and part.Size.X>=2 and part.Size.Z>=2 and part.CFrame.UpVector.Y>0.99999 and not part:IsDescendantOf(map.DistantSkyline) then
 		table.insert(topFaces,part)
 	end
-	if part.Name=="WalkingRoof" then table.insert(walkingRoofs,part) end
 end
-expect(#topFaces>=150,"Coplanar regression covers the whole arena, lobby and large props")
-expect(#walkingRoofs==6,"All six chase roofs are included")
+expect(#topFaces>=200,"Coplanar regression covers the whole mall and Plaza")
 for i,a in ipairs(topFaces) do
+	local ta=topHeight(a)
 	for j=i+1,#topFaces do
 		local b=topFaces[j]
-		if math.abs(topHeight(a)-topHeight(b))<0.005 then
+		if math.abs(ta-topHeight(b))<0.005 then
 			expect(not horizontalOverlap(a,b),"Coplanar top faces z-fight: "..a:GetFullName().." / "..b:GetFullName())
 		end
 	end
 end
 
--- Trimming a bridge fixes flicker only if it still meets the roof. Sample both
--- sides of every flat deck-to-roof seam across its usable width so a gap, step,
--- or over-trim fails independently of the coplanar-face check above.
-local roofSeams=0
-for _,deck in ipairs(map.ParkourRoutes:GetChildren()) do
-	if deck:IsA("BasePart") and deck:GetAttribute("TraversalRoute") and deck.CFrame.UpVector.Y>0.99999 then
-		for _,side in ipairs({-1,1}) do
-			local beyond=deck.CFrame*roblox.Vector3.new(0,deck.Size.Y/2+0.5,side*(deck.Size.Z/2+0.2))
-			local meetsRoof=false
-			for _,roof in ipairs(walkingRoofs) do
-				local distance=rayBox(beyond,roblox.Vector3.new(0,-1,0),roof)
-				if distance and math.abs(distance-0.5)<0.01 then meetsRoof=true end
-			end
-			if meetsRoof then
-				roofSeams+=1
-				for _,x in ipairs({-deck.Size.X/2+0.6,0,deck.Size.X/2-0.6}) do
-					for _,offset in ipairs({-0.2,0,0.2}) do
-						local origin=deck.CFrame*roblox.Vector3.new(x,deck.Size.Y/2+0.5,side*(deck.Size.Z/2+offset))
-						local nearest=math.huge
-						local floors=table.clone(walkingRoofs)
-						table.insert(floors,deck)
-						for _,part in ipairs(floors) do
-							-- Binary CFrames round butt-joined edges by a few millionths of
-							-- a stud. Ignore only that serialization error, never a real gap.
-							local distance=rayBox(origin,roblox.Vector3.new(0,-1,0),part,0.0001)
-							if distance then nearest=math.min(nearest,distance) end
-						end
-						expect(math.abs(nearest-0.5)<0.01,"Continuous, flush roof seam: "..deck.Name.." side "..side.." x "..x.." offset "..offset.." distance "..nearest)
-					end
-				end
-			end
-		end
-	end
-end
-expect(roofSeams==7,"Two level bridges and three ramp landings meet seven roof edges")
-
 local function checkSpawn(cf,label)
 	local nearest=math.huge
 	for _,part in ipairs(colliders) do
-		local distance=rayBox(cf.Position,roblox.Vector3.new(0,-1,0),part)
-		if distance then nearest=math.min(nearest,distance) end
+		local near=rayBox(cf.Position,roblox.Vector3.new(0,-1,0),part)
+		if near then nearest=math.min(nearest,near) end
 	end
 	expect(nearest>=2.8 and nearest<=4.5,label.." has floor at avatar foot height; distance="..nearest)
-	for _,part in ipairs(colliders) do
-		local point=part.CFrame:PointToObjectSpace(cf.Position)
-		local h=part.Size/2
-		-- Avatar torso clearance, including a one-stud horizontal radius.
-		local inside=math.abs(point.X)<h.X+0.8 and math.abs(point.Z)<h.Z+0.8 and math.abs(point.Y)<h.Y+1.8
-		expect(not inside,label.." overlaps "..part.Name)
-	end
 	for _,part in ipairs(map:GetDescendants()) do
-		if part:IsA("BasePart") and part:GetAttribute("VisualPolish") then
+		if part:IsA("BasePart") and (part.CanCollide or part:GetAttribute("VisualPolish")) and not part:IsDescendantOf(map.DistantSkyline) then
 			local point=part.CFrame:PointToObjectSpace(cf.Position)
 			local h=part.Size/2
 			local inside=math.abs(point.X)<h.X+0.8 and math.abs(point.Z)<h.Z+0.8 and math.abs(point.Y)<h.Y+1.8
-			expect(not inside,label.." visually hidden by "..part.Name)
+			expect(not inside,label.." overlaps "..part.Name.." "..part:GetFullName())
 		end
 	end
 end
+expect(#result.RunnerSpawns>=12 and #result.HunterSpawns==2 and #result.Podiums==3,"Complete spawn roster")
 for i,cf in ipairs(result.RunnerSpawns) do checkSpawn(cf,"Runner "..i) end
 for i,cf in ipairs(result.HunterSpawns) do checkSpawn(cf,"Hunter "..i) end
-checkSpawn(result.LobbySpawn,"Lobby")
-local routes, gates, trusses=0,0,0
+checkSpawn(result.LobbySpawn,"Plaza lobby")
+for i,cf in ipairs(result.Podiums) do
+	expect(cf.Position.Z>260 and cf.Position.Z<300,"Podium "..i.." stands in the Plaza")
+end
+expect(result.LobbySpawn.Position.Z>200,"Lobby spawn is in the separate Plaza hub")
+for _,cf in ipairs(result.RunnerSpawns) do expect(math.abs(cf.Position.Z)<92,"Runner spawn is inside the mall") end
+
+local routes,gates,stairs,escalators=0,0,0,0
 for _,part in ipairs(map:GetDescendants()) do
 	if part:IsA("BasePart") and part:GetAttribute("TraversalRoute") then
 		routes+=1
 		local slope=math.deg(math.asin(math.abs(part.CFrame.LookVector.Y)))
 		expect(slope<30,"Traversable route slope: "..part.Name)
 		expect(part.Size.X>=10,"Wide mobile-friendly route: "..part.Name)
+		if part.Name:find("Escalator") then escalators+=1 end
 	elseif part:IsA("BasePart") and part:GetAttribute("DynamicObstacle") then
 		gates+=1
 		expect(typeof(part:GetAttribute("GateClosedCFrame"))=="CFrame","Gate resets on new server")
-	elseif part:IsA("TrussPart") then
-		trusses+=1
-		local position=part.CFrame.Position
-		for _,building in ipairs(map.Architecture:GetChildren()) do
-			local facade=building:FindFirstChild("Facade")
-			if facade then
-				local p=facade.CFrame:PointToObjectSpace(position)
-				expect(not (math.abs(p.X)<facade.Size.X/2-0.05 and math.abs(p.Z)<facade.Size.Z/2-0.05),"Ladder buried inside "..building.Name)
+	elseif part:IsA("BasePart") and part:GetAttribute("StairStep") then
+		stairs+=1
+	end
+end
+expect(escalators==2,"Two escalator connections")
+expect(stairs==40,"Two stair runs of twenty steps")
+expect(gates==2,"Two timing shutters")
+expect(not map.DistantSkyline.CityBelow.CanCollide,"No unreachable hiding floor below arena")
+
+-- Budgets and art safety ------------------------------------------------------------
+local partCount,lightCount,emitters,polishCount,signs=0,0,0,0,0
+for _,object in ipairs(map:GetDescendants()) do
+	if object:IsA("BasePart") then
+		partCount+=1
+		if object:GetAttribute("VisualPolish") then
+			polishCount+=1
+			expect(object.Anchored and not object.CanCollide and not object.CanQuery,"Art adds no collision or false vault/tag targets: "..object.Name)
+		end
+		if object:IsDescendantOf(map.DistantSkyline) then
+			expect(not object.CanCollide and not object.CanQuery and not object.CastShadow,"Distant skyline stays outside collision and shadow budgets: "..object.Name)
+		end
+		if object.CanCollide and object:GetAttribute("Vaultable") then
+			expect(object.Size.Y<=4.5 and object.Size.Y>=1.5,"Vaultable prop is within vault height: "..object.Name)
+		end
+	elseif object:IsA("PointLight") then
+		lightCount+=1
+		expect(not object.Shadows,"Decorative lights use no shadow maps")
+	elseif object:IsA("ParticleEmitter") then
+		emitters+=1
+		expect(object.Rate<=30,"Particle rates stay low")
+	elseif object:IsA("SurfaceGui") then signs+=1 end
+end
+expect(emitters==2,"Only the two fountain emitters animate continuously")
+expect(partCount==map:GetAttribute("StaticPartCount") and partCount<5200,"Static part budget: "..partCount)
+expect(lightCount<=40,"Local light budget: "..lightCount)
+expect(polishCount>=800,"Art present")
+expect(signs>=60,"Brand signs present")
+-- Ten enterable stores: every one has a front opening and at least one other route in or out.
+local enterable=0
+for _,store in ipairs(map.Stores:GetChildren()) do
+	if store:FindFirstChild("Carpet") then enterable+=1 end
+end
+if map.Stores:FindFirstChild("DeptCarpet") then enterable+=1 end -- the department store fills the east wing
+expect(enterable==10,"Ten enterable stores, found "..enterable)
+for _,name in ipairs({"CatchMall"}) do expect(world:FindFirstChild(name),"Map root") end
+local prompts,actions=0,{}
+for _,object in ipairs(map.PlazaHub:GetDescendants()) do
+	if object:IsA("ProximityPrompt") then prompts+=1; actions[object:GetAttribute("HubAction")]=true end
+end
+for _,action in ipairs({"Play","Locker","Shop","Quests","Roster","Rewards"}) do expect(actions[action],"Plaza has a "..action.." interaction") end
+expect(map.PlazaHub:FindFirstChild("LeaderboardBoard") and map.PlazaHub.LeaderboardBoard:FindFirstChildOfClass("SurfaceGui"),"Leaderboard board is present")
+local showcase=0
+for _,child in ipairs(map.PlazaHub:GetChildren()) do if child.Name:find("SkinShowcase_") then showcase+=1 end end
+expect(showcase==4,"Four skin showcase figures stand in the Plaza")
+
+-- Walkability: grid flood fill over the real collision boxes. Nodes are standing surfaces;
+-- steps up to 1.3 studs walk, up to 4.4 jump/vault, drops of any height are allowed.
+local CELL,X0,X1,Z0,Z1=2,-124,124,-94,94
+local buckets={}
+local function key(i,j) return i*1000+j end
+for _,part in ipairs(colliders) do
+	if not part:IsDescendantOf(map.PlazaHub) and part.Name~="Foundation" then
+		local cf,s=part.CFrame,part.Size
+		local ex=(math.abs(cf.RightVector.X)*s.X+math.abs(cf.UpVector.X)*s.Y+math.abs(cf.LookVector.X)*s.Z)/2+1.2
+		local ez=(math.abs(cf.RightVector.Z)*s.X+math.abs(cf.UpVector.Z)*s.Y+math.abs(cf.LookVector.Z)*s.Z)/2+1.2
+		for i=math.floor((cf.Position.X-ex-X0)/CELL),math.floor((cf.Position.X+ex-X0)/CELL) do
+			for j=math.floor((cf.Position.Z-ez-Z0)/CELL),math.floor((cf.Position.Z+ez-Z0)/CELL) do
+				local k=key(i,j)
+				buckets[k]=buckets[k] or {}
+				table.insert(buckets[k],part)
 			end
 		end
 	end
 end
-expect(routes==12,"Twelve connected bridge/ramp surfaces")
-expect(gates==2,"Two timing shortcuts")
-expect(trusses==6,"Six climbable ladders")
-expect(not map.DistantSkyline.CityBelow.CanCollide,"No unreachable hiding floor below arena")
-
-local partCount,lightCount,polishCount=0,0,0
-local landmarks={}
-local canopies={MoonSweptRoof=20,MarketButterflyRoof=14,GardenSunshade=24,ArrivalCanopyWing=6.3}
-for _,object in ipairs(map:GetDescendants()) do
-	if object:IsA("BasePart") then
-		partCount+=1
-		if object:GetAttribute("DistrictLandmark") then landmarks[object:GetAttribute("DistrictLandmark")]=true end
-		if object:GetAttribute("VisualPolish") then
-			polishCount+=1
-			expect(object.Anchored and not object.CanCollide and not object.CanTouch and not object.CanQuery,
-				"Art adds neither moving collision nor false vault/tag targets: "..object.Name)
+local columns={}
+local nx,nz=math.floor((X1-X0)/CELL),math.floor((Z1-Z0)/CELL)
+local function column(i,j)
+	local k=key(i,j)
+	if columns[k]~=nil then return columns[k] end
+	local x,z=X0+(i+0.5)*CELL,Z0+(j+0.5)*CELL
+	local intervals={}
+	for _,part in ipairs(buckets[k] or {}) do
+		-- Inflate by the avatar radius: thin walls then always block a 2-stud sample.
+		local near,far=rayBox(roblox.Vector3.new(x,60,z),roblox.Vector3.new(0,-1,0),part,-1.0)
+		if near then table.insert(intervals,{top=60-near,bottom=60-far,part=part}) end
+	end
+	local surfaces={}
+	for a,iv in ipairs(intervals) do
+		-- A surface counts only if the point is truly over the part (no inflation).
+		local n2=rayBox(roblox.Vector3.new(x,60,z),roblox.Vector3.new(0,-1,0),iv.part,0)
+		if n2 then
+			local top=60-n2
+			local free=true
+			for b,other in ipairs(intervals) do
+				-- Anything within a walkable step (1.3) is climbed onto, not a barrier.
+				if b~=a and other.bottom<top+5.2 and other.top>top+1.3 then free=false break end
+			end
+			if free and top>-1 and top<50 then table.insert(surfaces,top) end
 		end
-		if object:IsDescendantOf(map.DistantSkyline) then
-			expect(not object.CanCollide and not object.CanQuery and not object.CastShadow,
-				"Distant skyline stays outside collision and shadow budgets: "..object.Name)
+	end
+	table.sort(surfaces)
+	local unique={}
+	for _,s in ipairs(surfaces) do if #unique==0 or s-unique[#unique]>0.3 then table.insert(unique,s) end end
+	columns[k]=unique
+	return unique
+end
+local function nodeOf(p)
+	local i,j=math.floor((p.X-X0)/CELL),math.floor((p.Z-Z0)/CELL)
+	local best,bestD=nil,math.huge
+	for _,s in ipairs(column(i,j)) do
+		local d=math.abs(s-(p.Y-3.3))
+		if d<bestD then best,bestD=s,d end
+	end
+	return i,j,best
+end
+local function reach(si,sj,sy)
+	local seen={}
+	local function id(i,j,y) return key(i,j)*100+math.floor(y*2+0.5) end
+	local queue,head={{si,sj,sy}},1
+	seen[id(si,sj,sy)]=true
+	local count=0
+	while head<=#queue do
+		local i,j,y=table.unpack(queue[head]); head+=1; count+=1
+		for _,d in ipairs({{1,0},{-1,0},{0,1},{0,-1}}) do
+			local ni,nj=i+d[1],j+d[2]
+			if ni>=0 and nj>=0 and ni<nx and nj<nz then
+				for _,s in ipairs(column(ni,nj)) do
+					local rise=s-y
+					if rise<=4.4 and rise>=-60 then
+						-- Walking up more than 1.3 needs a jump over a low obstacle: only allowed if the
+						-- neighbouring surface is not on a wall (rise <= 4.4 already enforces that).
+						local k=id(ni,nj,s)
+						if not seen[k] then seen[k]=true; table.insert(queue,{ni,nj,s}) end
+					end
+				end
+			end
 		end
-		local roof=canopies[object.Name]
-		if roof then
-			local lowest=math.huge
-			for _,x in ipairs({-0.5,0.5}) do for _,y in ipairs({-0.5,0.5}) do for _,z in ipairs({-0.5,0.5}) do
-				lowest=math.min(lowest,(object.CFrame*roblox.Vector3.new(x*object.Size.X,y*object.Size.Y,z*object.Size.Z)).Y)
-			end end end
-			expect(lowest>roof+7.5,"Roof art clears avatars and route sightlines: "..object.Name)
-		end
-	elseif object:IsA("PointLight") then
-		lightCount+=1
-		expect(not object.Shadows,"Local decorative lights use no expensive shadow maps")
-	elseif object:IsA("ParticleEmitter") then
-		expect(false,"Static map must not acquire continuous particle emitters")
+	end
+	return seen,count
+end
+local starts={}
+for _,cf in ipairs(result.HunterSpawns) do starts[#starts+1]=cf end
+for _,cf in ipairs(result.RunnerSpawns) do starts[#starts+1]=cf end
+local seenFromHunter,huntCount=nil,0
+do
+	local i,j,y=nodeOf(result.HunterSpawns[1].Position)
+	expect(y~=nil,"Hunter spawn stands on a walkable surface")
+	seenFromHunter,huntCount=reach(i,j,y)
+end
+expect(huntCount>5000,"Hunters can reach a large walkable network: "..huntCount)
+for index,cf in ipairs(starts) do
+	local i,j,y=nodeOf(cf.Position)
+	expect(y~=nil,"Spawn "..index.." has a walkable cell")
+	expect(seenFromHunter[key(i,j)*100+math.floor(y*2+0.5)],"Hunter can reach spawn "..index.." at "..tostring(cf.Position))
+end
+-- Return paths: every runner spawn can reach both floors' key landmarks and the hunter spawn.
+local function reachable(from,to)
+	local i,j,y=nodeOf(from)
+	local seen=reach(i,j,y)
+	local ti,tj,ty=nodeOf(to)
+	return ty~=nil and seen[key(ti,tj)*100+math.floor(ty*2+0.5)]
+end
+local landmarks={
+	roundFountain=roblox.Vector3.new(0,3.3,-22), upperBridge=roblox.Vector3.new(0,19.3,0), foodCourt=roblox.Vector3.new(-88,3.3,0),
+	arcade=roblox.Vector3.new(92,3.3,0), department=roblox.Vector3.new(74,19.3,0), skyLounge=roblox.Vector3.new(-106,19.3,-14),
+}
+for index,cf in ipairs(result.RunnerSpawns) do
+	for name,target in pairs(landmarks) do
+		expect(reachable(cf.Position,target),"Runner spawn "..index.." can reach "..name)
+	end
+	expect(reachable(cf.Position,result.HunterSpawns[1].Position),"Runner spawn "..index.." can return to the ground floor")
+end
+-- Every enterable store must connect both ways with the hall (no sealed rooms, no one-door traps).
+for _,store in ipairs(map.Stores:GetChildren()) do
+	local carpet=store:FindFirstChild("Carpet")
+	if carpet then
+		local floor=carpet.CFrame.Position.Y-0.1
+		local north=carpet.CFrame.Position.Z<0
+		local inside=roblox.Vector3.new(carpet.CFrame.Position.X,floor+3.3,north and -54 or 54)
+		expect(reachable(inside,result.HunterSpawns[1].Position) and reachable(result.HunterSpawns[1].Position,inside),store.Name.." connects to the hall both ways")
 	end
 end
-expect(partCount==map:GetAttribute("StaticPartCount") and partCount<1800,"Updated art stays within static mobile part budget")
-expect(lightCount==10,"Art pass adds no local lights")
-expect(polishCount>=150,"District art is present in the delivered place")
-for _,name in ipairs({"Citrus","Moon","Garden","Polar","Ember","Meridian","Social"}) do
-	expect(landmarks[name],name.." has a distinctive landmark silhouette")
-end
-local citrus=map.Architecture["01_CitrusArcade"]
-local polar=map.Architecture["04_PolarLaundry"]
-expect(citrus.CitrusMarqueeFruit.CFrame.Position.Z>citrus.CitrusMarqueeHalo.CFrame.Position.Z,"Citrus graphic faces the city approach")
-expect(polar.PolarWasherGlass.CFrame.Position.Z>polar.PolarWasherHalo.CFrame.Position.Z,"Washer graphic faces the southern approach")
-expect(polar.PolarWasherHalo.CFrame.Position.Y-polar.PolarWasherHalo.Size.Y/2>23,"Washer halo does not obscure SPIN / CITY lettering")
-expect(map.SocialDeck.ChampionHaloInset.CFrame.Position.Z>map.SocialDeck.ChampionHalo.CFrame.Position.Z,"Podium emblem faces the lobby")
 
 -- Reloading an old baked model must replace it once and then reuse the new version.
--- This models opening a stale source place with the newer MapBuilder module.
 local stalePlace=roblox.deserializePlace(fs.readFile(placePath))
 local staleWorld=stalePlace:GetService("Workspace")
-local staleMap=staleWorld.NeonHeights
+local staleMap=staleWorld.CatchMall
 staleMap:SetAttribute("CatchMapVersion",2)
 local freshEnv=table.clone(env)
 freshEnv.game=stalePlace; freshEnv.workspace=staleWorld
 local reloaded=luau.load(fs.readFile("src/server/World/MapBuilder.lua"),{environment=freshEnv})()
 local rebuilt=reloaded.Build({Static=true})
 expect(staleMap.Parent==nil and rebuilt.Model~=staleMap,"Previous baked map is replaced without duplicate geometry")
-expect(rebuilt.Model:GetAttribute("CatchMapVersion")==4,"Replacement uses current map version")
+expect(rebuilt.Model:GetAttribute("CatchMapVersion")==5,"Replacement uses current map version")
 expect(reloaded.Build({Static=true})==rebuilt,"Replacement is reused on repeated builds")
 expect(sameTransform(rebuilt.LobbySpawn,result.LobbySpawn),"Version migration preserves lobby spawn")
 for _,kind in ipairs({"RunnerSpawns","HunterSpawns","Podiums"}) do
 	expect(#rebuilt[kind]==#result[kind],"Migration preserves "..kind.." count")
 	for i,cf in ipairs(result[kind]) do expect(sameTransform(rebuilt[kind][i],cf),"Migration preserves "..kind.." "..i) end
 end
-print("PASS: "..checks.." map, spawn clearance, art safety, route and baked-place assertions ("..partCount.." parts)")
+print("PASS: "..checks.." mall, hub, spawn clearance, walkability, art safety and baked-place assertions ("..partCount.." parts)")
