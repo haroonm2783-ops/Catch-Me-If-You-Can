@@ -768,4 +768,52 @@ do
 	expect(solo.round.modifier.id == "classic", "Solo practice is always Classic")
 end
 
+
+-- PLAY queue: with RequireQueue on, only players who pressed PLAY join a round.
+do
+	local f = fixture(4)
+	f.ctx.Config.Round.RequireQueue = true
+	for _, player in ipairs(f.players) do player.attributes = player.attributes or {} end
+	f.round:_step()
+	expect(f.round.phase == "Waiting", "Unqueued players in the Plaza must not start a round")
+	expect(f.round:Queue(f.players[1], true) and f.round:IsQueued(f.players[1]), "PLAY queues a player")
+	f.round:_step()
+	expect(f.round.phase == "Waiting", "One queued player is not enough outside Studio solo practice")
+	f.round:Queue(f.players[2], true)
+	f.round:Queue(f.players[2], true)
+	f.round:_step()
+	expect(f.round.phase == "Intermission", "Two queued players begin intermission")
+	expect(#f.round:_eligible() == 2, "Only queued players are eligible; the other two keep hanging out")
+	expect(f.round:Snapshot().queued == 2, "Snapshot reports the queued count")
+	f.advance(f, 16)
+	f.round:_step()
+	expect(f.round:IsActive(f.players[1]) and not f.round:IsActive(f.players[3]), "Plaza visitors are never drafted into a chase")
+	f.round:_endRound("Runner", "test")
+	expect(f.round:Queue(f.players[1], false) and not f.round:IsQueued(f.players[1]), "Leaving the queue is accepted once the round has ended")
+end
+
+-- Tracking pulse: a hunter far from every runner receives one announced compass hint.
+do
+	local f = fixture(2)
+	f.ctx.Config.Round.TrackingPulseAfter, f.ctx.Config.Round.TrackingPulseCooldown = 20, 40
+	f:startActive()
+	local hunter, runner
+	for _, player in ipairs(f.players) do if f.round:GetRole(player) == "Hunter" then hunter = player else runner = player end end
+	f:pose(hunter, 0, 3, 0, true)
+	f:pose(runner, 0, 3, -150, true)
+	local before = #f.notices
+	f.round:_trackingPulse()
+	f:advance(21)
+	f:pose(hunter, 0, 3, 0, true); f:pose(runner, 0, 3, -150, true)
+	f.round:_trackingPulse()
+	local pulse
+	for i = before + 1, #f.notices do if f.notices[i].notice.kind == "pulse" then pulse = f.notices[i] end end
+	expect(pulse and pulse.player == hunter and pulse.notice.direction == "N", "Hunter receives a compass pulse toward the distant runner")
+	local count = #f.notices
+	f.round:_trackingPulse()
+	local again = false
+	for i = count + 1, #f.notices do if f.notices[i].notice.kind == "pulse" then again = true end end
+	expect(not again, "Pulses respect their cooldown")
+end
+
 print("Gameplay service tests passed: " .. checks .. " checks")

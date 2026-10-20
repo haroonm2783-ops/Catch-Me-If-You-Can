@@ -222,6 +222,41 @@ for _, size in ipairs({Vector2.new(1440, 860), Vector2.new(390, 760), Vector2.ne
 	expect(not f.player:GetAttribute("CatchMenuOpen"), "Closing the menu must release input")
 end
 
+
+-- HUD safe zones: Roblox chat occupies the top-left under the top bar. No visible HUD element may
+-- start there, on any viewport; the PLAY control queues, and Plaza kiosks can open menus.
+for _, size in ipairs({Vector2.new(1440, 860), Vector2.new(390, 760), Vector2.new(844, 350), Vector2.new(1024, 768)}) do
+	local f = fixture(size, size.X < 900 and Enum.UserInputType.Touch or Enum.UserInputType.Keyboard)
+	local ui = f.load("UIController"); f.ctx.Controllers.UIController = ui; ui:Start()
+	f.ctx.Profile.settings = {tutorialDone = true}; ui:OnProfile(f.ctx.Profile)
+	ui:_finishTutorial(); f.actions[#f.actions] = nil; ui:_responsive()
+	for _, node in ipairs(ui.root:GetChildren()) do
+		local drawn = node.Visible and (node.ClassName == "TextLabel" or (node.BackgroundTransparency or 0) < 1)
+		local atLeft = node.AnchorPoint.X == 0 and node.Position.X.Scale == 0 and node.Position.X.Offset < 450
+		local atTop = node.AnchorPoint.Y == 0 and node.Position.Y.Scale == 0 and node.Position.Y.Offset < 240
+		local fullscreen = node.Size.X.Scale >= 1 and node.Size.Y.Scale >= 1
+		expect(not (drawn and atLeft and atTop and not fullscreen), "HUD element overlaps the Roblox chat zone at " .. tostring(size) .. ": " .. node.Name)
+	end
+	expect(ui.dock.AnchorPoint.X == 1 and ui.dock.Position.X.Scale == 1, "Menu rail lives on the right edge")
+	expect(ui.hero.Visible and ui.playButton.Text == "PLAY", "The Plaza shows a PLAY button")
+	ui.playButton.Activated:Fire()
+	expect(f.actions[#f.actions].action == "Play", "PLAY asks the server to queue the player")
+	f.player:SetAttribute("CatchQueued", true); f.ctx.State.queued = 3; ui:_responsive()
+	expect(string.find(ui.playButton.Text, "LEAVE", 1, true) and string.find(ui.heroDescription.Text, "3 queued", 1, true), "Queued state is shown")
+	ui.optimisticUntil = nil
+	ui.playButton.Activated:Fire()
+	expect(f.actions[#f.actions].action == "Leave", "Pressing again leaves the queue")
+	ui:OnNotice({kind = "openMenu", menu = "Shop"})
+	expect(ui.menu == "Shop", "Plaza shop kiosk opens the shop menu")
+	ui:CloseMenu()
+	-- Non-queued players in the Plaza never get the spectator camera during a live round.
+	f.ctx.Config = table.clone(f.ctx.Config); f.ctx.Config.Round = table.clone(f.ctx.Config.Round); f.ctx.Config.Round.RequireQueue = true
+	f.player:SetAttribute("CatchQueued", false)
+	f.ctx.State = {phase = "Active", roundId = 9, players = {}, endsAt = 999}
+	ui:OnState(f.ctx.State)
+	expect(not ui.spectator.Visible and ui.hero.Visible, "Plaza visitors stay free during a live round")
+end
+
 -- Onboarding, daily login and round-type presentation.
 do
 	local f = fixture(Vector2.new(390, 760), Enum.UserInputType.Touch)

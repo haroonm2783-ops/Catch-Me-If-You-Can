@@ -373,7 +373,7 @@ function RoundService:_activate()
 	self.phase = "Active"
 	self.startedAt = now()
 	self.endsAt = self.startedAt + self.modifier.duration
-	self.resultText = self.practice and "Explore NEON HEIGHTS · practice awards no XP or coins" or (self.modifier.id == "classic" and "The chase is on!" or (self.modifier.name .. " · " .. self.modifier.tagline))
+	self.resultText = self.practice and "Explore the NEON MALL · practice awards no XP or coins" or (self.modifier.id == "classic" and "The chase is on!" or (self.modifier.name .. " · " .. self.modifier.tagline))
 	for _, entry in pairs(self.roster) do
 		entry.joinedAt = self.startedAt
 		if entry.alive and entry.role == "Hunter" and entry.player.Character then
@@ -600,6 +600,50 @@ function RoundService:_infect(entry)
 	end
 end
 
+local COMPASS = { "N", "NE", "E", "SE", "S", "SW", "W", "NW" }
+
+-- Fair tracking pulse: a hunter who has not been near any runner for a while gets a clearly
+-- announced compass hint toward the nearest one. Runners are told it happened.
+function RoundService:_trackingPulse()
+	local config = self.ctx.Config.Round
+	if not config.TrackingPulseAfter or self.practice then return end
+	local current = now()
+	for _, entry in pairs(self.roster) do
+		if entry.role == "Hunter" and entry.alive and entry.player.Parent == Players then
+			local _, _, root = liveCharacter(entry.player)
+			if root then
+				local nearest, distance
+				for _, other in pairs(self.roster) do
+					if other.role == "Runner" and other.alive then
+						local _, _, otherRoot = liveCharacter(other.player)
+						if otherRoot then
+							local d = (otherRoot.Position - root.Position).Magnitude
+							if not distance or d < distance then nearest, distance = otherRoot, d end
+						end
+					end
+				end
+				entry.lastContact = entry.lastContact or current
+				if nearest and distance <= 70 then
+					entry.lastContact = current
+				elseif nearest and current - entry.lastContact >= config.TrackingPulseAfter
+					and current - (entry.lastPulse or 0) >= config.TrackingPulseCooldown then
+					entry.lastPulse, entry.lastContact = current, current
+					local offset = nearest.Position - root.Position
+					local angle = math.atan2(offset.X, -offset.Z)
+					local index = math.floor((angle / (math.pi / 4)) + 0.5) % 8 + 1
+					self:_notice(entry.player, { kind = "pulse", direction = COMPASS[index], distance = math.floor(distance / 5) * 5,
+						text = string.format("TRACKING PULSE: a runner is %d studs to the %s", math.floor(distance / 5) * 5, COMPASS[index]) })
+					for _, runner in pairs(self.roster) do
+						if runner.role == "Runner" and runner.alive then
+							self:_notice(runner.player, { kind = "toast", text = "Tracking pulse: hunters just received a direction hint. Keep moving!" })
+						end
+					end
+				end
+			end
+		end
+	end
+end
+
 function RoundService:_step()
 	if self.phase == "Waiting" then
 		local eligible = self:_eligible()
@@ -629,6 +673,7 @@ function RoundService:_step()
 		end
 	elseif self.phase == "Active" then
 		self:_checkWin()
+		if self.phase == "Active" then self:_trackingPulse() end
 	elseif self.phase == "Results" and now() >= self.endsAt then
 		self.phase, self.endsAt = "Waiting", 0
 		self.roster, self.winners = {}, {}

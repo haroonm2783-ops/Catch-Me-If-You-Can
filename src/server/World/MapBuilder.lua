@@ -509,6 +509,7 @@ function MapBuilder.Build(options)
 		neon(shell, "VaultLight", s * 16, 43.2 - math.abs(s) * 0.4 * 0.5, 0, 0.3, 0.2, 90, P.white)
 	end
 
+	for _, c in ipairs({ { -48, -38 }, { 48, 38 }, { -48, 38 }, { 48, -38 }, { 0, -38 }, { 0, 38 } }) do light(atrium, Vector3.new(c[1], F2 - 1.7, c[2]), P.white, 0.7, 34) end
 	-- Support columns on the balcony edge and glass balcony railings with designated gaps.
 	local columns = {}
 	for _, z in ipairs({ -VZ, -14, 14, VZ }) do for _, x in ipairs({ -VX, VX }) do table.insert(columns, { x, z }) end end
@@ -852,7 +853,7 @@ function MapBuilder.Build(options)
 		end
 		local ctx = storeCtx(def, folder)
 		-- Carpet and ceiling lights.
-		art(folder, "Carpet", Vector3.new(W - 1.2, 0.1, 31), Vector3.new(cx, fy + 0.1, frontZ + dir * 16.2), def.color, Enum.Material.Fabric)
+		art(folder, "Carpet", Vector3.new(W - 1.2, 0.1, 31), Vector3.new(cx, fy + 0.1, frontZ + dir * 16.2), def.color:Lerp(P.white, 0.4), Enum.Material.Fabric)
 		art(folder, "CarpetBorder", Vector3.new(W - 1.2, 0.12, 1), Vector3.new(cx, fy + 0.11, frontZ + dir * 3), def.accent, Enum.Material.SmoothPlastic)
 		for i = 1, 3 do ceilingStrip(folder, cx, ceil - 0.2, frontZ + dir * (6 + i * 7.5), W - 8, 0.8, i % 2 == 0 and def.accent or P.white) end
 		-- Front: kick wall, glazing either side of a 16 stud opening, and a header band.
@@ -873,6 +874,7 @@ function MapBuilder.Build(options)
 		blade:SetAttribute("VisualPolish", true)
 		surfaceText(blade, Enum.NormalId.Right, string.sub(def.sign, 1, 1), def.accent, 40, 0.9, 0.9)
 		surfaceText(blade, Enum.NormalId.Left, string.sub(def.sign, 1, 1), def.accent, 40, 0.9, 0.9)
+		light(folder, Vector3.new(cx, ceil - 0.4, frontZ + dir * 14), def.accent, 0.7, 30)
 		local theme = themes[def.theme]
 		if theme then theme(ctx) end
 		return folder
@@ -978,6 +980,7 @@ function MapBuilder.Build(options)
 		artBeam(court, "PendantWire", Vector3.new(-86, 12.4, z), Vector3.new(-86, ceil1, z), 0.1, P.ink)
 	end
 	sign(court, "FOOD COURT", Vector3.new(-66.2, 12.6, 0), 22, 3.6, P.orange, math.pi / 2)
+	for _, z in ipairs({ -26, 26 }) do light(court, Vector3.new(-86, ceil1 - 0.4, z), P.orange, 0.7, 32) end
 	for _, z in ipairs({ -46, 46 }) do
 		planter(court, -84, 0, z, 16, 0, true)
 		palm(court, -88, 1.4, z, 1.1, 0.1)
@@ -1025,6 +1028,8 @@ function MapBuilder.Build(options)
 	end end
 	for x = 72, 108, 12 do ceilingStrip(arcade, x, ceil1 - 0.2, 0, 0.6, 90, x % 24 == 0 and P.magenta or P.cyan) end
 	sign(arcade, "INSERT COIN", Vector3.new(110.4, 10, 0), 22, 3, P.yellow, -math.pi / 2)
+	light(arcade, Vector3.new(88, ceil1 - 0.4, -26), P.magenta, 0.8, 34)
+	light(arcade, Vector3.new(88, ceil1 - 0.4, 26), P.cyan, 0.8, 34)
 
 	-- =====================================================================================
 	-- SECOND FLOOR WINGS: Department store (east) and Sky Lounge (west)

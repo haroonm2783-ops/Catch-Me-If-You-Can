@@ -1,4 +1,4 @@
--- Original NEON HEIGHTS interface. Every persistent action goes through the server.
+-- Original NEON MALL interface. Every persistent action goes through the server.
 local Players = game:GetService("Players")
 local TweenService = game:GetService("TweenService")
 local RunService = game:GetService("RunService")
@@ -11,11 +11,12 @@ local UIController = {}
 UIController.__index = UIController
 
 local C = {
-	background = Color3.fromRGB(10, 16, 29), panel = Color3.fromRGB(18, 28, 45),
-	card = Color3.fromRGB(26, 39, 58), line = Color3.fromRGB(49, 66, 87),
-	text = Color3.fromRGB(237, 246, 255), muted = Color3.fromRGB(150, 172, 194),
-	cyan = Color3.fromRGB(68, 230, 231), coral = Color3.fromRGB(255, 112, 118),
-	amber = Color3.fromRGB(255, 204, 107), green = Color3.fromRGB(133, 235, 175),
+	background = Color3.fromRGB(14, 13, 38), panel = Color3.fromRGB(24, 22, 56),
+	card = Color3.fromRGB(36, 32, 76), line = Color3.fromRGB(74, 66, 130),
+	text = Color3.fromRGB(246, 244, 255), muted = Color3.fromRGB(170, 164, 210),
+	cyan = Color3.fromRGB(72, 228, 240), coral = Color3.fromRGB(255, 108, 120),
+	amber = Color3.fromRGB(255, 200, 92), green = Color3.fromRGB(120, 236, 170),
+	magenta = Color3.fromRGB(240, 80, 196), purple = Color3.fromRGB(140, 100, 240),
 }
 local F = {regular = Enum.Font.Gotham, medium = Enum.Font.GothamMedium, bold = Enum.Font.GothamBold, black = Enum.Font.GothamBlack}
 
@@ -110,11 +111,17 @@ local function clear(parent)
 	for _, child in ipairs(parent:GetChildren()) do child:Destroy() end
 end
 
-local function myRole(state)
+local function isQueued(ctx)
+	local required = ctx and ctx.Config and ctx.Config.Round and ctx.Config.Round.RequireQueue
+	return not required or Players.LocalPlayer:GetAttribute("CatchQueued") == true
+end
+
+-- Players who have not pressed PLAY stay in the Plaza hub; they are never spectators.
+local function myRole(state, ctx)
 	for _, record in ipairs(state.players or {}) do
 		if record.userId == Players.LocalPlayer.UserId then return record.role, record.alive end
 	end
-	if state.phase == "Active" or state.phase == "HeadStart" then return "Spectator", false end
+	if (state.phase == "Active" or state.phase == "HeadStart") and isQueued(ctx) then return "Spectator", false end
 	return "Lobby", true
 end
 
@@ -155,6 +162,19 @@ function UIController:Start()
 		Name = "CatchCityUI", ResetOnSpawn = false, IgnoreGuiInset = false,
 		DisplayOrder = 20, ZIndexBehavior = Enum.ZIndexBehavior.Sibling,
 	}, self.player:WaitForChild("PlayerGui"))
+	-- Respect notches and home indicators; the left edge stays clear for Roblox chat.
+	pcall(function() self.gui.ScreenInsets = Enum.ScreenInsets.DeviceSafeInsets end)
+	-- The Roblox player list would sit under the wallet; the Plaza board and CREW menu replace it.
+	local function hideCoreGui()
+		pcall(function()
+			local StarterGui = game:GetService("StarterGui")
+			StarterGui:SetCoreGuiEnabled(Enum.CoreGuiType.PlayerList, false)
+			StarterGui:SetCoreGuiEnabled(Enum.CoreGuiType.Backpack, false)
+		end)
+	end
+	hideCoreGui()
+	-- The CoreGui can register late on slow devices; a second pass makes the setting stick.
+	task.delay(3, hideCoreGui)
 	self.root = frame(self.gui, {Size = UDim2.fromScale(1, 1), BackgroundTransparency = 1})
 	self:_buildHeader()
 	self:_buildDock()
@@ -167,7 +187,7 @@ function UIController:Start()
 	}, 18)
 	node("UISizeConstraint", {MaxSize = Vector2.new(1180, 760), MinSize = Vector2.new(270, 160)}, self.panel)
 	stroke(self.panel)
-	gradient(self.panel, Color3.fromRGB(22, 35, 53), C.background, 110)
+	gradient(self.panel, C.panel, C.background, 110)
 	self.panelScale = node("UIScale", {Scale = 1}, self.panel)
 	frame(self.panel, {Position = UDim2.fromOffset(20, 0), Size = UDim2.fromOffset(80, 3), BackgroundColor3 = C.cyan}, 2)
 	self.panelTitle = label(self.panel, "THE COLLECTION", {Position = UDim2.fromOffset(20, 12), Size = UDim2.new(1, -90, 0, 27), Font = F.black, TextSize = 22, TextTruncate = Enum.TextTruncate.AtEnd})
@@ -225,48 +245,70 @@ function UIController:Start()
 end
 
 function UIController:_buildHeader()
-	self.header = frame(self.root, {Position = UDim2.fromOffset(18, 10), Size = UDim2.new(1, -36, 0, 68), BackgroundTransparency = 1})
-	self.brand = label(self.header, "CATCH ME\nIF YOU CAN", {Font = F.black, TextSize = 21, TextColor3 = C.text, Size = UDim2.fromOffset(220, 52), TextYAlignment = Enum.TextYAlignment.Top})
-	self.brandAccent = frame(self.header, {Position = UDim2.fromOffset(0, 56), Size = UDim2.fromOffset(36, 3), BackgroundColor3 = C.cyan}, 2)
-	self.clock = frame(self.header, {AnchorPoint = Vector2.new(0.5, 0), Position = UDim2.fromScale(0.5, 0), Size = UDim2.fromOffset(220, 67), BackgroundColor3 = C.background, BackgroundTransparency = 0.08}, 14)
-	self.clockStroke = stroke(self.clock)
-	gradient(self.clock, Color3.fromRGB(26, 43, 60), C.background)
-	self.roundTrack = frame(self.clock, {Name = "RoundProgress", Position = UDim2.new(0, 9, 1, -3), Size = UDim2.new(1, -18, 0, 2), BackgroundColor3 = C.line}, 2)
+	-- Top row: round clock centered, wallet at the right. The left edge belongs to Roblox chat.
+	self.header = frame(self.root, {Position = UDim2.fromOffset(0, 8), Size = UDim2.new(1, 0, 0, 72), BackgroundTransparency = 1})
+	self.clock = frame(self.header, {AnchorPoint = Vector2.new(0.5, 0), Position = UDim2.fromScale(0.5, 0), Size = UDim2.fromOffset(236, 70), BackgroundColor3 = C.background, BackgroundTransparency = 0.06}, 16)
+	self.clockStroke = stroke(self.clock, C.line, 0.1)
+	gradient(self.clock, C.panel, C.background)
+	frame(self.clock, {AnchorPoint = Vector2.new(0.5, 0), Position = UDim2.fromScale(0.5, 0), Size = UDim2.fromOffset(64, 3), BackgroundColor3 = C.magenta}, 2)
+	self.roundTrack = frame(self.clock, {Name = "RoundProgress", Position = UDim2.new(0, 14, 1, -7), Size = UDim2.new(1, -28, 0, 3), BackgroundColor3 = C.line}, 2)
 	self.roundFill = frame(self.roundTrack, {Size = UDim2.fromScale(1, 1), BackgroundColor3 = C.cyan}, 2)
-	self.phaseLabel = label(self.clock, "WELCOME TO NEON HEIGHTS", {Position = UDim2.fromOffset(5, 6), Size = UDim2.new(1, -10, 0, 15), TextXAlignment = Enum.TextXAlignment.Center, TextSize = 9, Font = F.bold, TextColor3 = C.cyan})
-	self.timerLabel = label(self.clock, "LOBBY", {Position = UDim2.fromOffset(5, 21), Size = UDim2.new(1, -10, 0, 29), TextXAlignment = Enum.TextXAlignment.Center, TextSize = 27, Font = F.black})
-	self.aliveLabel = label(self.clock, "Waiting for players", {Position = UDim2.fromOffset(5, 50), Size = UDim2.new(1, -10, 0, 12), TextXAlignment = Enum.TextXAlignment.Center, TextSize = 9, TextColor3 = C.muted})
-	self.wallet = frame(self.header, {AnchorPoint = Vector2.new(1, 0), Position = UDim2.fromScale(1, 0), Size = UDim2.fromOffset(180, 60), BackgroundColor3 = C.background, BackgroundTransparency = 0.08}, 12)
-	stroke(self.wallet)
-	self.coinsLabel = label(self.wallet, "0 COINS", {Position = UDim2.fromOffset(14, 8), Size = UDim2.new(1, -24, 0, 22), Font = F.bold, TextColor3 = C.amber, TextSize = 17, TextXAlignment = Enum.TextXAlignment.Right})
-	self.levelLabel = label(self.wallet, "LEVEL 1 / ROOKIE", {Position = UDim2.fromOffset(10, 35), Size = UDim2.new(1, -20, 0, 13), Font = F.medium, TextColor3 = C.muted, TextSize = 10, TextXAlignment = Enum.TextXAlignment.Right})
-	self.roleChip = label(self.root, "EXPLORE THE CITY", {Position = UDim2.fromOffset(20, 132), Size = UDim2.fromOffset(260, 22), Font = F.bold, TextSize = 11, TextColor3 = C.cyan})
+	self.phaseLabel = label(self.clock, "WELCOME TO THE PLAZA", {Position = UDim2.fromOffset(5, 8), Size = UDim2.new(1, -10, 0, 14), TextXAlignment = Enum.TextXAlignment.Center, TextSize = 10, Font = F.bold, TextColor3 = C.cyan})
+	self.timerLabel = label(self.clock, "LOBBY", {Position = UDim2.fromOffset(5, 21), Size = UDim2.new(1, -10, 0, 30), TextXAlignment = Enum.TextXAlignment.Center, TextSize = 28, Font = F.black})
+	self.aliveLabel = label(self.clock, "Waiting for players", {Position = UDim2.fromOffset(5, 50), Size = UDim2.new(1, -10, 0, 12), TextXAlignment = Enum.TextXAlignment.Center, TextSize = 10, TextColor3 = C.muted})
+	self.wallet = frame(self.header, {AnchorPoint = Vector2.new(1, 0), Position = UDim2.new(1, -12, 0, 0), Size = UDim2.fromOffset(176, 58), BackgroundColor3 = C.background, BackgroundTransparency = 0.06}, 14)
+	stroke(self.wallet, C.line, 0.1)
+	gradient(self.wallet, C.panel, C.background)
+	local coin = frame(self.wallet, {Position = UDim2.fromOffset(12, 10), Size = UDim2.fromOffset(20, 20), BackgroundColor3 = C.amber}, 10)
+	stroke(coin, Color3.fromRGB(255, 236, 170), 0.2)
+	self.coinsLabel = label(self.wallet, "0 COINS", {Position = UDim2.fromOffset(38, 7), Size = UDim2.new(1, -48, 0, 24), Font = F.black, TextColor3 = C.amber, TextSize = 17, TextXAlignment = Enum.TextXAlignment.Right})
+	self.levelLabel = label(self.wallet, "LEVEL 1 / ROOKIE", {Position = UDim2.fromOffset(10, 34), Size = UDim2.new(1, -20, 0, 14), Font = F.medium, TextColor3 = C.muted, TextSize = 10, TextXAlignment = Enum.TextXAlignment.Right})
+	self.roleChip = label(self.root, "EXPLORE THE PLAZA", {AnchorPoint = Vector2.new(0.5, 0), Position = UDim2.new(0.5, 0, 0, 86), Size = UDim2.fromOffset(320, 20), Font = F.bold, TextSize = 11, TextColor3 = C.cyan, TextXAlignment = Enum.TextXAlignment.Center})
 end
 
 function UIController:_buildDock()
-	self.dock = scroll(self.root, {Position = UDim2.fromOffset(18, 88), Size = UDim2.new(1, -36, 0, 36), ScrollBarThickness = 0}, true)
-	list(self.dock, true, 7)
-	local options = {{"Shop", "SHOP"}, {"Inventory", "LOCKER"}, {"Quests", "QUESTS"}, {"Progress", "CAREER"}, {"Leaderboard", "ROSTER"}, {"Settings", "SETTINGS"}}
+	-- Vertical menu rail on the right, below the wallet; scrolls on short screens.
+	self.dock = scroll(self.root, {AnchorPoint = Vector2.new(1, 0), Position = UDim2.new(1, -12, 0, 96), Size = UDim2.new(0, 92, 1, -250), ScrollBarThickness = 0, ClipsDescendants = true})
+	list(self.dock, false, 6)
+	local options = {{"Shop", "SHOP"}, {"Inventory", "LOCKER"}, {"Quests", "QUESTS"}, {"Progress", "CAREER"}, {"Leaderboard", "CREW"}, {"Settings", "SETTINGS"}}
 	for index, option in ipairs(options) do
-		button(self.dock, option[2], function() self:OpenMenu(option[1]) end, {Name = option[1], Size = UDim2.fromOffset(option[1] == "Leaderboard" and 85 or 78, 34), LayoutOrder = index, TextSize = 10})
+		button(self.dock, option[2], function() self:OpenMenu(option[1]) end, {Name = option[1], Size = UDim2.fromOffset(88, 38), LayoutOrder = index, TextSize = 11, BackgroundColor3 = C.panel})
 	end
 	self.emoteButton = button(self.dock, "EMOTE", function()
 		local id = (self.ctx.Profile.equipped or {}).emotes
 		if id and id ~= "" then self:_send("Emote", {id = id}) end
-	end, {Size = UDim2.fromOffset(78, 34), LayoutOrder = 7, TextSize = 10})
+	end, {Size = UDim2.fromOffset(88, 38), LayoutOrder = 7, TextSize = 11, BackgroundColor3 = C.panel})
 end
 
+-- Bottom-center call to action. In the Plaza this is the PLAY / queue control.
 function UIController:_buildHero()
-	self.hero = frame(self.root, {Position = UDim2.new(0, 22, 0.5, -78), Size = UDim2.fromOffset(440, 230), BackgroundTransparency = 1})
-	label(self.hero, "A CITY MADE FOR THE CHASE", {Position = UDim2.fromOffset(0, 0), Size = UDim2.new(1, 0, 0, 18), TextColor3 = C.cyan, TextSize = 11, Font = F.bold})
-	self.heroTitle = label(self.hero, "RUN THE CITY.\nOWN THE MOMENT.", {Position = UDim2.fromOffset(0, 28), Size = UDim2.new(1, 0, 0, 97), Font = F.black, TextSize = 35, TextWrapped = true, TextYAlignment = Enum.TextYAlignment.Top})
-	self.heroDescription = label(self.hero, "Rooftops. Shortcuts. One more escape.\nRounds start automatically when the crew is ready.", {Position = UDim2.fromOffset(0, 132), Size = UDim2.new(1, -10, 0, 42), TextColor3 = C.muted, TextSize = 13, TextWrapped = true, TextYAlignment = Enum.TextYAlignment.Top})
-	button(self.hero, "ENTER THE CITY  >", function()
-		self.visited = true self.hero.Visible = false
-		self:Toast("Explore the lobby. You join the next round automatically.", "welcome")
-	end, {Position = UDim2.fromOffset(0, 188), Size = UDim2.fromOffset(225, 42), BackgroundColor3 = C.cyan, TextColor3 = C.background})
+	self.hero = frame(self.root, {AnchorPoint = Vector2.new(0.5, 1), Position = UDim2.new(0.5, 0, 1, -96), Size = UDim2.fromOffset(280, 86), BackgroundTransparency = 1})
+	self.heroTitle = label(self.hero, "RUN THE MALL. OWN THE MOMENT.", {Position = UDim2.fromOffset(0, 0), Size = UDim2.new(1, 0, 0, 16), Font = F.bold, TextSize = 11, TextColor3 = C.cyan, TextXAlignment = Enum.TextXAlignment.Center})
+	self.heroDescription = label(self.hero, "Walk into the PLAY gate, or press the button.", {Position = UDim2.fromOffset(0, 66), Size = UDim2.new(1, 0, 0, 16), TextColor3 = C.muted, TextSize = 10, TextXAlignment = Enum.TextXAlignment.Center})
+	self.playButton = button(self.hero, "PLAY", function()
+		local queued = self.player:GetAttribute("CatchQueued") == true
+		self:_send(queued and "Leave" or "Play")
+		self.optimisticQueue = not queued
+		self.optimisticUntil = os.clock() + 1.5
+		self:_updatePlay()
+	end, {Name = "PlayButton", Position = UDim2.fromOffset(0, 20), Size = UDim2.fromOffset(280, 44), BackgroundColor3 = C.magenta, TextSize = 22, Font = F.black})
+	gradient(self.playButton, C.magenta, C.purple, 0)
 	self.saveLabel = label(self.root, "CONNECTING TO YOUR PROFILE", {Position = UDim2.new(0, 20, 1, -25), Size = UDim2.new(1, -125, 0, 15), TextColor3 = C.muted, TextSize = 9, TextTruncate = Enum.TextTruncate.AtEnd})
 	self.versionLabel = label(self.root, "BUILD " .. tostring(self.ctx.Config.Version), {Name = "BuildVersion", AnchorPoint = Vector2.new(1, 0), Position = UDim2.new(1, -20, 1, -25), Size = UDim2.fromOffset(85, 15), TextColor3 = C.muted, TextSize = 9, TextXAlignment = Enum.TextXAlignment.Right})
+end
+
+function UIController:_updatePlay()
+	if not self.playButton then return end
+	local queued = self.player:GetAttribute("CatchQueued") == true
+	if self.optimisticUntil and os.clock() < self.optimisticUntil then queued = self.optimisticQueue end
+	local state = self.ctx.State or {}
+	local count = state.queued or 0
+	self.playButton.Text = queued and "IN QUEUE  /  LEAVE" or "PLAY"
+	self.playButton.TextSize = queued and 15 or 22
+	self.playButton.BackgroundColor3 = queued and C.card or C.magenta
+	local gradientObject = self.playButton:FindFirstChildOfClass("UIGradient")
+	if gradientObject then gradientObject.Enabled = not queued end
+	self.heroDescription.Text = queued and (tostring(count) .. " queued / the chase starts automatically") or "Walk into the PLAY gate, or press the button."
 end
 
 function UIController:_buildAbilities()
@@ -298,7 +340,7 @@ function UIController:_buildTutorial()
 	self.tutorial = frame(self.root, {Name = "Tutorial", AnchorPoint = Vector2.new(0.5, 0.5), Position = UDim2.fromScale(0.5, 0.5), Size = UDim2.new(1, -40, 0, 300), BackgroundColor3 = C.background, Visible = false, ZIndex = 30}, 18)
 	node("UISizeConstraint", {MaxSize = Vector2.new(560, 330), MinSize = Vector2.new(260, 250)}, self.tutorial)
 	stroke(self.tutorial, C.cyan, 0.2)
-	gradient(self.tutorial, Color3.fromRGB(24, 40, 58), C.background, 110)
+	gradient(self.tutorial, C.panel, C.background, 110)
 	self.tutorialStep = label(self.tutorial, "", {Position = UDim2.fromOffset(22, 16), Size = UDim2.new(1, -44, 0, 16), TextSize = 10, Font = F.bold, TextColor3 = C.cyan, ZIndex = 31})
 	self.tutorialTitle = label(self.tutorial, "", {Position = UDim2.fromOffset(22, 38), Size = UDim2.new(1, -44, 0, 36), Font = F.black, TextSize = 22, TextWrapped = true, ZIndex = 31})
 	self.tutorialBody = label(self.tutorial, "", {Position = UDim2.fromOffset(22, 84), Size = UDim2.new(1, -44, 1, -158), TextSize = 14, TextColor3 = C.muted, TextWrapped = true, TextYAlignment = Enum.TextYAlignment.Top, ZIndex = 31})
@@ -313,7 +355,7 @@ function UIController:_tutorialPages()
 		or (pad and "Sprint: L3     Slide: B     Jump / vault: A     Tag: R2     Locker: Y")
 		or "Sprint: hold Shift     Slide: C while running     Jump / vault: Space     Tag: F"
 	return {
-		{title = "WELCOME TO NEON HEIGHTS", body = "Every round, a few HUNTERS chase the RUNNERS across the rooftops. The round starts by itself when enough players are ready."},
+		{title = "WELCOME TO THE NEON MALL", body = "Every round, a few HUNTERS chase the RUNNERS across the rooftops. The round starts by itself when enough players are ready."},
 		{title = "RUNNERS: STAY FREE", body = "Take ramps, bridges and ladders. Break line of sight and use the moving gates. Outlast the clock to win."},
 		{title = "HUNTERS: TAG THEM ALL", body = "Runners get a head start. Get close and tag them. In some rounds caught runners join the hunt, so watch the banner for the round type."},
 		{title = "MOVE LIKE A LEGEND", body = controls .. "\n\nSlide under pressure, vault over obstacles, and keep your momentum."},
@@ -350,14 +392,14 @@ end
 function UIController:_finishTutorial()
 	if self.tutorial then self.tutorial.Visible = false end
 	self.visited = true
-	if self.hero then self.hero.Visible = false end
+	self:_responsive()
 	if (self.ctx.Profile.settings or {}).tutorialDone ~= true then
 		self:_send("Settings", {tutorialDone = true})
 	end
 end
 
 function UIController:_buildToast()
-	self.toast = frame(self.root, {AnchorPoint = Vector2.new(0.5, 0), Position = UDim2.new(0.5, 0, 0, 134), Size = UDim2.new(0.8, 0, 0, 54), Visible = false, BackgroundColor3 = C.card, ZIndex = 20}, 12)
+	self.toast = frame(self.root, {AnchorPoint = Vector2.new(0.5, 0), Position = UDim2.new(0.5, 0, 0, 112), Size = UDim2.new(0.8, 0, 0, 54), Visible = false, BackgroundColor3 = C.card, ZIndex = 20}, 12)
 	node("UISizeConstraint", {MaxSize = Vector2.new(600, 90)}, self.toast)
 	self.toastStroke = stroke(self.toast, C.cyan)
 	self.toastText = label(self.toast, "", {Position = UDim2.fromOffset(14, 8), Size = UDim2.new(1, -28, 1, -16), TextSize = 13, Font = F.medium, TextWrapped = true, TextXAlignment = Enum.TextXAlignment.Center})
@@ -386,33 +428,53 @@ function UIController:_responsive()
 	local size = self.root.AbsoluteSize
 	local small = size.X < 700
 	local short = size.Y < 560
+	local touch = UserInputService:GetLastInputType() == Enum.UserInputType.Touch
 	self.compact = small
-	self.brand.TextSize = small and 13 or 21
-	self.brand.Size = UDim2.fromOffset(small and 115 or 220, 52)
-	self.brand.Visible = size.X >= 390
-	self.brandAccent.Visible = self.brand.Visible
-	self.clock.Position = size.X < 390 and UDim2.fromOffset(64, 0) or UDim2.fromScale(0.5, 0)
-	self.clock.Size = UDim2.fromOffset(small and 128 or 220, 67)
-	self.phaseLabel.TextSize = small and 7 or 9
-	self.wallet.Size = UDim2.fromOffset(small and 112 or 180, 60)
-	self.coinsLabel.TextSize = small and 12 or 17
-	self.levelLabel.TextSize = small and 7 or 10
-	self.hero.Size = UDim2.fromOffset(math.min(size.X - 44, 440), short and 190 or 230)
-	self.hero.Position = short and UDim2.fromOffset(22, 156) or UDim2.new(0, 22, 0.5, -78)
-	self.heroTitle.TextSize = small and 26 or 35
-	-- Short landscape displays need a usable content viewport below the dock.
-	self.panel.Size = UDim2.new(1, -24, 1, short and -136 or -160)
-	self.panel.Position = UDim2.new(0.5, 0, 0.5, short and 58 or 60)
+	-- Top row: clock stays centered; wallet shrinks beside it on phones.
+	self.clock.Size = UDim2.fromOffset(small and 168 or 236, small and 62 or 70)
+	self.phaseLabel.TextSize = small and 8 or 10
+	self.timerLabel.TextSize = small and 22 or 28
+	self.timerLabel.Position = UDim2.fromOffset(5, small and 17 or 21)
+	self.aliveLabel.Position = UDim2.fromOffset(5, small and 43 or 50)
+	self.aliveLabel.TextSize = small and 8 or 10
+	self.wallet.Size = UDim2.fromOffset(small and 120 or 176, small and 50 or 58)
+	self.coinsLabel.TextSize = small and 13 or 17
+	self.coinsLabel.Position = UDim2.fromOffset(small and 34 or 38, small and 5 or 7)
+	self.levelLabel.TextSize = small and 8 or 10
+	self.levelLabel.Position = UDim2.fromOffset(10, small and 29 or 34)
+	self.roleChip.Position = UDim2.new(0.5, 0, 0, small and 76 or 86)
+	-- Right-hand menu rail: sits under the wallet and above the touch buttons.
+	local railTop = small and 70 or 96
+	self.dock.Position = UDim2.new(1, -10, 0, railTop)
+	self.dock.Size = UDim2.new(0, small and 78 or 92, 1, -(railTop + (touch and 170 or 110)))
+	for _, child in ipairs(self.dock:GetChildren()) do
+		if child:IsA("GuiButton") then child.Size = UDim2.fromOffset(small and 74 or 88, small and 34 or 38) end
+	end
+	self.dock.Visible = not self.menu
+	-- Menus are modal; keep them clear of the top bar and the clock.
+	self.panel.Size = UDim2.new(1, -24, 1, short and -104 or -150)
+	self.panel.Position = UDim2.new(0.5, 0, 0.5, short and 42 or 50)
 	self.panelTitle.TextSize = small and 18 or 22
 	self.panelSubtitle.TextSize = small and 10 or 11
 	self.panelSubtitle.TextTruncate = Enum.TextTruncate.AtEnd
-	self.roleChip.Visible = not short and not self.menu
-	self.hero.Visible = not self.visited and not self.menu and (self.ctx.State.phase == "Waiting" or self.ctx.State.phase == "Intermission") and not short
-	self.abilities.Visible = not self.menu and UserInputService:GetLastInputType() ~= Enum.UserInputType.Touch and not short
+	self.roleChip.Visible = not self.menu
+	-- PLAY control: Plaza only. Hidden during menus, the tutorial, and active rounds.
+	local state = self.ctx.State or {}
+	local role = myRole(state, self.ctx)
+	local inRound = (state.phase == "Active" or state.phase == "HeadStart") and role ~= "Lobby"
+	local tutorial = self.tutorial and self.tutorial.Visible
+	self.hero.Size = UDim2.fromOffset(math.min(size.X - 24, 280), 86)
+	self.playButton.Size = UDim2.fromOffset(math.min(size.X - 24, 280), 44)
+	self.hero.Position = UDim2.new(0.5, 0, 1, touch and (short and -16 or -28) or -96)
+	self.hero.Visible = not self.menu and not tutorial and not inRound and role ~= "Spectator"
+	self.heroTitle.Visible = not short
+	self.heroDescription.Visible = not short
+	self.abilities.Visible = not self.menu and not touch and not short and (inRound or role == "Spectator" or state.phase == "Active")
 	self.spectator.Size = UDim2.fromOffset(math.min(320, size.X - 36), 62)
-	self.spectator.Position = UDim2.new(0.5, 0, 1, UserInputService.TouchEnabled and -32 or -96)
+	self.spectator.Position = UDim2.new(0.5, 0, 1, touch and -32 or -96)
 	self.saveLabel.Visible = not short
 	self.versionLabel.Visible = not short
+	self:_updatePlay()
 	self:_updateSpectator()
 end
 
@@ -478,7 +540,7 @@ end
 
 function UIController:_renderShop()
 	local inventory = self.menu == "Inventory"
-	self.panelTitle.Text = inventory and "THE FIT STUDIO" or "NEON HEIGHTS / COLLECTION"
+	self.panelTitle.Text = inventory and "THE FIT STUDIO" or "NEON MALL / COLLECTION"
 	self.panelSubtitle.Text = inventory and "Build your signature. Every mask works with every outfit." or "Original citywear. Try on the look. Keep the chase fair."
 	local compact = self.panel.AbsoluteSize.X < 760 or self.panelContent.AbsoluteSize.Y < 390
 	local portrait = self.panel.AbsoluteSize.X < 540
@@ -500,8 +562,8 @@ function UIController:_renderShop()
 		Size = compact and UDim2.new(1, -5, 0, detailHeight) or UDim2.new(0.44, -8, 1, 0),
 		BackgroundColor3 = C.panel,
 	}, 16)
-	stroke(detail, Color3.fromRGB(65, 91, 112), 0.3)
-	gradient(detail, Color3.fromRGB(35, 57, 74), Color3.fromRGB(13, 22, 38), 115)
+	stroke(detail, C.line, 0.3)
+	gradient(detail, Color3.fromRGB(58, 46, 118), Color3.fromRGB(20, 18, 48), 115)
 	local collection = frame(surface, {
 		Position = compact and UDim2.fromOffset(0, detailHeight + 18) or UDim2.new(0.44, 10, 0, 0),
 		Size = compact and UDim2.new(1, -5, 0, gridHeight + 78) or UDim2.new(0.56, -10, 1, 0), BackgroundTransparency = 1,
@@ -526,7 +588,7 @@ function UIController:_renderShop()
 	for index, item in ipairs(visible) do
 		local itemColor = accent(item)
 		local chosen = self.selectedItem == item.id
-		local card = button(grid, "", function() self.selectedItem = item.id self:_renderMenu() end, {Name = "Item_" .. item.id, LayoutOrder = index, BackgroundColor3 = chosen and Color3.fromRGB(31, 58, 72) or C.card})
+		local card = button(grid, "", function() self.selectedItem = item.id self:_renderMenu() end, {Name = "Item_" .. item.id, LayoutOrder = index, BackgroundColor3 = chosen and Color3.fromRGB(58, 50, 112) or C.card})
 		frame(card, {Position = UDim2.fromOffset(12, 12), Size = UDim2.fromOffset(30, 4), BackgroundColor3 = itemColor}, 2)
 		label(card, string.upper(item.rarity or "Common"), {Position = UDim2.fromOffset(12, 25), Size = UDim2.new(1, -24, 0, 15), TextSize = 9, Font = F.bold, TextColor3 = itemColor})
 		label(card, item.name, {Position = UDim2.fromOffset(12, 47), Size = UDim2.new(1, -24, 0, 47), Font = F.bold, TextSize = portrait and 14 or 18, TextWrapped = true, TextYAlignment = Enum.TextYAlignment.Top})
@@ -551,7 +613,7 @@ function UIController:_renderItemDetail(parent, item, horizontal)
 	stroke(plate, accent(item), 0.5)
 	local view = node("ViewportFrame", {
 		Name = "CharacterPreview", BackgroundTransparency = 1, Size = UDim2.new(1, 0, 1, -36),
-		Ambient = Color3.fromRGB(190, 207, 230), LightColor = Color3.fromRGB(255, 240, 219), LightDirection = Vector3.new(-1, -0.6, -1),
+		Ambient = Color3.fromRGB(205, 200, 235), LightColor = Color3.fromRGB(255, 240, 224), LightDirection = Vector3.new(-1, -0.6, -1),
 	}, stage)
 	local world = node("WorldModel", {}, view)
 	local extra = table.clone(equipped)
@@ -689,7 +751,7 @@ end
 
 function UIController:_renderSettings()
 	self.panelTitle.Text = "MAKE IT YOURS"
-	self.panelSubtitle.Text = "NEON HEIGHTS / " .. tostring(self.ctx.Config.Version or "v0.2.0") .. " / Preferences save with your profile."
+	self.panelSubtitle.Text = "NEON MALL / " .. tostring(self.ctx.Config.Version or "v0.2.0") .. " / Preferences save with your profile."
 	local container = scroll(self.panelContent)
 	list(container, false, 10)
 	local settings = self.ctx.Profile.settings or {}
@@ -713,7 +775,7 @@ function UIController:_renderSettings()
 end
 
 function UIController:_renderLeaderboard()
-	self.panelTitle.Text = "THE CITY CREW"
+	self.panelTitle.Text = "THE MALL CREW"
 	self.panelSubtitle.Text = "Current server / lifetime rating, wins, and tags"
 	local container = scroll(self.panelContent)
 	list(container, false, 7)
@@ -727,7 +789,7 @@ function UIController:_renderLeaderboard()
 	for index, player in ipairs(players) do
 		local role = "Lobby"
 		for _, entry in ipairs(self.ctx.State.players or {}) do if entry.userId == player.UserId then role = entry.role break end end
-		local row = frame(container, {Size = UDim2.new(1, -5, 0, 72), LayoutOrder = index, BackgroundColor3 = player == self.player and Color3.fromRGB(27, 57, 69) or C.panel}, 10)
+		local row = frame(container, {Size = UDim2.new(1, -5, 0, 72), LayoutOrder = index, BackgroundColor3 = player == self.player and Color3.fromRGB(52, 48, 108) or C.panel}, 10)
 		label(row, string.format("%02d", index), {Position = UDim2.fromOffset(12, 10), Size = UDim2.fromOffset(33, 25), TextColor3 = index == 1 and C.amber or C.muted, Font = F.black, TextSize = 20})
 		label(row, player.DisplayName .. (player == self.player and "  (YOU)" or ""), {Position = UDim2.fromOffset(54, 10), Size = UDim2.new(1, -68, 0, 23), TextSize = 14, Font = F.bold, TextTruncate = Enum.TextTruncate.AtEnd})
 		label(row, string.upper(role) .. "  /  LV " .. number(stat(player, "Level")) .. "  /  " .. number(stat(player, "Rating")) .. " RATING  /  " .. number(stat(player, "Wins")) .. " WINS  /  " .. number(stat(player, "Tags")) .. " TAGS", {Position = UDim2.fromOffset(54, 39), Size = UDim2.new(1, -68, 0, 24), TextColor3 = C.muted, TextSize = self.compact and 8 or 10, TextWrapped = true})
@@ -743,14 +805,14 @@ function UIController:_renderResults()
 	local container = scroll(self.panelContent)
 	list(container, false, 12)
 	local headline = frame(container, {Name = "WinnerHeadline", Size = UDim2.new(1, -5, 0, 132), LayoutOrder = 0}, 16)
-	gradient(headline, Color3.fromRGB(65, 48, 35), Color3.fromRGB(24, 32, 48), 20)
+	gradient(headline, Color3.fromRGB(112, 52, 110), Color3.fromRGB(26, 24, 60), 20)
 	stroke(headline, C.amber, 0.4)
-	label(headline, state.practice and "NEON HEIGHTS / PRACTICE" or "NEON HEIGHTS / VICTORY LAP", {Position = UDim2.fromOffset(18, 16), Size = UDim2.new(1, -36, 0, 18), TextSize = 10, Font = F.bold, TextColor3 = C.amber, TextXAlignment = Enum.TextXAlignment.Center})
+	label(headline, state.practice and "NEON MALL / PRACTICE" or "NEON MALL / VICTORY LAP", {Position = UDim2.fromOffset(18, 16), Size = UDim2.new(1, -36, 0, 18), TextSize = 10, Font = F.bold, TextColor3 = C.amber, TextXAlignment = Enum.TextXAlignment.Center})
 	label(headline, state.resultText or "ROUND COMPLETE", {Position = UDim2.fromOffset(18, 47), Size = UDim2.new(1, -36, 0, 60), TextSize = 30, Font = F.black, TextColor3 = C.text, TextWrapped = true, TextXAlignment = Enum.TextXAlignment.Center, TextScaled = true})
 	for index, userId in ipairs(winners) do
 		local name = "Player " .. tostring(userId)
 		for _, entry in ipairs(state.players or {}) do if entry.userId == userId then name = entry.displayName or entry.name break end end
-		local card = frame(container, {Size = UDim2.new(1, -5, 0, 86), LayoutOrder = index, BackgroundColor3 = userId == self.player.UserId and Color3.fromRGB(42, 53, 56) or C.panel}, 12)
+		local card = frame(container, {Size = UDim2.new(1, -5, 0, 86), LayoutOrder = index, BackgroundColor3 = userId == self.player.UserId and Color3.fromRGB(60, 52, 100) or C.panel}, 12)
 		label(card, string.format("%02d", index), {Position = UDim2.fromOffset(17, 18), Size = UDim2.fromOffset(48, 50), TextColor3 = C.amber, Font = F.black, TextSize = 32})
 		label(card, "CHASE CHAMPION", {Position = UDim2.fromOffset(78, 16), Size = UDim2.new(1, -96, 0, 16), TextColor3 = C.amber, Font = F.bold, TextSize = 9})
 		label(card, name .. (userId == self.player.UserId and " / YOU" or ""), {Position = UDim2.fromOffset(78, 40), Size = UDim2.new(1, -96, 0, 27), Font = F.bold, TextSize = 20, TextTruncate = Enum.TextTruncate.AtEnd})
@@ -814,7 +876,7 @@ end
 
 function UIController:_updateSpectator()
 	local state = self.ctx.State
-	local role = myRole(state)
+	local role = myRole(state, self.ctx)
 	local spectating = role == "Spectator" and (state.phase == "Active" or state.phase == "HeadStart")
 	self.spectator.Visible = spectating and not self.menu
 	if not spectating then
@@ -853,7 +915,7 @@ function UIController:_tick()
 	self.roundFill.Size = UDim2.fromScale(state.phase == "Waiting" and 1 or math.clamp(remaining / math.max(durations[state.phase] or 1, 1), 0, 1), 1)
 	self.roundFill.BackgroundColor3 = final and C.coral or C.cyan
 	if final then self.phaseLabel.Text = state.lastRunner and "LAST RUNNER / FINAL CHASE" or "FINAL CHASE" self.phaseLabel.TextColor3 = C.coral end
-	local role = myRole(state)
+	local role = myRole(state, self.ctx)
 	for action, widgets in pairs(self.abilityLabels) do
 		local deadline = self.player:GetAttribute("Catch" .. action .. "ReadyAt") or 0
 		local cooldown = math.max(0, deadline - now)
@@ -865,6 +927,7 @@ function UIController:_tick()
 		widgets.status.TextColor3 = not enabled and C.muted or (cooldown > 0 and C.amber or C.cyan)
 		widgets.fill.BackgroundColor3 = not enabled and C.line or (cooldown > 0 and C.amber or C.cyan)
 	end
+	self:_updatePlay()
 	if self.wasSpectating then self:_updateSpectator() end
 	if self.pendingCameraRestore and not self.wasSpectating then self:_restoreCamera() end
 end
@@ -872,17 +935,17 @@ end
 function UIController:OnState(state)
 	if not self.gui then return end
 	local phase = state.phase or "Waiting"
-	local role = myRole(state)
+	local role = myRole(state, self.ctx)
 	local active = phase == "Active" or phase == "HeadStart"
-	local labels = {Waiting = "WELCOME TO NEON HEIGHTS", Intermission = "NEXT CHASE STARTS IN", HeadStart = "RUNNERS GET A HEAD START", Active = "THE CHASE IS ON", Results = "NEXT UP / CITY PODIUM"}
+	local labels = {Waiting = "WELCOME TO THE PLAZA", Intermission = "NEXT CHASE STARTS IN", HeadStart = "RUNNERS GET A HEAD START", Active = "THE CHASE IS ON", Results = "NEXT UP / CHAMPIONS"}
 	local modifier = state.modifier
 	local special = modifier and modifier.id ~= "classic" and not state.practice
 	if special and phase == "Intermission" then labels.Intermission = "NEXT: " .. modifier.name .. " IN"
 	elseif special and phase == "Active" then labels.Active = modifier.name end
-	self.phaseLabel.Text = state.practice and "STUDIO / SOLO PRACTICE" or (labels[phase] or "NEON HEIGHTS")
+	self.phaseLabel.Text = state.practice and "STUDIO / SOLO PRACTICE" or (labels[phase] or "NEON MALL")
 	self.phaseLabel.TextColor3 = C.cyan
-	self.aliveLabel.Text = active and (tostring(state.aliveRunners or 0) .. " RUNNERS LEFT") or (phase == "Waiting" and "Waiting for the crew" or (state.mapName or "NEON HEIGHTS"))
-	self.roleChip.Text = state.practice and "PRACTICE / NO PROGRESSION REWARDS" or (active and string.upper(role) .. " / " .. (role == "Hunter" and "TAG EVERY RUNNER" or role == "Runner" and "SURVIVE THE CHASE" or "NEXT ROUND IS YOURS") or "EXPLORE THE CITY")
+	self.aliveLabel.Text = active and (tostring(state.aliveRunners or 0) .. " RUNNERS LEFT") or (phase == "Waiting" and "Waiting for the crew" or (state.mapName or "NEON MALL"))
+	self.roleChip.Text = state.practice and "PRACTICE / NO PROGRESSION REWARDS" or (active and string.upper(role) .. " / " .. (role == "Hunter" and "TAG EVERY RUNNER" or role == "Runner" and "SURVIVE THE CHASE" or "NEXT ROUND IS YOURS") or "EXPLORE THE PLAZA")
 	self.roleChip.TextColor3 = role == "Hunter" and C.coral or C.cyan
 	self.emoteButton.Visible = not active
 	if active and (self.lastRound ~= state.roundId or self.lastRole ~= role) then
@@ -933,7 +996,11 @@ end
 
 function UIController:OnNotice(notice)
 	if not self.gui or type(notice) ~= "table" then return end
-	if notice.text then self:Toast(notice.text, notice.kind) end
+	if notice.kind == "openMenu" and type(notice.menu) == "string" then
+		if self.menu ~= notice.menu then self:OpenMenu(notice.menu) end
+		return
+	end
+	if notice.text then self:Toast(notice.text, notice.kind == "pulse" and "unlock" or notice.kind) end
 	if notice.kind == "purchase" or notice.kind == "unlock" then
 		self.pendingId = nil
 		if self.menu == "Shop" or self.menu == "Inventory" then self:_renderMenu() end
