@@ -4,7 +4,7 @@ local Config = {
 	Version = "0.3.0",
 	Round = {
 		MaxPlayers = 12, MinimumPlayers = 2, Duration = 180, Intermission = 16,
-		ResultsDuration = 10, HeadStart = 5, FinalSeconds = 30, RespawnDelay = 2,
+		ResultsDuration = 10, HeadStart = 5, FinalSeconds = 30, RespawnDelay = 2, ScareDistance = 34,
 		StudioSolo = true,
 	},
 	Movement = {

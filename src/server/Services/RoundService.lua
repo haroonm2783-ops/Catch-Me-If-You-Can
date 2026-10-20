@@ -576,6 +576,30 @@ function RoundService:_infect(entry)
 	end
 end
 
+-- Face mood for a player: purely presentational, derived from facts the server already owns.
+function RoundService:MoodFor(player)
+	if self.phase == "Results" then
+		if table.find(self.winners, player.UserId) then return "Win" end
+		return self.roster[player.UserId] and "Lose" or "Idle"
+	end
+	if not self:_playingPhase() then return "Idle" end
+	local entry = self.roster[player.UserId]
+	if not entry or not entry.alive then return "Idle" end
+	if entry.role == "Hunter" then return "Hunt" end
+	local character, _, root = liveCharacter(player)
+	if not character then return "Idle" end
+	if character:GetAttribute("CatchHiding") == true then return "Hide" end
+	for _, other in pairs(self.roster) do
+		if other.role == "Hunter" and other.alive and not self.departing[other.player] then
+			local _, _, hunterRoot = liveCharacter(other.player)
+			if hunterRoot and (hunterRoot.Position - root.Position).Magnitude <= self.ctx.Config.Round.ScareDistance then
+				return "Scared"
+			end
+		end
+	end
+	return "Run"
+end
+
 function RoundService:_step()
 	if self.phase == "Waiting" then
 		local eligible = self:_eligible()

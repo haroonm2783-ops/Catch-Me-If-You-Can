@@ -6,11 +6,11 @@ local Appearance = require(ReplicatedStorage:WaitForChild("CatchShared"):WaitFor
 local CosmeticService = {}
 CosmeticService.__index = CosmeticService
 
-local plateStyles = {
-	name_rookie = {label="CITY NEWCOMER",color=Color3.fromRGB(160,189,210)},
-	name_survivor = {label="UNTOUCHABLE",color=Color3.fromRGB(73,227,204)},
-	name_legend = {label="SKYLINE LEGEND",color=Color3.fromRGB(244,194,88)},
-}
+local function plateStyle(catalog, plateId)
+	local item = catalog and (catalog.Get(plateId) or catalog.Get("name_rookie"))
+	local rgb = item and item.accent or {160,189,210}
+	return {label = item and item.name or "MALL NEWCOMER", color = Color3.fromRGB(rgb[1],rgb[2],rgb[3])}
+end
 
 local function text(parent, name, value, size, position, color, bold)
 	local label = Instance.new("TextLabel")
@@ -28,21 +28,30 @@ local function text(parent, name, value, size, position, color, bold)
 	return label
 end
 
-local function nameplate(folder, rig, displayName, plateId, title)
+local function nameplate(folder, rig, displayName, plateId, title, catalog, userId)
 	local head = rig:FindFirstChild("Head")
 	if not head then return end
-	local style = plateStyles[plateId] or plateStyles.name_rookie
+	local style = plateStyle(catalog, plateId)
 	local gui = Instance.new("BillboardGui")
 	gui.Name = "CatchNameplate"
 	gui.Adornee = head
-	gui.Size = UDim2.fromOffset(190,45)
-	gui.StudsOffset = Vector3.new(0,1.45,0)
+	gui.Size = UDim2.fromOffset(200,52)
+	gui.StudsOffset = Vector3.new(0,1.65,0)
 	gui.AlwaysOnTop = false
 	gui.MaxDistance = 70
 	gui.Parent = folder
-	text(gui,"Identity",displayName,UDim2.fromScale(1,0.58),UDim2.fromScale(0,0),Color3.fromRGB(245,246,255),true)
+	text(gui,"Identity",displayName,UDim2.fromScale(1,0.55),UDim2.fromScale(0,0),Color3.fromRGB(255,255,255),true)
+	-- A per-player identity bar keeps every runner recognizable whatever they wear.
+	local bar = Instance.new("Frame")
+	bar.Name = "IdentityBar"
+	bar.BackgroundColor3 = Appearance.IdentityColor(userId)
+	bar.BorderSizePixel = 0
+	bar.AnchorPoint = Vector2.new(0.5,0)
+	bar.Position = UDim2.fromScale(0.5,0.56)
+	bar.Size = UDim2.fromOffset(46,3)
+	bar.Parent = gui
 	if title or plateId ~= "" then
-		text(gui,"Title",title or style.label,UDim2.fromScale(1,0.42),UDim2.fromScale(0,0.58),style.color,false)
+		text(gui,"Title",title or style.label,UDim2.fromScale(1,0.38),UDim2.fromScale(0,0.62),style.color,false)
 	end
 end
 
@@ -63,10 +72,15 @@ local function ownedEquipment(ctx, profile)
 end
 
 function CosmeticService.new(ctx)
-	return setmetatable({ctx=ctx, connections={}, playerConnections={}, characterConnections={}, emotes={}, lastEmote={}, podiums=nil, podiumSpin=nil},CosmeticService)
+	return setmetatable({ctx=ctx, connections={}, playerConnections={}, characterConnections={}, emotes={}, lastEmote={}, podiums=nil, podiumSpin=nil, pendingLook={}, moodClock=0},CosmeticService)
 end
 
-function CosmeticService:Apply(player, refreshLoadingAppearance)
+function CosmeticService:_inRound(player)
+	local round = self.ctx.Services.RoundService
+	return round ~= nil and round.IsActive ~= nil and round:IsActive(player) == true
+end
+
+function CosmeticService:Apply(player, refreshLoadingAppearance, force)
 	local data = self.ctx.Services.DataService
 	local profile = data and data:Get(player)
 	local rig = player.Character
@@ -75,10 +89,20 @@ function CosmeticService:Apply(player, refreshLoadingAppearance)
 	-- outfit once while loading; DataService reapplies verified owned items on load.
 	if not profile and not refreshLoadingAppearance and rig:FindFirstChild("CatchAppearance")
 		and rig:GetAttribute("CatchAppearanceVersion") == Appearance.Version then return false end
+	-- Never change a participant's silhouette mid-chase: the choice is saved at once but the
+	-- new look is applied when they are next out of the round (results, lobby, or respawn).
+	if profile and not force and rig:FindFirstChild("CatchAppearance") and self:_inRound(player) then
+		if not self.pendingLook[player] then
+			self.pendingLook[player] = true
+			self.ctx.Remotes.Notice:FireClient(player,{kind="toast",text="Saved! Your new look appears after this round."})
+		end
+		return true
+	end
+	self.pendingLook[player] = nil
 	local equipped = profile and ownedEquipment(self.ctx,profile) or self.ctx.Catalog.DefaultEquipment
-	local folder = Appearance.Apply(rig,equipped.skins,equipped.masks,equipped)
+	local folder = Appearance.Apply(rig,equipped.skins,equipped.masks,equipped,{userId=player.UserId})
 	if not folder then return false end
-	nameplate(folder,rig,player.DisplayName,equipped.nameplates)
+	nameplate(folder,rig,player.DisplayName,equipped.nameplates,nil,self.ctx.Catalog,player.UserId)
 	Appearance.ApplyRole(rig,player:GetAttribute("RoundRole") or rig:GetAttribute("RoundRole") or "Lobby")
 	local humanoid = rig:FindFirstChildOfClass("Humanoid")
 	if humanoid then humanoid.DisplayDistanceType = Enum.HumanoidDisplayDistanceType.None end
@@ -194,11 +218,11 @@ function CosmeticService:ShowWinners(players)
 		local profile = self.ctx.Services.DataService:Get(player)
 		if profile then
 			local equipped = ownedEquipment(self.ctx,profile)
-			local rig = Appearance.BuildPreview(equipped.skins,equipped.masks,equipped)
+			local rig = Appearance.BuildPreview(equipped.skins,equipped.masks,equipped,{userId=player.UserId})
 			rig.Name = "Winner_"..tostring(player.UserId)
 			rig.Parent = folder
 			rig:PivotTo(positions[index])
-			nameplate(rig.CatchAppearance,rig,player.DisplayName,equipped.nameplates,"CHASE CHAMPION")
+			nameplate(rig.CatchAppearance,rig,player.DisplayName,equipped.nameplates,"CHASE CHAMPION",self.ctx.Catalog,player.UserId)
 			local animate = Appearance.CreatePreviewPose(rig,equipped.victories)
 			if animate then
 				animate(0)
@@ -269,6 +293,33 @@ function CosmeticService:_watchPlayer(player)
 	if player.Character then applyWhenReady(player.Character) end
 end
 
+-- Moods drive replicated face geometry; the round service owns the facts behind them.
+function CosmeticService:_updateMoods()
+	local round = self.ctx.Services.RoundService
+	if not round or not round.MoodFor then return end
+	for _, player in ipairs(Players:GetPlayers()) do
+		local rig = player.Character
+		if rig and rig:FindFirstChild("CatchAppearance") then
+			local mood = round:MoodFor(player)
+			if rig:GetAttribute("CatchMood") ~= mood then rig:SetAttribute("CatchMood",mood) end
+			Appearance.SetMood(rig,mood)
+			local plate = rig.CatchAppearance:FindFirstChild("CatchNameplate")
+			if plate then
+				local visible = rig:GetAttribute("CatchHiding") ~= true
+				if plate.Enabled ~= visible then plate.Enabled = visible end
+			end
+		end
+	end
+end
+
+function CosmeticService:_flushPending()
+	for player in pairs(self.pendingLook) do
+		if not self:_inRound(player) then
+			self:Apply(player,false,true)
+		end
+	end
+end
+
 function CosmeticService:_updateTrails()
 	for _, player in ipairs(Players:GetPlayers()) do
 		local rig = player.Character
@@ -292,7 +343,16 @@ function CosmeticService:Start()
 	local elapsed = 0
 	table.insert(self.connections, RunService.Heartbeat:Connect(function(dt)
 		elapsed += dt
-		if elapsed >= 0.15 then elapsed = 0; self:_updateTrails() end
+		if elapsed >= 0.15 then
+			self.moodClock += elapsed
+			elapsed = 0
+			self:_updateTrails()
+			if self.moodClock >= 0.45 then
+				self.moodClock = 0
+				self:_flushPending()
+				self:_updateMoods()
+			end
+		end
 	end))
 	table.insert(self.connections,Players.PlayerAdded:Connect(function(player) self:_watchPlayer(player) end))
 	table.insert(self.connections,Players.PlayerRemoving:Connect(function(player)
@@ -302,6 +362,7 @@ function CosmeticService:Start()
 		self.playerConnections[player] = nil
 		self.characterConnections[player] = nil
 		self.lastEmote[player] = nil
+		self.pendingLook[player] = nil
 	end))
 	for _, player in ipairs(Players:GetPlayers()) do self:_watchPlayer(player) end
 end

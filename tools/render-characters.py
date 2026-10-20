@@ -72,7 +72,7 @@ def font(size, bold=False):
     return ImageFont.load_default(size=size)
 
 
-def draw_model(image, parts, box, camera):
+def draw_model(image, parts, box, camera, view="full"):
     width, height = box[2]-box[0], box[3]-box[1]
     tile = np.array(image.crop(box))
     depth = np.full((height,width), np.inf, dtype=np.float32)
@@ -91,7 +91,6 @@ def draw_model(image, parts, box, camera):
             if magnitude < 1e-10:
                 continue
             normal /= magnitude
-            # Keep lighting independent of any accidental triangle winding differences.
             if np.dot(normal,points.mean(axis=0)-np.array(part["cf"][:3])) < 0:
                 normal = -normal
             brightness = 0.67+0.33*max(0,np.dot(normal,light))
@@ -99,12 +98,16 @@ def draw_model(image, parts, box, camera):
                 brightness = 1.12
             color = np.minimum(255,np.array(part["color"])*255*brightness)
             faces.append((points @ projection,color,part["alpha"]))
-    coordinates = np.concatenate([face[0] for face in faces])
-    lower, upper = coordinates.min(axis=0), coordinates.max(axis=0)
-    # Fixed scale across outfits preserves silhouette comparisons.
-    scale = min((width-26)/4.5,(height-25)/7.3)
-    ox = width/2 - (lower[0]+upper[0])*scale/2
-    oy = height-10-upper[1]*scale
+    if view == "head":
+        focus = np.array([0,2.35,0.0]) @ projection
+        scale = min(width,height)/2.9
+        ox = width/2 - focus[0]*scale
+        oy = height/2 - focus[1]*scale
+    else:
+        focus = np.array([0,-0.15,0.0]) @ projection
+        scale = min((width-20)/4.6,(height-20)/6.9)
+        ox = width/2 - focus[0]*scale
+        oy = height/2 - focus[1]*scale
     for points, color, alpha in sorted(faces,key=lambda f:f[0][:,2].mean(),reverse=True):
         projected = [(ox+p[0]*scale,oy+p[1]*scale,p[2]) for p in points]
         for i in range(1,len(projected)-1):
@@ -131,38 +134,38 @@ def draw_model(image, parts, box, camera):
     image.paste(Image.fromarray(tile),box[:2])
 
 
+def sheet(specimens, columns, cell, title, views, output):
+    rows = math.ceil(len(specimens)/columns)
+    width, height = columns*cell[0]+36, rows*cell[1]+130
+    image = Image.new("RGB",(width,height),(250,244,236))
+    draw = ImageDraw.Draw(image)
+    draw.text((30,22),title,font=font(34,True),fill=(40,40,70))
+    draw.text((32,70),"Geometry preview - not Roblox Studio rendering. Materials, lighting and VFX need Studio review.",font=font(15),fill=(110,110,140))
+    for i,specimen in enumerate(specimens):
+        x,y = 18+(i%columns)*cell[0],110+(i//columns)*cell[1]
+        draw.rounded_rectangle((x,y,x+cell[0]-14,y+cell[1]-14),radius=18,fill=(255,255,255),outline=(220,214,236),width=2)
+        accent = tuple(specimen.get("accent") or (120,120,160))
+        draw.rounded_rectangle((x+16,y+16,x+22,y+56),radius=3,fill=accent)
+        draw.text((x+32,y+14),specimen["title"],font=font(19,True),fill=(40,40,70))
+        draw.text((x+32,y+40),specimen["subtitle"]+"  |  "+str(specimen.get("count",0))+" parts",font=font(12),fill=(120,120,150))
+        inner = (cell[0]-14)//len(views)
+        for j,camera in enumerate(views):
+            draw_model(image,specimen["parts"],(x+j*inner,y+66,x+(j+1)*inner,y+cell[1]-16),camera,specimen.get("view","full"))
+        draw = ImageDraw.Draw(image)
+    output.parent.mkdir(parents=True,exist_ok=True)
+    image.save(output)
+    print(output)
+
+
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--input",type=Path,default=ROOT/".tooling/character-geometry.json")
-    parser.add_argument("--output",type=Path,default=ROOT/"docs/Character-lineup.png")
+    parser.add_argument("--outdir",type=Path,default=ROOT/"docs")
     args = parser.parse_args()
-    scene = json.loads(args.input.read_text())
-    specimens = scene["specimens"]
-    assert len(specimens)==8,"The comparison sheet expects seven outfits and a Hunter comparison"
-    width,height = 2382,1370
-    image = Image.new("RGB",(width,height),(12,20,35))
-    draw = ImageDraw.Draw(image)
-    draw.rounded_rectangle((43,34,53,106),radius=4,fill=(74,224,216))
-    draw.text((72,32),"CATCH ME IF YOU CAN",font=font(39,True),fill=(240,244,250))
-    draw.text((74,84),"CHARACTER SILHOUETTE + FIT REVIEW",font=font(18),fill=(139,178,195))
-    accents = [(75,221,211),(250,118,111),(165,215,242),(152,219,151),(182,143,232),(239,198,94),(90,222,231),(231,113,130)]
-    for i,specimen in enumerate(specimens):
-        x,y = 36+(i%4)*582,133+(i//4)*566
-        draw.rounded_rectangle((x,y,x+564,y+548),radius=19,fill=(21,33,51),outline=(43,61,81),width=2)
-        draw.rounded_rectangle((x+23,y+25,x+29,y+72),radius=3,fill=accents[i])
-        draw.text((x+43,y+23),specimen["title"],font=font(23,True),fill=(237,242,247))
-        draw.text((x+43,y+57),specimen["subtitle"],font=font(15),fill=(152,176,193))
-        draw.line((x+21,y+501,x+543,y+501),fill=(57,78,95),width=2)
-        draw_model(image,specimen["parts"],(x+8,y+80,x+282,y+499),(0,0.4,-10))
-        draw_model(image,specimen["parts"],(x+282,y+80,x+556,y+499),(-5,1.0,-10))
-        draw = ImageDraw.Draw(image)
-        draw.text((x+92,y+515),"FRONT",font=font(13,True),fill=(124,157,178))
-        draw.text((x+360,y+515),"3/4 VIEW",font=font(13,True),fill=(124,157,178))
-    draw.text((41,1283),"GEOMETRY PREVIEW — NOT ROBLOX STUDIO RENDERING",font=font(20,True),fill=(90,220,213))
-    draw.text((41,1319),"Actual Appearance.BuildPreview geometry. Head meshes approximated. Materials, role outlines, VFX and lighting require Studio review.",font=font(16),fill=(149,171,190))
-    args.output.parent.mkdir(parents=True,exist_ok=True)
-    image.save(args.output)
-    print(args.output)
+    sheets = json.loads(args.input.read_text())["sheets"]
+    sheet(sheets["skins"],4,(760,520),"CATCH ME IF YOU CAN / SKINS",[(0,0.35,-10),(-6,1.0,-10),(5,1.0,10)],args.outdir/"Character-lineup.png")
+    sheet(sheets["masks"],4,(420,380),"CATCH ME IF YOU CAN / MASKS",[(0,0.2,-10),(-6,0.6,-10)],args.outdir/"Mask-lineup.png")
+    sheet(sheets["moods"],3,(420,380),"CATCH ME IF YOU CAN / EXPRESSIONS",[(0,0.2,-10)],args.outdir/"Expression-lineup.png")
 
 
 if __name__=="__main__":
