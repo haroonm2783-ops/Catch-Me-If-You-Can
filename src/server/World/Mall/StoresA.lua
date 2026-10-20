@@ -47,7 +47,7 @@ function StoresA.defs(P, Fixtures)
 
 	-- N2 ------------------------------------------------------------------------------------
 	table.insert(list, {slot = "N2", floor = 1, name = "VOLT ELECTRONICS", tagline = "THE FUTURE, ON SALE", kind = "Electronics",
-		accent = P.sky, wall = P.white, carpet = P.dark, floorMaterial = Enum.Material.SmoothPlastic, light = P.sky, serviceDoors = {-30, 30},
+		accent = P.sky, wall = P.white, carpet = Color3.fromRGB(58, 104, 214), floorMaterial = Enum.Material.SmoothPlastic, light = P.sky, serviceDoors = {-30, 30},
 		build = function(ctx)
 			local f = ctx.f
 			local neons = {P.sky, P.mint, P.violet, P.pink, P.sun}
@@ -81,7 +81,7 @@ function StoresA.defs(P, Fixtures)
 
 	-- N3 ------------------------------------------------------------------------------------
 	table.insert(list, {slot = "N3", floor = 1, name = "SNEAKER PALACE", tagline = "KICKS FOR EVERY CHASE", kind = "Sneakers",
-		accent = P.orange, wall = P.white, carpet = P.black, floorMaterial = Enum.Material.SmoothPlastic, light = P.orange, serviceDoors = {44},
+		accent = P.orange, wall = P.white, carpet = Color3.fromRGB(255, 190, 110), floorMaterial = Enum.Material.SmoothPlastic, light = P.orange, serviceDoors = {44},
 		build = function(ctx)
 			local f = ctx.f
 			local hues = {P.orange, P.red, P.sun, P.sky, P.lime, P.violet}

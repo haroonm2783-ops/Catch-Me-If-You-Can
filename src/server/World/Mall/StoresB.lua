@@ -185,7 +185,7 @@ function StoresB.defs(P, Fx)
 
 	-- W3 ------------------------------------------------------------------------------------
 	table.insert(list, {slot = "W3", floor = 1, name = "NOIR & GOLD", tagline = "LUXURY BOUTIQUE", kind = "Luxury",
-		accent = P.gold, wall = Color3.fromRGB(240, 230, 214), carpet = P.black, floorMaterial = Enum.Material.Marble, light = P.gold, serviceDoors = {0},
+		accent = P.gold, wall = Color3.fromRGB(240, 230, 214), carpet = Color3.fromRGB(116, 52, 120), floorMaterial = Enum.Material.Marble, light = P.gold, serviceDoors = {0},
 		build = function(ctx)
 			local f = ctx.f
 			-- Round pedestals with glass domes and handbags.

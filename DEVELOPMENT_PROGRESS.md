@@ -1,73 +1,64 @@
 # DEVELOPMENT_PROGRESS.md — live tracker (read this first in every session)
 
-Older delivery history (0.2.x, verification detail, launch checklist): `PROGRESS.md`.
-This file is the running log for the takeover/polish effort. Update it at every milestone.
+Older delivery history (0.2.x, verification detail): `PROGRESS.md`. Launch assessment: `docs/LAUNCH_READINESS.md`.
+Playtest script: `docs/TESTING.md` ("0.4.0 Catch Mall acceptance script").
 
 ## Ground rules for this effort
 - No Roblox Studio/engine exists in the cloud container. Verified = `./tools/check.sh` (compile, rebuild,
-  6 mocked-boundary suites, place deserialization). Anything about feel, rendering, audio, devices, real
+  8 mocked-boundary suites, place deserialization). Anything about feel, rendering, audio, devices, real
   DataStores and Robux is **UNVERIFIED until a human plays it in Studio**.
-- Never publish, spend money, or invent product/asset IDs. All pass IDs stay 0.
+- Never publish, spend money, or invent product/asset IDs. All `gamePassId` and `Products[n].productId` stay 0.
 - Never overwrite `dist/` by hand: always `./tools/build.sh` (check.sh does it).
-- **Push status:** the Claude GitHub App is not installed for this repo, so `git push` from the cloud is
-  refused. Commits are local to the session container; see "Exact next steps" for how to get them out.
+- Branch: `claude/launch-quality-overhaul` (not merged; no PR opened).
 
-## Phase 1 audit (done) — state of the inherited game
-Solid: server-authoritative rounds/movement/tagging, rate-limited remotes with payload validation,
-DataStore leases + retries, ownership-verified passes, 6 test suites, deterministic build.
-Weak (ranked by player impact):
-1. City read as dark/dim dusk with purple haze and very dark base palette (user's top complaint).
-2. Single round type; a tagged runner spectates up to ~3 min = dead time and low replay variety.
-3. No first-time onboarding/tutorial beyond a toast.
-4. Only 6 achievements, no titles, no daily login reward; progression feels thin.
-5. Music/most SFX are engine fallbacks (no licensed asset IDs available to me — cannot invent them).
-6. No global leaderboard (server-only), no map interactives (jump pads, etc.), no animations uploaded.
-7. Nothing has ever been playtested with 2+ real clients or on mobile.
+## Version 0.4.0 — launch-quality overhaul (this session)
+All of the following are implemented, tested against mocks, and committed:
+- [x] **Characters** (`src/shared/Appearance.lua` v3): expressive face parts toggled by mood, hair, 8 outfits,
+      8 masks, free skin tone + hair color, preview rig, deferred mid-round look changes (`CosmeticService`).
+- [x] **Catch Mall** (`src/server/World/MallBuilder.lua` + `Mall/*`): 324×304 studs, 2 floors + service ring,
+      atrium, 8 escalators, 4 grand stairs, 2 skybridges, 8 drop gaps, corner ladders, food court, arcade,
+      cinema, restrooms, 24 stores/attractions, 106 hide cells, 55 coins, sealed lobby deck, bright lighting.
+- [x] **Hiding gameplay** (`HideService`): hide / search / scan / coins / close calls, rewards, reset per round.
+- [x] **UI** (`UIController`): bright theme, always-visible Shop/Locker dock (vertical, or horizontal on short
+      screens), objective card, hide meter, ability bar, rarity cards with thumbnails, results reward breakdown,
+      coin-pack tab, side-drawer menus during rounds (no pausing, no protection).
+- [x] **Client systems:** `HidingController` (role-based prompt labels, scan/reveal highlights, coin spin),
+      Scan binding + jump-to-unhide in `MovementController`, procedural mood poses sharing its single joint
+      writer, mall feedback sounds/banners in `EffectsController`, optional ambience loop slot.
+- [x] **Monetization:** developer-product coin packs, idempotent `ProcessReceipt` (granted only after save),
+      `BuyCoins` action; docs in `docs/MONETIZATION.md`.
+- [x] **Tests:** mall navigation suite (125k checks), enum-validity suite, new client/data/gameplay checks.
+- [x] **Docs:** README, LAUNCH_READINESS, TESTING, MONETIZATION updated; map previews `docs/Mall-*.png`
+      and character sheets `docs/*-lineup.png` regenerated (software renders, not Studio screenshots).
 
-## Completed
-- [x] Takeover audit, baseline `./tools/check.sh` green (all suites).
-- [x] **Bright city pass:** late-afternoon lighting (ClockTime 15.2, high ambient, warm sun, light haze,
-      saturation up), lifted the dark base palette (roads, concrete, navy, steel, glass, greens, teal, coral).
-      Geometry/collision untouched. MAP_VERSION 3→4 so old baked maps are replaced. Tests updated.
-      UNVERIFIED visually — needs a Studio look; tune `applyLighting()` / palette `P` in MapBuilder.lua.
+## Test results (latest `./tools/check.sh`)
+rules 398 · data/shop/receipts 172 · gameplay 270 · appearance 283,138 · client 1,309 · legacy map 28,291 ·
+mall 125,020 · enums 856 refs — PASS. Mocked Roblox boundaries only. **Zero Studio/engine playtests have been run.**
 
-- [x] **Round modifiers** (`src/shared/Modifiers.lua`, RoundService): Classic / Infection (tagged runners become
-      hunters after a 4s server-held respawn; no infection in last 6s; infected share hunter win and keep survival
-      XP) / Swarm (+1 hunter, 120s) / Slide Frenzy (slide+vault cooldown x0.5). Weighted, never repeats back-to-back,
-      size-gated (Infection>=4, Swarm>=6), practice always Classic. Previewed at intermission, shown in HUD + banner.
-      +43 gameplay checks.
-- [x] **Progression:** shared `Achievements.lua` (16, coin rewards, progress shown in Career), 5 new milestone title
-      nameplates, 7-day UTC login streak (`ClaimLogin`, server-owned, rate-limited, coins/XP only), QUESTS "!" flag.
-- [x] **Onboarding:** 5-page first-run overlay (platform-aware controls), persisted via `settings.tutorialDone`,
-      replayable from Settings > HOW TO PLAY, auto-dismissed when a round starts.
-- [x] Version bumped to 0.3.0.
+## Known risks (ranked)
+1. **Mobile performance** — ~7,200 parts, StreamingEnabled off. Unmeasured.
+2. **Visual quality** — mall palette/lighting/UI never seen in the engine.
+3. **Mood pose rotation signs** (`MOOD_POSES` in `MovementController.lua`) are derived by hand; may need flipping.
+4. **Hide/search balance** numbers (`Config.Hide`) are guesses; fairness needs real players.
+5. **Stuck spots** — navigation checks are analytic, not physics.
+6. **No audio assets** — engine fallbacks only (`Config.Audio` slots exist for owner-supplied IDs).
 
-## Current task
-Docs/QA pass for what exists, then pick the next item from Remaining.
+## Exact next steps for whoever continues
+1. `./tools/bootstrap.sh && ./tools/check.sh` to confirm the baseline is green.
+2. Open `dist/Catch-Me-If-You-Can-Final.rbxl` in Studio; run the 0.4.0 acceptance script in `docs/TESTING.md`.
+3. Fix what it finds, in this priority: crashes/errors in Output → stuck spots/exploits → HUD clipping on phone →
+   performance → look and feel. Tune `Config.Hide`, `applyLighting()`, palette `P`, `MOOD_POSES`.
+4. Create passes/products (see `docs/MONETIZATION.md`), paste IDs, rebuild, test on a private place.
+5. Add licensed audio IDs to `Config.Audio` and test.
+6. Only then publish. After each change: run check, update this file, commit.
 
-## Remaining (priority order)
-1. Map interactives (jump pads / limited-use shortcuts) — needs Studio feel testing; design in docs first.
-2. Global leaderboard via OrderedDataStore (needs published-place verification).
-3. Shop: more cosmetics (trails/emotes) and a featured/new rail; no timers/FOMO tricks.
-4. Audio: wire licensed IDs once the owner supplies them (Config.Audio).
-5. Full QA pass + launch-readiness report (`docs/LAUNCH_READINESS.md`).
-
-## Known bugs / risks
-- None confirmed from the user's last Studio run besides the 0.2.1 slide/roof fixes awaiting acceptance.
-- Mobile performance, slide feel, camera, and avatar fit all unmeasured.
-
-## Test results (latest)
-`./tools/check.sh`: rules 308, data/shop 150, gameplay 240, appearance 157,251, client 494, map 28,292 — PASS.
-(Mocked Roblox boundaries only. Zero Studio/engine playtests have been run by this effort.)
+## Later ideas (not started)
+Global leaderboard (OrderedDataStore), jump pads / limited shortcuts, player voting on modifiers, seasonal store
+reskins, uploaded animations, streaming with `ReplicationFocus` if mobile memory demands it.
 
 ## Implementation decisions
 - Keep the existing architecture (Rojo + services + pure Rules). Extend, don't rebuild.
-- Modifiers are server logic only (no new remotes needed beyond snapshot fields) to stay testable headless.
+- The server owns hide/search/scan, coins and rewards; the client only presents and sends intent.
 - Rewards stay cosmetic/currency only; no gameplay advantage is purchasable.
-
-## Exact next steps
-1. `cd` repo, `./tools/bootstrap.sh && ./tools/check.sh` to confirm baseline.
-2. Continue with the first unchecked item in "Remaining".
-3. After each item: run check, update this file, commit.
-4. Pushing: install the Claude GitHub App for `haroonm2783-ops/Catch-Me-If-You-Can`
-   (https://github.com/apps/claude/installations/select_target) or reconnect GitHub in claude.ai settings.
+- Mood poses share MovementController's joint writer to avoid two scripts fighting over C0.
+- Hide cells always show a closed door (occupancy is not visible); hunters get a search and a scan instead.

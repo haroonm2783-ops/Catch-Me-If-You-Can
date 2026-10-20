@@ -29,7 +29,7 @@ local limits = {
 	Sprint={capacity=6,refill=4}, Slide={capacity=3,refill=1}, Vault={capacity=5,refill=3},
 	Tag={capacity=5,refill=4}, Equip={capacity=4,refill=2}, Buy={capacity=2,refill=0.5},
 	ClaimQuest={capacity=3,refill=1}, ClaimLogin={capacity=2,refill=0.2}, Settings={capacity=4,refill=2}, Emote={capacity=2,refill=0.5},
-		Scan={capacity=2,refill=0.2}, Unhide={capacity=3,refill=1},
+	Scan={capacity=2,refill=0.2}, Unhide={capacity=3,refill=1}, BuyCoins={capacity=2,refill=0.3},
 }
 local buckets = {}
 local queryTimes = {}
@@ -75,6 +75,8 @@ local function dispatch(player, action, payload)
 		if type(payload.category)=="string" and type(payload.id)=="string" then ctx.Services.DataService:Equip(player,payload.category,payload.id) end
 	elseif action == "Buy" then
 		if type(payload.id)=="string" then ctx.Services.ShopService:Purchase(player,payload.id) end
+	elseif action == "BuyCoins" then
+		if type(payload.id)=="string" then ctx.Services.ShopService:PurchaseProduct(player,payload.id) end
 	elseif action == "ClaimQuest" then
 		if type(payload.id)=="string" then ctx.Services.DataService:ClaimQuest(player,payload.id) end
 	elseif action == "ClaimLogin" then

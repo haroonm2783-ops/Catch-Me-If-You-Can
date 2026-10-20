@@ -88,7 +88,9 @@ local function button(parent, text, callback, props)
 	local object = node("TextButton", values, parent)
 	corner(object, 12)
 	local outline = stroke(object, shade(values.BackgroundColor3, 0.45), 0, 2)
-	gradient(object, shade(values.BackgroundColor3, 1.16), shade(values.BackgroundColor3, 0.92), 90)
+	-- A UIGradient on the button itself would also tint its text, so the sheen is a child overlay.
+	local sheen = frame(object, {Name = "Sheen", BackgroundColor3 = Color3.new(1, 1, 1), Size = UDim2.fromScale(1, 1), Active = false}, 12)
+	node("UIGradient", {Transparency = NumberSequence.new(0.78, 1), Rotation = 90}, sheen)
 	if object.MouseEnter then
 		object.MouseEnter:Connect(function() outline.Color = C.text end)
 		object.MouseLeave:Connect(function() outline.Color = shade(values.BackgroundColor3, 0.45) end)
@@ -699,6 +701,7 @@ function UIController:_renderShop()
 	local profile = self.ctx.Profile
 	local owned = profile.owned or {}
 	local equipped = profile.equipped or {}
+	if inventory and self.category == "coins" then self.category = "skins" end
 	local visible = {}
 	for _, item in ipairs(self.ctx.Catalog.ForCategory(self.category)) do
 		if not inventory or owned[item.id] then visible[#visible + 1] = item end
@@ -728,6 +731,16 @@ function UIController:_renderShop()
 			self.category = category.id self.gridScroll = 0 self:_renderMenu()
 		end, {Name = "Category_" .. category.id, Size = UDim2.fromOffset(math.max(86, #category.label * 8 + 44), 38), LayoutOrder = index, TextSize = 11,
 			BackgroundColor3 = chosen and C.amber or C.card, TextColor3 = chosen and C.ink or C.text})
+	end
+	if not inventory then
+		local chosen = self.category == "coins"
+		button(categories, "💰 COINS", function() self.category = "coins" self.gridScroll = 0 self:_renderMenu() end,
+			{Name = "Category_coins", Size = UDim2.fromOffset(96, 38), LayoutOrder = 99, TextSize = 11,
+				BackgroundColor3 = chosen and C.amber or C.green, TextColor3 = C.ink})
+	end
+	if self.category == "coins" and not inventory then
+		self:_renderCoinPacks(collection, detail)
+		return
 	end
 	local gridProps = {Name = "CollectionGrid", Position = UDim2.fromOffset(0, 52), Size = UDim2.new(1, 0, 1, -52), BackgroundTransparency = 1}
 	local grid = compact and frame(collection, gridProps) or scroll(collection, gridProps)
@@ -763,6 +776,26 @@ function UIController:_renderShop()
 		button(collection, "EXPLORE THE SHOP", function() self:OpenMenu("Shop") end, {Name = "ExploreShop", Position = UDim2.fromOffset(12, 186), Size = UDim2.new(1, -24, 0, 44), BackgroundColor3 = C.pink, TextSize = 13})
 	end
 	self:_renderItemDetail(detail, selected, compact and not portrait)
+end
+
+-- Coin packs are developer products: the server grants coins from the receipt, never from this UI.
+function UIController:_renderCoinPacks(collection, detail)
+	label(detail, "COINS BUY STYLE, NOT POWER", {Position = UDim2.fromOffset(18, 18), Size = UDim2.new(1, -36, 0, 40), Font = F.title, TextSize = 22, TextWrapped = true, TextColor3 = C.amber})
+	label(detail, "Coins only unlock cosmetics: outfits, masks, trails and titles. No pack changes speed, tagging, hiding or anything else in a round. You also earn coins free by playing, collecting mall coins and claiming daily missions.", {Position = UDim2.fromOffset(18, 66), Size = UDim2.new(1, -36, 1, -90), TextSize = 12, TextColor3 = C.muted, TextWrapped = true, TextYAlignment = Enum.TextYAlignment.Top, Font = F.medium})
+	local grid = scroll(collection, {Name = "CoinPacks", Position = UDim2.fromOffset(0, 52), Size = UDim2.new(1, 0, 1, -52)})
+	list(grid, false, 10)
+	for index, pack in ipairs(self.ctx.Catalog.Products) do
+		local configured = (pack.productId or 0) > 0
+		local row = frame(grid, {Name = "Pack_" .. pack.id, Size = UDim2.new(1, -8, 0, 78), LayoutOrder = index, BackgroundColor3 = C.card}, 16)
+		stroke(row, C.ink, 0, 3)
+		label(row, "🪙", {Position = UDim2.fromOffset(12, 10), Size = UDim2.fromOffset(52, 52), TextSize = 38, TextXAlignment = Enum.TextXAlignment.Center})
+		label(row, pack.name, {Position = UDim2.fromOffset(72, 12), Size = UDim2.new(1, -230, 0, 22), Font = F.black, TextSize = 15, TextTruncate = Enum.TextTruncate.AtEnd})
+		label(row, number(pack.coins) .. " COINS", {Position = UDim2.fromOffset(72, 38), Size = UDim2.new(1, -230, 0, 24), Font = F.title, TextSize = 20, TextColor3 = C.amber})
+		button(row, configured and ("R$ " .. number(pack.robux)) or "COMING SOON", function()
+			if configured then self:_send("BuyCoins", {id = pack.id}) else self:Toast("Coin packs are not configured for sale yet.") end
+		end, {Name = "BuyPack_" .. pack.id, AnchorPoint = Vector2.new(1, 0.5), Position = UDim2.new(1, -14, 0.5, 0), Size = UDim2.fromOffset(130, 44), TextSize = 13,
+			BackgroundColor3 = configured and C.green or C.card, TextColor3 = configured and C.ink or C.muted})
+	end
 end
 
 function UIController:_renderItemDetail(parent, item, horizontal)

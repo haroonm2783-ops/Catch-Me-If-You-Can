@@ -144,7 +144,7 @@ function DataService:_Load(player)
 	if self.records[player] or self.closing then return end
 	local record = {
 		player = player, loaded = false, accepting = true, departed = false, writable = false,
-		revision = 0, savedRevision = 0, awarded = {}, receipts = {}, saving = false,
+		revision = 0, savedRevision = 0, awarded = {}, receipts = {}, productRevision = {}, saving = false,
 		persistence = self.sessionOnly and "session" or "unavailable",
 		lockId = self.sessionId .. ":" .. HttpService:GenerateGUID(false), writeSequence = 0,
 	}
@@ -347,6 +347,33 @@ function DataService:Grant(player, ids, source)
 		task.defer(function() self:Save(player) end)
 	end
 	return true, changed and "Granted." or "Already owned."
+end
+
+-- Developer-product coins. Idempotent per Roblox PurchaseId and only reports success once the
+-- balance is durable (or the server is intentionally session-only, as in Studio).
+function DataService:GrantProductCoins(player, purchaseId, coins)
+	if not self:Ready(player) then return false, "not_ready" end
+	if type(purchaseId) ~= "string" or #purchaseId == 0 or #purchaseId > 100 then return false, "invalid" end
+	coins = number(coins, 0, MAX_COUNTER)
+	if coins <= 0 then return false, "invalid" end
+	local record = self.records[player]
+	local receipt = "P:" .. purchaseId
+	if not record.awarded[receipt] then
+		-- Record before changing the balance; no yielding call sits between these lines.
+		record.awarded[receipt] = true
+		table.insert(record.receipts, receipt)
+		if #record.receipts > 40 then table.remove(record.receipts, 1) end
+		record.profile.coins = add(record.profile.coins, coins)
+		self:_Dirty(record)
+		record.productRevision[receipt] = record.revision
+		self:Send(player)
+	end
+	if self.sessionOnly then return true, "session" end
+	local needed = record.productRevision[receipt]
+	if needed == nil or record.savedRevision >= needed then return true, "saved" end
+	local saved = self:Save(player)
+	if saved or (record.savedRevision >= needed) then return true, "saved" end
+	return false, "save_failed"
 end
 
 function DataService:_PurchaseWithCoins(player, id)

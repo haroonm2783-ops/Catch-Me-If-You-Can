@@ -191,7 +191,7 @@ local function fixture(viewport, inputType)
 		require = function(module) expect(module == appearanceModule, "UI must use shared Appearance"); return appearance end,
 		TweenInfo = {new = function() return {} end}, Random = {new = function() return {NextInteger = function(_, a, b) return math.floor((a + b) / 2) end, NextNumber = function(_, a, b) return (a + b) / 2 end} end},
 	}
-	for _, name in ipairs({"Enum", "Color3", "ColorSequence", "UDim", "UDim2", "Vector2", "Vector3", "CFrame"}) do environment[name] = roblox[name] end
+	for _, name in ipairs({"Enum", "Color3", "ColorSequence", "NumberSequence", "UDim", "UDim2", "Vector2", "Vector3", "CFrame"}) do environment[name] = roblox[name] end
 	local profile = Rules.NewProfile(1700000000); profile.loaded = true; profile.persistence = "session"; profile.quests = {}
 	local actions = {}
 	local ctx = {Config = Config, Catalog = Catalog, Rules = Rules, Achievements = Achievements, Profile = profile, State = {phase = "Waiting", roundId = 0, players = {}}, Controllers = {},
@@ -709,6 +709,87 @@ do
 	coin:SetAttribute("Collected", true); f.services.RunService.Heartbeat:Fire(0.1)
 	expect(coin.Transparency == 1, "Collected coins vanish on the client")
 	hiding:Destroy()
+end
+
+
+-- Moods pose the avatar through the same single joint writer as sliding, for local and remote avatars.
+do
+	local f = fixture(Vector2.new(1280, 720))
+	local function rig()
+		local model, humanoid = f.character()
+		local torso = f.instance.new("Part"); torso.Name = "UpperTorso"; torso.Parent = model
+		for _, name in ipairs({"Neck", "LeftShoulder", "RightShoulder", "LeftElbow", "RightElbow"}) do
+			local joint = f.instance.new("Motor6D"); joint.Name = name; joint.C0 = roblox.CFrame.new(0, 0.2, 0); joint.Parent = torso
+		end
+		return model, humanoid
+	end
+	local localRig = rig(); f.player.Character = localRig
+	local other = f.instance.new("Player"); other.UserId = 99; other.Character = rig(); table.insert(f.players.list, other)
+	local movement = f.load("MovementController"); movement:Start()
+	movement:OnState({phase = "Results", roundId = 3, players = {}})
+	local function joint(model, name) return model:FindFirstChild(name, true) end
+	local base = joint(localRig, "RightShoulder").C0
+	local otherBase = joint(other.Character, "RightShoulder").C0
+	movement:_feedback(0.1)
+	expect(joint(localRig, "Neck").C0 ~= roblox.CFrame.new(0, 0.2, 0), "Idle avatars breathe and sway their head")
+	expect(joint(localRig, "RightShoulder").C0 == base, "Idle does not move the shoulders")
+	localRig:SetAttribute("CatchMood", "Win"); other.Character:SetAttribute("CatchMood", "Win")
+	for _ = 1, 20 do movement:_feedback(0.1) end
+	expect(joint(localRig, "RightShoulder").C0 ~= base and joint(other.Character, "RightShoulder").C0 ~= otherBase, "A winning mood raises both avatars' arms")
+	expect(joint(localRig, "LeftElbow").C0 ~= roblox.CFrame.new(0, 0.2, 0), "Win bends the elbows")
+	localRig:SetAttribute("CatchMood", "Idle"); other.Character:SetAttribute("CatchMood", "Idle")
+	for _ = 1, 40 do movement:_feedback(0.1) end
+	expect((joint(localRig, "RightShoulder").C0.Position - base.Position).Magnitude < 0.001
+		and (joint(localRig, "RightShoulder").C0.LookVector - base.LookVector).Magnitude < 0.01, "Returning to idle lowers the arms")
+	expect(next(movement.remotePoses) == nil, "Finished remote moods release their joints")
+	f.ctx.Profile.settings.reducedMotion = true
+	other.Character:SetAttribute("CatchMood", "Scared"); movement:_feedback(0.1)
+	expect(next(movement.remotePoses) == nil and joint(other.Character, "RightShoulder").C0 == otherBase, "Reduced motion disables mood poses")
+	movement:Destroy()
+end
+
+
+-- Coin packs: visible in the Shop, inert until configured, and always routed through the server.
+do
+	local f = fixture(Vector2.new(1280, 720))
+	f.ctx.Profile.settings.tutorialDone = true
+	local ui = f.load("UIController"); ui:Start(); ui:OpenMenu("Shop")
+	local tab = ui.panelContent:FindFirstChild("Category_coins", true)
+	expect(tab ~= nil, "The shop offers a coins tab")
+	tab.Activated:Fire()
+	expect(ui.category == "coins" and ui.panelContent:FindFirstChild("Pack_coins_bag", true), "The coins tab lists the packs")
+	local buy = ui.panelContent:FindFirstChild("BuyPack_coins_bag", true)
+	expect(buy.Text == "COMING SOON", "Unconfigured packs say so")
+	local count = #f.actions; buy.Activated:Fire()
+	expect(#f.actions == count, "An unconfigured pack never contacts the server")
+	local pack = Catalog.Products[2]
+	pack.productId = 4242
+	ui:_renderMenu()
+	buy = ui.panelContent:FindFirstChild("BuyPack_coins_bag", true)
+	expect(string.find(buy.Text, "R$ 99", 1, true), "Configured packs show their Robux price")
+	buy.Activated:Fire()
+	pack.productId = 0
+	expect(f.actions[#f.actions].action == "BuyCoins" and f.actions[#f.actions].payload.id == "coins_bag", "A configured pack only sends its catalog ID")
+	ui:CloseMenu(); ui:OpenMenu("Inventory")
+	expect(ui.category == "skins" and not ui.panelContent:FindFirstChild("Category_coins", true), "The locker never shows coin packs")
+end
+
+
+-- UIGradient also tints the text of its parent, so no text object may carry one.
+do
+	local f = fixture(Vector2.new(1280, 720))
+	local ui = f.load("UIController"); ui:Start()
+	for _, menu in ipairs({"Shop", "Inventory", "Quests", "Progress", "Settings", "Leaderboard", "Results"}) do ui:OpenMenu(menu) end
+	local texts = 0
+	for _, node in ipairs(ui.root:GetDescendants()) do
+		if node.ClassName == "TextButton" or node.ClassName == "TextLabel" then
+			texts += 1
+			for _, child in ipairs(node:GetChildren()) do
+				expect(child.ClassName ~= "UIGradient", "Text objects must not carry a UIGradient (" .. node.Name .. ")")
+			end
+		end
+	end
+	expect(texts > 50, "The gradient guard must cover the real interface")
 end
 
 print("Client controller integration: " .. checks .. " checks passed")

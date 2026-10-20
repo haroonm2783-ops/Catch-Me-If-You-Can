@@ -33,15 +33,21 @@ fixed charge. Coin prices are enforced from the server's catalog.
 
 | Catalog ID | Cosmetic entitlement | Design price (Robux) |
 | --- | --- | ---: |
-| `skin_shadow` | Shadow Runner | 299 |
-| `skin_golden` | Golden Phantom | 599 |
-| `skin_neon` | Neon Outlaw | 399 |
-| `skin_crimson` | Crimson Hunter | 499 |
+| `skin_neonphantom` | Neon Phantom | 399 |
+| `skin_ninja` | Shadow Ninja | 349 |
+| `skin_midnight` | Midnight Menace | 449 |
+| `skin_golden` | Golden Champion (Legendary) | 599 |
 | `mask_phantom` | Phantom Mask | 149 |
 | `mask_kitsune` | Kitsune Mask | 199 |
-| `mask_skull` | Gold Skull Mask | 349 |
-| `bundle_night` | Shadow Runner, Phantom Mask, Afterglow trail | 649 |
-| `vip_founder` | Neon Outlaw, Prism Visor, Rooftop Shuffle | 699 |
+| `mask_skull` | Gold Skull Mask (Legendary) | 349 |
+| `bundle_night` | Midnight Menace, Phantom Mask, Afterglow trail | 649 |
+| `bundle_ninja` | Shadow Ninja, Shinobi Wrap, Sunset Circuit trail | 549 |
+| `vip_founder` | Streetwear Superstar, Jester Grin, Food Court Shuffle | 799 |
+
+Free and earned launch skins: **Mall Runner** (free), **Skate Kid** (level 5),
+**Cyber Runner** (25 wins), **Streetwear Superstar** (1,800 coins). Masks: Street Bandana
+(free), Prism Visor and Shinobi Wrap (coins), Jester Grin (coins), Pixel Visage (75 tags).
+Skin tone and hair color are free for everyone.
 
 Skins and masks occupy independent equipment slots and can be combined. Bundles
 and VIP grant their listed inventory items; their collection entry is not an
@@ -66,10 +72,38 @@ tagging, or competitive advantage.
 - Studio uses temporary session data by default. A storage failure or another
   active session produces an explicit non-saving status. Inspect the status in
   CAREER; an inventory update is not proof that a DataStore write succeeded.
-- This version sells permanent **game passes**, not repeatable developer
-  products. There is no developer-product `ProcessReceipt` flow. Do not put
-  developer product IDs in `gamePassId` or sell repeatable currency packs through
-  this implementation.
+- Permanent cosmetics are **game passes**. Repeatable **coin packs** are
+  **developer products** handled by `ShopService:ProcessReceipt` (below). Never put a
+  developer product ID in a `gamePassId` or a pass ID in a coin pack.
+
+## Coin packs (developer products)
+
+Coins only buy cosmetics, so packs are a convenience and never a gameplay advantage.
+All four packs ship with `productId = 0`: the shop shows **COMING SOON** and nothing can
+prompt. To activate one:
+
+1. In Creator Dashboard, **Monetization → Developer Products → Create**. Set the Robux
+   price and copy the **product ID** (not a pass or asset ID).
+2. Put it in `Catalog.Products[n].productId` in [`src/shared/Catalog.lua`](../src/shared/Catalog.lua).
+3. Rebuild with `./tools/check.sh`, publish, and test on a private server.
+
+| Pack | Coins | Design price (Robux) |
+| --- | ---: | ---: |
+| `coins_pocket` Pocket Change | 500 | 49 |
+| `coins_bag` Shopping Bag | 1,200 | 99 |
+| `coins_haul` Mall Haul | 3,200 | 249 |
+| `coins_mogul` Mall Mogul | 9,000 | 599 |
+
+How it stays safe (covered by `tests/data_service.spec.luau` against mocks):
+
+- The client sends only a pack ID (`BuyCoins`); the server maps it to the product ID and
+  throttles prompts. The prompt is intent only.
+- `ProcessReceipt` validates the receipt, resolves the product by ID, and credits coins
+  exactly once per `PurchaseId` (stored with the profile's receipt list).
+- It returns `PurchaseGranted` only after the balance is saved (or, in Studio, when the
+  server is intentionally session-only). A failed save returns `NotProcessedYet`, and the
+  retry will not credit twice. Players who left get the receipt on their next join.
+- Real settlement is **not** proven by mocks: complete the real-service checks below.
 
 ## Required real-service tests
 

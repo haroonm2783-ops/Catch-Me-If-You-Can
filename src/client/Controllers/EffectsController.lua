@@ -134,30 +134,38 @@ function EffectsController:_sound(name, volume, pitchScale)
 	Debris:AddItem(sound, 15)
 end
 
-function EffectsController:_music()
-	if not self.music then
-		local id = tonumber((self.ctx.Config.Audio or {}).Music)
+-- Looping beds (soundtrack and mall ambience). Both follow the music preference and only play
+-- when a verified asset id is configured; nothing is invented here.
+function EffectsController:_loop(field, configKey, name, volume)
+	if not self[field] then
+		local id = tonumber((self.ctx.Config.Audio or {})[configKey])
 		if not id or id <= 0 or id == math.huge or id ~= math.floor(id) then
 			return
 		end
-		self.music = Instance.new("Sound")
-		self.music.Name = "CatchMusic"
-		self.music.SoundId = "rbxassetid://" .. tostring(id)
-		self.music.Looped = true
-		self.music.Volume = 0.18
-		self.music.Parent = SoundService
+		self[field] = Instance.new("Sound")
+		self[field].Name = name
+		self[field].SoundId = "rbxassetid://" .. tostring(id)
+		self[field].Looped = true
+		self[field].Volume = volume
+		self[field].Parent = SoundService
 	end
+	local sound = self[field]
 	if self:_settings().music == false then
-		self.music:Pause()
-	elseif not self.music.IsPlaying then
-		if self.music.TimePosition > 0 then
-			self.music:Resume()
+		sound:Pause()
+	elseif not sound.IsPlaying then
+		if sound.TimePosition > 0 then
+			sound:Resume()
 		else
 			-- Validate a configured soundtrack just like SFX. Music has its own
 			-- preference: muting footsteps must not mute an enabled soundtrack.
-			self:_play(self.music, nil, "music")
+			self:_play(sound, nil, "music")
 		end
 	end
+end
+
+function EffectsController:_music()
+	self:_loop("music", "Music", "CatchMusic", 0.18)
+	self:_loop("ambience", "Ambience", "CatchAmbience", 0.12)
 end
 
 function EffectsController:_sprintAudio()
@@ -534,6 +542,9 @@ function EffectsController:Destroy()
 	table.clear(self.sounds)
 	if self.music then
 		self.music:Destroy()
+	end
+	if self.ambience then
+		self.ambience:Destroy()
 	end
 	if self.sprintSound then
 		self.sprintSound:Destroy()

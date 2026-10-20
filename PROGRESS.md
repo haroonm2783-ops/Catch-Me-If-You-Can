@@ -1,5 +1,9 @@
 # Catch Me If You Can — preserved development state
 
+> **Superseded:** version 0.4.0 (Catch Mall overhaul) replaced the Neon Heights map and most of the UI. Read
+> `DEVELOPMENT_PROGRESS.md` and `docs/LAUNCH_READINESS.md` first; the sections below are historical 0.2.x notes.
+
+
 ## Current delivery — version 0.2.1
 
 The existing implementation has been continued and integrated, not restarted.

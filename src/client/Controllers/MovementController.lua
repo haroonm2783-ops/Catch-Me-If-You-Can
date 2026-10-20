@@ -37,10 +37,49 @@ local SLIDE_POSE = {
 	["Right Shoulder"] = CFrame.Angles(-0.15, 0, 0.25),
 }
 
+-- Mood overlays share the slide pose's single writer so the two never fight over a joint.
+-- Rotations are R15 joint offsets in the parent's axes: shoulders raise on Z, elbows and necks pitch on X.
+-- Only the replicated CatchMood attribute (set by the server from round state) selects a mood.
+local function angles(x, y, z) return CFrame.Angles(x or 0, y or 0, z or 0) end
+local MOOD_POSES = {
+	Hunt = { Waist = angles(-0.14), Neck = angles(-0.12), LeftElbow = angles(0.75), RightElbow = angles(0.75), LeftShoulder = angles(0, 0, -0.12), RightShoulder = angles(0, 0, 0.12) },
+	Scared = { Neck = angles(-0.08), LeftShoulder = angles(0, 0, -0.4), RightShoulder = angles(0, 0, 0.4), LeftElbow = angles(1.05), RightElbow = angles(1.05) },
+	Win = { Neck = angles(0.18), LeftShoulder = angles(0, 0, -2.55), RightShoulder = angles(0, 0, 2.55), LeftElbow = angles(0.1), RightElbow = angles(0.1) },
+	Lose = { Waist = angles(-0.2), Neck = angles(-0.5), LeftShoulder = angles(0.1, 0, -0.08), RightShoulder = angles(0.1, 0, 0.08) },
+}
+MOOD_POSES.Hide = MOOD_POSES.Scared
+-- Joints a mood or the idle breathing may touch.
+local MOOD_JOINTS = { Waist = true, Neck = true, LeftElbow = true, RightElbow = true, LeftShoulder = true, RightShoulder = true }
+
+-- Time-varying detail layered over the static mood pose.
+local function moodMotion(name, mood, clock, blend)
+	if name == "Waist" then
+		return angles(math.sin(clock * 1.7) * 0.015)
+	elseif name == "Neck" then
+		if mood == "Scared" or mood == "Hide" then
+			return angles(0, math.sin(clock * 3.4) * 0.35 * blend, 0) -- glancing around
+		end
+		return angles(math.sin(clock * 1.2 + 1) * 0.02, math.sin(clock * 0.6) * 0.08, 0)
+	elseif mood == "Win" and (name == "LeftShoulder" or name == "RightShoulder") then
+		local sway = math.sin(clock * 9) * 0.1 * blend
+		return angles(0, 0, name == "LeftShoulder" and -sway or sway) -- cheering wave
+	end
+	return nil
+end
+
+local function moodOffset(name, mood, blend, clock)
+	local base = CFrame.new()
+	local target = MOOD_POSES[mood] and MOOD_POSES[mood][name]
+	local offset = target and base:Lerp(target, blend) or base
+	local motion = MOOD_JOINTS[name] and moodMotion(name, mood, clock, blend)
+	if motion then offset = offset * motion end
+	return offset
+end
+
 local function collectPose(character)
 	local pose = {}
 	for _, descendant in ipairs(character:GetDescendants()) do
-		if descendant:IsA("Motor6D") and SLIDE_POSE[descendant.Name] then
+		if descendant:IsA("Motor6D") and (SLIDE_POSE[descendant.Name] or MOOD_JOINTS[descendant.Name]) then
 			table.insert(pose, { joint = descendant, base = descendant.C0 })
 		end
 	end
@@ -56,12 +95,15 @@ local function resetPose(pose)
 	end
 end
 
-local function applyPose(pose, blend, lean)
+local function applyPose(pose, blend, lean, mood, moodBlend, clock)
 	for _, record in ipairs(pose) do
 		local joint = record.joint
 		if joint.Parent then
 			if joint.C0 ~= record.last then record.base = joint.C0 end
-			local offset = CFrame.new():Lerp(SLIDE_POSE[joint.Name], blend)
+			local offset = CFrame.new():Lerp(SLIDE_POSE[joint.Name] or CFrame.new(), blend)
+			if MOOD_JOINTS[joint.Name] and not (blend > 0.5 and SLIDE_POSE[joint.Name]) then
+				offset = offset * moodOffset(joint.Name, mood or "Idle", moodBlend or 0, clock or 0)
+			end
 			if joint.Name == "Waist" or joint.Name == "RootJoint" then
 				offset *= CFrame.Angles(lean.X, lean.Y, lean.Z)
 			end
@@ -88,6 +130,9 @@ function MovementController.new(ctx)
 		pose = {},
 		remotePoses = {},
 		slideBlend = 0,
+		moodBlend = 0,
+		mood = "Idle",
+		clock = 0,
 		sprintRequested = false,
 		lastVaultIntent = 0,
 		lastSlideIntent = 0,
@@ -152,6 +197,7 @@ function MovementController:_resetPose()
 	resetPose(self.pose)
 	self.lean = Vector3.zero
 	self.slideBlend = 0
+	self.moodBlend = 0
 end
 
 -- Sliding is replicated by the server as an attribute. Each client renders the
@@ -169,19 +215,23 @@ function MovementController:_remoteFeedback(dt)
 				self.remotePoses[player], record = nil, nil
 			end
 			local humanoid = character and character:FindFirstChildOfClass("Humanoid")
-			local sliding = humanoid and humanoid.Health > 0 and character:GetAttribute("Sliding") == true
-				and not character:GetAttribute("CatchEmoting") and not self:_settings().reducedMotion
-			if sliding and not record then
-				record = { character = character, pose = collectPose(character), blend = 0 }
+			local alive = humanoid and humanoid.Health > 0 and not character:GetAttribute("CatchEmoting") and not self:_settings().reducedMotion
+			local sliding = alive and character:GetAttribute("Sliding") == true
+			local mood = alive and character:GetAttribute("CatchMood") or "Idle"
+			local moody = MOOD_POSES[mood] ~= nil
+			if (sliding or moody) and not record then
+				record = { character = character, pose = collectPose(character), blend = 0, moodBlend = 0, mood = mood }
 				self.remotePoses[player] = record
 			end
 			if record then
+				if moody then record.mood = mood end
 				record.blend += ((sliding and 1 or 0) - record.blend) * smoothing
-				if not sliding and record.blend < 0.001 then
+				record.moodBlend += ((moody and 1 or 0) - record.moodBlend) * smoothing
+				if not sliding and not moody and record.blend < 0.001 and record.moodBlend < 0.001 then
 					resetPose(record.pose)
 					self.remotePoses[player] = nil
 				else
-					applyPose(record.pose, record.blend, Vector3.zero)
+					applyPose(record.pose, record.blend, Vector3.zero, record.mood, record.moodBlend, self.clock)
 				end
 			end
 		end
@@ -246,6 +296,7 @@ end
 
 function MovementController:_feedback(dt)
 	dt = math.min(dt, 0.1)
+	self.clock += dt
 	self:_remoteFeedback(dt)
 	local humanoid, root, character = self.humanoid, self.root, self.character
 	local camera = workspace.CurrentCamera
@@ -300,11 +351,12 @@ function MovementController:_feedback(dt)
 		0, -direction.X * (sprinting and 0.075 or 0.045))
 	self.lean = self.lean:Lerp(targetLean, smoothing)
 	self.slideBlend += ((sliding and 1 or 0) - self.slideBlend) * (1 - math.exp(-18 * dt))
-	if moving or sliding or self.slideBlend > 0.001 or self.lean.Magnitude > 0.001 then
-		applyPose(self.pose, self.slideBlend, self.lean)
-	else
-		self:_resetPose()
-	end
+	local mood = character:GetAttribute("CatchMood") or "Idle"
+	local moody = MOOD_POSES[mood] ~= nil
+	if moody then self.mood = mood end
+	self.moodBlend += ((moody and 1 or 0) - self.moodBlend) * smoothing
+	-- Breathing and head sway run whenever the avatar is standing in the mall.
+	applyPose(self.pose, self.slideBlend, self.lean, self.mood, self.moodBlend, self.clock)
 end
 
 function MovementController:OnState(state)

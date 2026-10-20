@@ -46,6 +46,8 @@ local function fixture(studio, existingStore)
 	local queue, notices, snapshots = {}, {}, {}
 	local scheduler = {}
 	local players = { PlayerAdded = signal(), PlayerRemoving = signal(), GetPlayers = function() return {} end }
+	local roster = {}
+	function players:GetPlayerByUserId(id) return roster[id] end
 	local store = existingStore or { values = {}, calls = 0 }
 	function store:UpdateAsync(key, transform)
 		self.calls += 1
@@ -70,6 +72,11 @@ local function fixture(studio, existingStore)
 		if self.afterQuery then local hook = self.afterQuery; self.afterQuery = nil; hook() end
 		return self.owns[tostring(userId) .. ":" .. tostring(passId)] == true
 	end
+	function marketplace:PromptProductPurchase(_, productId)
+		self.productPrompts = (self.productPrompts or 0) + 1
+		self.lastProduct = productId
+		if self.failPrompt then error("simulated prompt failure") end
+	end
 	function marketplace:PromptGamePassPurchase(_, _passId)
 		self.prompts += 1
 		if self.failPrompt then error("simulated prompt failure") end
@@ -91,6 +98,7 @@ local function fixture(studio, existingStore)
 			spawn = function(fn) table.insert(queue, fn) end,
 		},
 		Instance = { new = instance },
+		Enum = { ProductPurchaseDecision = { PurchaseGranted = "Granted", NotProcessedYet = "NotYet" } },
 	}
 	local ctx = {
 		Config = {
@@ -115,6 +123,7 @@ local function fixture(studio, existingStore)
 	player.UserId = 42
 	player.Name = "TestRunner"
 	player.Parent = players
+	roster[42] = player
 	return {
 		data = data, shop = shop, player = player, store = store, ctx = ctx, queue = queue,
 		notices = notices, snapshots = snapshots, marketplace = marketplace, players = players, scheduler = scheduler,
@@ -496,6 +505,54 @@ do
 	expect(profile.settings.tutorialDone == true and profile.settings.coins == nil, "Settings only accept known flags")
 	local normalized = Rules.NormalizeProfile({ login = { streak = -5, lastClaim = "'; drop" }, settings = { tutorialDone = "yes" } })
 	expect(normalized.login.streak == 0 and normalized.login.lastClaim == "" and normalized.settings.tutorialDone == false, "Login state and tutorial flag are sanitized")
+end
+
+
+-- Developer-product coin packs: configured IDs only, one grant per PurchaseId, durable before success.
+do
+	local original = Catalog.Products[1]
+	-- Unconfigured packs (productId 0) never prompt.
+	local f = fixture(false)
+	f.data:_Load(f.player)
+	expect(not f.shop:PurchaseProduct(f.player, original.id) and (f.marketplace.productPrompts or 0) == 0, "Unconfigured coin pack must not prompt")
+	expect(not f.shop:PurchaseProduct(f.player, "coins_nope") and not f.shop:PurchaseProduct(f.player, 12), "Unknown pack IDs are rejected")
+	-- Temporarily configure a pack for the receipt flow.
+	original.productId = 777
+	local ok, err = pcall(function()
+		expect(f.shop:PurchaseProduct(f.player, original.id) and f.marketplace.lastProduct == 777, "Configured pack prompts its developer product")
+		expect(not f.shop:PurchaseProduct(f.player, original.id), "Rapid re-prompts are throttled")
+		f.shop:Start()
+		expect(type(f.marketplace.ProcessReceipt) == "function", "ShopService must own ProcessReceipt")
+		local profile = f.data:Get(f.player)
+		local before = profile.coins
+		local receipt = { PlayerId = 42, ProductId = 777, PurchaseId = "abc-1" }
+		expect(f.marketplace.ProcessReceipt(receipt) == "Granted", "A verified receipt is granted")
+		expect(profile.coins == before + original.coins, "Coins are credited exactly once")
+		expect(f.store.values.player_42 ~= nil and f.store.values.player_42.profile.coins == before + original.coins, "Success is only reported after the balance is saved")
+		expect(f.marketplace.ProcessReceipt(receipt) == "Granted" and profile.coins == before + original.coins, "Replayed receipts do not pay twice")
+		expect(f.marketplace.ProcessReceipt({ PlayerId = 42, ProductId = 999, PurchaseId = "abc-2" }) == "NotYet", "Unknown products are not marked processed")
+		expect(f.marketplace.ProcessReceipt({ PlayerId = 7, ProductId = 777, PurchaseId = "abc-3" }) == "NotYet", "Players who left get the receipt again later")
+		expect(f.marketplace.ProcessReceipt("junk") == "NotYet" and f.marketplace.ProcessReceipt({ PlayerId = 42, ProductId = 777 }) == "NotYet", "Malformed receipts are never granted")
+		expect(profile.coins == before + original.coins, "Rejected receipts never change the balance")
+		-- A failed save must not report success, and a retry must not double-credit.
+		f.store.failBefore = true
+		local retry = { PlayerId = 42, ProductId = 777, PurchaseId = "abc-4" }
+		expect(f.marketplace.ProcessReceipt(retry) == "NotYet", "A receipt whose save failed is retried by Roblox")
+		expect(profile.coins == before + original.coins * 2, "The balance is already credited in memory")
+		f.store.failBefore = false
+		expect(f.marketplace.ProcessReceipt(retry) == "Granted", "The retry completes once storage recovers")
+		expect(profile.coins == before + original.coins * 2, "The retry must not credit a second time")
+		expect(f.store.values.player_42.profile.coins == before + original.coins * 2, "The retried grant is durable")
+		local snapshot = f.data:Snapshot(f.player)
+		expect(snapshot.coins == profile.coins, "The client sees the new balance")
+		-- Studio sessions are explicitly non-persistent, so a receipt there is grantable.
+		local studio = fixture(true)
+		studio.data:_Load(studio.player)
+		studio.shop:Start()
+		expect(studio.marketplace.ProcessReceipt({ PlayerId = 42, ProductId = 777, PurchaseId = "s-1" }) == "Granted", "Studio receipts grant into the session profile")
+	end)
+	original.productId = 0
+	expect(ok, tostring(err))
 end
 
 print("Data and shop service tests passed: " .. checks .. " checks")

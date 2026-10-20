@@ -37,6 +37,10 @@ local Config = {
 	Audio = {
 		Music = 0, Sprint = 0, Slide = 0, Vault = 0, Land = 0, Tag = 0, Win = 0, Lose = 0,
 		Level = 0, Countdown = 0, Final = 0, Purchase = 0,
+		-- Mall gameplay cues. Leave 0 to use the bundled engine fallbacks; paste a verified rbxassetid to override.
+		Pickup = 0, CloseCall = 0, Found = 0, Hide = 0, Reveal = 0, Scan = 0,
+		-- Looping mall ambience (crowd, fountain, muzak) under the music; 0 = silent.
+		Ambience = 0,
 	},
 }
 return table.freeze(Config)

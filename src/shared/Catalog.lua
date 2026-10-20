@@ -73,6 +73,24 @@ Catalog.DefaultEquipment = {
 	tones="tone_auto", hairColors="hair_auto",
 }
 function Catalog.Get(id) return Catalog.Items[id] end
+-- Developer-product coin packs. Coins only ever buy cosmetics, so these are convenience, never power.
+-- productId stays 0 until a real developer product is created; a 0 pack can be seen but never prompts.
+Catalog.Products = {
+	{id="coins_pocket",name="Pocket Change",coins=500,robux=49,productId=0,accent={255,208,64}},
+	{id="coins_bag",name="Shopping Bag",coins=1200,robux=99,productId=0,accent={86,232,142}},
+	{id="coins_haul",name="Mall Haul",coins=3200,robux=249,productId=0,accent={52,220,255}},
+	{id="coins_mogul",name="Mall Mogul",coins=9000,robux=599,productId=0,accent={255,96,184}},
+}
+Catalog.ProductsById = {}
+for _, product in ipairs(Catalog.Products) do Catalog.ProductsById[product.id] = product end
+function Catalog.Product(id) return Catalog.ProductsById[id] end
+function Catalog.ProductByRobloxId(productId)
+	if type(productId) ~= "number" or productId <= 0 then return nil end
+	for _, product in ipairs(Catalog.Products) do
+		if product.productId == productId then return product end
+	end
+	return nil
+end
 function Catalog.ForCategory(category)
 	local result = {}
 	for _, item in ipairs(entries) do
