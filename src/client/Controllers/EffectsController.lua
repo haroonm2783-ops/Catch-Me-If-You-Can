@@ -238,7 +238,7 @@ function EffectsController:_banner(text, color, duration, large)
 	local label = Instance.new("TextLabel")
 	label.Name = "ChaseCue"
 	label.AnchorPoint = Vector2.new(0.5, 0.5)
-	label.Position = UDim2.fromScale(0.5, 0.32)
+	label.Position = UDim2.fromScale(0.5, 0.55)
 	label.Size = UDim2.new(0.85, 0, 0, large and 110 or 42)
 	label.BackgroundTransparency = 1
 	label.Text = text
@@ -482,7 +482,6 @@ function EffectsController:OnNotice(notice)
 		self:_pulse(GOLD, 0.45)
 		self:_sound("CloseCall", 0.4)
 	elseif notice.kind == "found" then
-		self:_banner("FOUND ONE!", CORAL, 0.8, false)
 		self:_pulse(CORAL, 0.5)
 		self:_sound("Found", 0.5)
 	elseif notice.kind == "reveal" then

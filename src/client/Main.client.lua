@@ -32,7 +32,8 @@ ctx.Remotes.Notice.OnClientEvent:Connect(function(notice)
 	if type(notice) == "table" then deliver("OnNotice",notice) end
 end)
 for _, name in ipairs({"UIController","MovementController","EffectsController","HidingController"}) do
-	ctx.Controllers[name]:Start()
+	local ok, err = pcall(function() ctx.Controllers[name]:Start() end)
+	if not ok then warn("[Catch] " .. name .. ".Start: " .. tostring(err)) end
 end
 Players.LocalPlayer.CharacterAdded:Connect(function(character) deliver("OnCharacter",character) end)
 if Players.LocalPlayer.Character then deliver("OnCharacter",Players.LocalPlayer.Character) end

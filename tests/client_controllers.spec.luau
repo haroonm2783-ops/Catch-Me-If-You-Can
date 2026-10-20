@@ -93,6 +93,8 @@ local function fixture(viewport, inputType)
 		}}, {
 			__index = function(self, key)
 				if methods[key] then return methods[key] end
+				-- Real engine: only ScrollingFrame has CanvasPosition; reading it elsewhere throws.
+				if key == "CanvasPosition" and self.ClassName ~= "ScrollingFrame" then error("CanvasPosition is not a valid member of " .. self.ClassName) end
 				if key == "AbsoluteSize" then
 					if self.ClassName == "ScreenGui" or self.ClassName == "PlayerGui" then return viewport end
 					local parentSize = self.Parent and self.Parent.AbsoluteSize or viewport
@@ -682,7 +684,7 @@ do
 	effects._pulse = function() end
 	effects._worldBurst = function() end
 	for _, notice in ipairs({{kind = "pickup", count = 3}, {kind = "closecall"}, {kind = "found"}, {kind = "reveal", userId = 42}, {kind = "hide", state = "in"}, {kind = "scan"}}) do effects:OnNotice(notice) end
-	expect(table.concat(cues, ","):find("Pickup") and table.concat(cues, ","):find("CLOSE CALL") and table.concat(cues, ","):find("FOUND ONE") and table.concat(cues, ","):find("YOU WERE FOUND") and table.concat(cues, ","):find("Hide") and table.concat(cues, ","):find("Scan"), "Every mall gameplay notice has audiovisual feedback")
+	expect(table.concat(cues, ","):find("Pickup") and table.concat(cues, ","):find("CLOSE CALL") and table.concat(cues, ","):find("YOU WERE FOUND") and table.concat(cues, ","):find("Hide") and table.concat(cues, ","):find("Scan"), "Every mall gameplay notice has audiovisual feedback")
 end
 
 -- Hiding controller relabels prompts by role and honors server-owned occupancy.
@@ -790,6 +792,21 @@ do
 		end
 	end
 	expect(texts > 50, "The gradient guard must cover the real interface")
+end
+
+-- Short screens keep the objective card fully on screen (it sits under the dock row).
+do
+	for _, size in ipairs({Vector2.new(568, 320), Vector2.new(667, 375), Vector2.new(320, 500), Vector2.new(844, 350)}) do
+		local f = fixture(size, Enum.UserInputType.Touch)
+		f.ctx.Profile.settings.tutorialDone = true
+		local ui = f.load("UIController"); ui:Start()
+		f.ctx.State = {phase = "Active", roundId = 2, endsAt = 280, aliveRunners = 3, players = {{userId = 42, role = "Runner", alive = true}}}
+		ui:OnState(f.ctx.State)
+		local o = ui.objective
+		expect(o.Visible and o.Position.X.Offset >= 0 and o.Position.X.Offset + o.Size.X.Offset <= size.X, "Objective card must stay on screen at " .. tostring(size))
+		local header = ui.clock.Position.X.Offset + ui.clock.Size.X.Offset
+		expect(header <= size.X - ui.wallet.Size.X.Offset - 12 or ui.clock.AnchorPoint.X > 0, "Round card must not sit under the wallet at " .. tostring(size))
+	end
 end
 
 print("Client controller integration: " .. checks .. " checks passed")

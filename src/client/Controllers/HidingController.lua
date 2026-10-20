@@ -114,6 +114,10 @@ function HidingController:_marker(position, duration)
 	corner.Parent = label
 	Debris:AddItem(anchor, duration)
 	table.insert(self.markers, anchor)
+	task.delay(duration + 0.5, function()
+		local index = table.find(self.markers, anchor)
+		if index then table.remove(self.markers, index) end
+	end)
 end
 
 function HidingController:OnState(state)

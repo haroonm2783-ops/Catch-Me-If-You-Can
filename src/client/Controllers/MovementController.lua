@@ -76,6 +76,14 @@ local function moodOffset(name, mood, blend, clock)
 	return offset
 end
 
+-- The engine can hand back a C0 that differs from what was written in the last float bits.
+local function sameCFrame(a, b)
+	if a == nil or b == nil then return a == b end
+	return (a.Position - b.Position).Magnitude < 1e-4
+		and (a.LookVector - b.LookVector).Magnitude < 1e-4
+		and (a.UpVector - b.UpVector).Magnitude < 1e-4
+end
+
 local function collectPose(character)
 	local pose = {}
 	for _, descendant in ipairs(character:GetDescendants()) do
@@ -88,7 +96,7 @@ end
 
 local function resetPose(pose)
 	for _, record in ipairs(pose) do
-		if record.joint.Parent and record.last and record.joint.C0 == record.last then
+		if record.joint.Parent and record.last and sameCFrame(record.joint.C0, record.last) then
 			record.joint.C0 = record.base
 		end
 		record.last = nil
@@ -99,10 +107,12 @@ local function applyPose(pose, blend, lean, mood, moodBlend, clock)
 	for _, record in ipairs(pose) do
 		local joint = record.joint
 		if joint.Parent then
-			if joint.C0 ~= record.last then record.base = joint.C0 end
+			if not sameCFrame(joint.C0, record.last) then record.base = joint.C0 end
 			local offset = CFrame.new():Lerp(SLIDE_POSE[joint.Name] or CFrame.new(), blend)
-			if MOOD_JOINTS[joint.Name] and not (blend > 0.5 and SLIDE_POSE[joint.Name]) then
-				offset = offset * moodOffset(joint.Name, mood or "Idle", moodBlend or 0, clock or 0)
+			if MOOD_JOINTS[joint.Name] then
+				-- Fade the mood out as the slide pose takes over a shared joint, so nothing pops.
+				local share = SLIDE_POSE[joint.Name] and (1 - math.clamp(blend, 0, 1)) or 1
+				offset = offset * moodOffset(joint.Name, mood or "Idle", (moodBlend or 0) * share, clock or 0)
 			end
 			if joint.Name == "Waist" or joint.Name == "RootJoint" then
 				offset *= CFrame.Angles(lean.X, lean.Y, lean.Z)
@@ -375,7 +385,20 @@ function MovementController:OnState(state)
 	self:_touchControls()
 end
 
+-- Touch buttons can appear a frame after BindAction, so styling is reapplied on every state update.
+function MovementController:_styleTouchControls()
+	for _, action in ipairs(ACTIONS) do
+		local control = ContextActionService:GetButton(action)
+		if control and not control:GetAttribute("CatchStyled") then
+			control.Size = UDim2.fromOffset(64, 64)
+			control.ImageColor3 = Color3.fromRGB(86, 66, 190)
+			control:SetAttribute("CatchStyled", true)
+		end
+	end
+end
+
 function MovementController:_touchControls()
+	self:_styleTouchControls()
 	local visible = self.role ~= "Spectator" and not self.player:GetAttribute("CatchMenuOpen")
 	for _, action in ipairs(ACTIONS) do
 		local control = ContextActionService:GetButton(action)
@@ -456,13 +479,7 @@ function MovementController:Start()
 	ContextActionService:SetPosition("CatchSlide", UDim2.new(1, -110, 1, -150))
 	ContextActionService:SetPosition("CatchTag", UDim2.new(1, -190, 1, -225))
 	ContextActionService:SetPosition("CatchScan", UDim2.new(1, -110, 1, -225))
-	for _, action in ipairs(ACTIONS) do
-		local button = ContextActionService:GetButton(action)
-		if button then
-			button.Size = UDim2.fromOffset(64, 64)
-			button.ImageColor3 = Color3.fromRGB(31, 47, 65)
-		end
-	end
+	self:_styleTouchControls()
 	table.insert(self.connections, UserInputService.JumpRequest:Connect(function()
 		if UserInputService.TouchEnabled then
 			self:_intent("Vault")

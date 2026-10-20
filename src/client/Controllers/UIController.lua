@@ -54,7 +54,9 @@ local function stroke(object, color, transparency, thickness)
 		ApplyStrokeMode = Enum.ApplyStrokeMode.Border}, object)
 end
 
+-- A UIGradient multiplies the object's BackgroundColor3, so the base stays white and the gradient owns the color.
 local function gradient(object, first, last, rotation)
+	object.BackgroundColor3 = Color3.new(1, 1, 1)
 	return node("UIGradient", {Color = ColorSequence.new(first, last), Rotation = rotation or 90}, object)
 end
 
@@ -252,9 +254,26 @@ function UIController:Start()
 			self.previewCamera.CFrame = CFrame.lookAt(Vector3.new(math.sin(angle) * 11, 1.4, -math.cos(angle) * 11), Vector3.new(0, 0.15, 0))
 		end
 	end)
+	self:_makeRoomForCoreUi()
 	self:_responsive()
 	self:OnProfile(self.ctx.Profile)
 	self:OnState(self.ctx.State)
+end
+
+-- Roblox's default chat window and player list sit in the corners the HUD uses. Move the chat to the
+-- lower left and hide the player list (the CREW menu replaces it). Best-effort: failures are harmless.
+function UIController:_makeRoomForCoreUi()
+	pcall(function()
+		game:GetService("StarterGui"):SetCoreGuiEnabled(Enum.CoreGuiType.PlayerList, false)
+	end)
+	pcall(function()
+		if self.root.AbsoluteSize.X < 700 then return end
+		local window = game:GetService("TextChatService"):FindFirstChildOfClass("ChatWindowConfiguration")
+		if window then
+			window.Size = UDim2.fromOffset(340, 170)
+			window.Position = UDim2.new(0, 108, 1, -230)
+		end
+	end)
 end
 
 ---------------------------------------------------------------------------------------------------
@@ -329,13 +348,13 @@ function UIController:_buildObjective()
 	gradient(self.objective, Color3.fromRGB(74, 56, 170), C.background, 90)
 	self.roleChip = label(self.objective, "RUNNER", {Position = UDim2.fromOffset(12, 5), Size = UDim2.new(0.5, -12, 0, 16), TextSize = 11, TextColor3 = C.cyan, Font = F.black})
 	self.objectiveRight = label(self.objective, "", {Position = UDim2.new(0.5, 0, 0, 5), Size = UDim2.new(0.5, -12, 0, 16), TextSize = 11, TextColor3 = C.muted, TextXAlignment = Enum.TextXAlignment.Right})
-	self.objectiveText = label(self.objective, "", {Position = UDim2.fromOffset(12, 22), Size = UDim2.new(1, -24, 0, 30), TextSize = 13, TextWrapped = true, TextYAlignment = Enum.TextYAlignment.Top})
-	self.hideMeter = frame(self.root, {Name = "HideMeter", AnchorPoint = Vector2.new(0.5, 0), Position = UDim2.new(0.5, 0, 0, 148), Size = UDim2.fromOffset(300, 64), BackgroundColor3 = C.background, Visible = false}, 14)
+	self.objectiveText = label(self.objective, "", {Position = UDim2.fromOffset(12, 22), Size = UDim2.new(1, -24, 0, 30), TextSize = 12, TextWrapped = true, TextYAlignment = Enum.TextYAlignment.Top})
+	self.hideMeter = frame(self.root, {Name = "HideMeter", AnchorPoint = Vector2.new(0.5, 0), Position = UDim2.new(0.5, 0, 0, 150), Size = UDim2.fromOffset(300, 84), BackgroundColor3 = C.background, Visible = false}, 14)
 	stroke(self.hideMeter, C.amber, 0, 3)
 	label(self.hideMeter, "🤫 HIDING... SHHH!", {Position = UDim2.fromOffset(12, 6), Size = UDim2.new(1, -24, 0, 16), TextSize = 12, TextColor3 = C.amber, Font = F.black})
 	local track = frame(self.hideMeter, {Position = UDim2.fromOffset(12, 28), Size = UDim2.new(1, -24, 0, 8), BackgroundColor3 = C.ink}, 4)
 	self.hideFill = frame(track, {Name = "HideFill", Size = UDim2.fromScale(1, 1), BackgroundColor3 = C.amber}, 4)
-	self.leaveButton = button(self.hideMeter, "LEAVE SPOT", function() self:_send("Unhide") end, {Name = "LeaveHiding", Position = UDim2.new(0, 12, 1, -24), Size = UDim2.new(1, -24, 0, 18), TextSize = 10, BackgroundColor3 = C.coral})
+	self.leaveButton = button(self.hideMeter, "LEAVE SPOT", function() self:_send("Unhide") end, {Name = "LeaveHiding", Position = UDim2.new(0, 12, 1, -38), Size = UDim2.new(1, -24, 0, 32), TextSize = 12, BackgroundColor3 = C.coral})
 end
 
 function UIController:_buildHero()
@@ -391,7 +410,7 @@ function UIController:_buildPanel()
 	gradient(self.panel, Color3.fromRGB(70, 54, 160), C.background, 110)
 	self.panelScale = node("UIScale", {Scale = 1}, self.panel)
 	self.panelBanner = frame(self.panel, {Name = "Banner", Size = UDim2.new(1, 0, 0, 66), BackgroundColor3 = C.pink, ZIndex = 5}, 22)
-	gradient(self.panelBanner, Color3.fromRGB(255, 130, 200), Color3.fromRGB(150, 80, 255), 0)
+	self.bannerGradient = gradient(self.panelBanner, Color3.fromRGB(255, 130, 200), Color3.fromRGB(150, 80, 255), 0)
 	self.panelTitle = label(self.panel, "THE SHOP", {Position = UDim2.fromOffset(20, 8), Size = UDim2.new(1, -90, 0, 30), Font = F.title, TextSize = 26, TextTruncate = Enum.TextTruncate.AtEnd, TextStrokeTransparency = 0.6, ZIndex = 6})
 	self.panelSubtitle = label(self.panel, "", {Position = UDim2.fromOffset(20, 38), Size = UDim2.new(1, -90, 0, 20), TextColor3 = Color3.fromRGB(255, 240, 255), TextSize = 11, Font = F.medium, ZIndex = 6})
 	button(self.panel, "X", function() self:CloseMenu() end, {Name = "Close", Position = UDim2.new(1, -54, 0, 12), Size = UDim2.fromOffset(40, 40), BackgroundColor3 = C.coral, ZIndex = 7})
@@ -465,14 +484,14 @@ function UIController:_finishTutorial()
 end
 
 function UIController:_buildToast()
-	self.toast = frame(self.root, {AnchorPoint = Vector2.new(0.5, 0), Position = UDim2.new(0.5, 0, 0, 220), Size = UDim2.new(0.8, 0, 0, 52), Visible = false, BackgroundColor3 = C.card, ZIndex = 20}, 14)
+	self.toast = frame(self.root, {AnchorPoint = Vector2.new(0.5, 0), Position = UDim2.fromScale(0.5, 0.68), Size = UDim2.new(0.8, 0, 0, 52), Visible = false, BackgroundColor3 = C.card, ZIndex = 20}, 14)
 	node("UISizeConstraint", {MaxSize = Vector2.new(600, 90)}, self.toast)
 	self.toastStroke = stroke(self.toast, C.cyan, 0, 3)
 	self.toastText = label(self.toast, "", {Position = UDim2.fromOffset(14, 6), Size = UDim2.new(1, -28, 1, -12), TextSize = 14, Font = F.bold, TextWrapped = true, TextXAlignment = Enum.TextXAlignment.Center, ZIndex = 21})
 end
 
 function UIController:_buildAnnouncement()
-	self.announcement = frame(self.root, {AnchorPoint = Vector2.new(0.5, 0.5), Position = UDim2.fromScale(0.5, 0.36), Size = UDim2.new(0.85, 0, 0, 144), BackgroundColor3 = C.background, BackgroundTransparency = 0.04, Visible = false, ZIndex = 18}, 22)
+	self.announcement = frame(self.root, {AnchorPoint = Vector2.new(0.5, 0.5), Position = UDim2.fromScale(0.5, 0.3), Size = UDim2.new(0.85, 0, 0, 144), BackgroundColor3 = C.background, BackgroundTransparency = 0.04, Visible = false, ZIndex = 18}, 22)
 	node("UISizeConstraint", {MaxSize = Vector2.new(640, 144)}, self.announcement)
 	self.announcementStroke = stroke(self.announcement, C.cyan, 0, 4)
 	self.announcementTitle = label(self.announcement, "YOU ARE A RUNNER", {Position = UDim2.fromOffset(12, 20), Size = UDim2.new(1, -24, 0, 50), TextSize = 32, Font = F.title, TextXAlignment = Enum.TextXAlignment.Center, TextScaled = true, ZIndex = 19})
@@ -513,10 +532,10 @@ function UIController:_responsive()
 	self.brandLabel.TextSize = small and 13 or 20
 	self.clock.Position = size.X < 560 and UDim2.fromOffset(size.X < 400 and 60 or 80, 0) or UDim2.fromScale(0.5, 0)
 	self.clock.AnchorPoint = size.X < 560 and Vector2.zero or Vector2.new(0.5, 0)
-	self.clock.Size = UDim2.fromOffset(small and 150 or 230, 66)
+	self.clock.Size = UDim2.fromOffset(size.X < 360 and 124 or (small and 150 or 230), 66)
 	self.phaseLabel.TextSize = small and 8 or 10
 	self.timerLabel.TextSize = small and 22 or 28
-	self.wallet.Size = UDim2.fromOffset(small and 116 or 188, 60)
+	self.wallet.Size = UDim2.fromOffset(size.X < 360 and 108 or (small and 116 or 188), 60)
 	self.coinsLabel.TextSize = small and 15 or 21
 	self.levelLabel.TextSize = small and 8 or 10
 	-- Dock: Shop and Locker lead, and stay on screen at every size.
@@ -542,14 +561,20 @@ function UIController:_responsive()
 	self.leftMargin = leftMargin
 	-- Objective
 	local objectiveWidth = math.min(300, size.X - leftMargin - 130)
-	self.objective.Size = UDim2.fromOffset(math.max(180, objectiveWidth), small and 52 or 58)
-	local objectiveY = horizontal and 76 or 78
-	self.objective.Position = (small or horizontal) and UDim2.fromOffset(leftMargin + (horizontal and cell * 8 + 12 or 0), objectiveY) or UDim2.new(0.5, 0, 0, 82)
+	self.objective.Size = UDim2.fromOffset(math.max(180, objectiveWidth), 62)
+	-- Short screens tuck the objective under the dock row instead of beside it, so it never leaves the screen.
+	if horizontal then
+		self.objective.Size = UDim2.fromOffset(math.max(180, math.min(300, size.X - 16)), 52)
+		self.objective.Position = UDim2.fromOffset(8, top)
+	elseif small then
+		self.objective.Position = UDim2.fromOffset(leftMargin, 78)
+	else
+		self.objective.Position = UDim2.new(0.5, 0, 0, 82)
+	end
 	self.objective.AnchorPoint = (small or horizontal) and Vector2.zero or Vector2.new(0.5, 0)
-	if small and not horizontal then self.objective.Position = UDim2.fromOffset(leftMargin, 78) end
-	self.hideMeter.Size = UDim2.fromOffset(math.max(180, math.min(300, size.X - leftMargin - 16)), 64)
+	self.hideMeter.Size = UDim2.fromOffset(math.max(180, math.min(300, size.X - leftMargin - 16)), 84)
 	self.hideMeter.AnchorPoint = Vector2.new(0.5, 0)
-	self.hideMeter.Position = UDim2.new(0.5, 0, 0, small and 140 or 148)
+	self.hideMeter.Position = UDim2.new(0.5, 0, 0, horizontal and 140 or (small and 146 or 150))
 	-- Welcome card
 	self.hero.Size = UDim2.fromOffset(math.max(220, math.min(size.X - leftMargin - 16, 430)), short and 200 or 250)
 	self.hero.Position = short and UDim2.fromOffset(leftMargin, top + 6) or UDim2.new(0, leftMargin, 0.5, -90)
@@ -608,12 +633,12 @@ function UIController:_renderMenu()
 	local focused = GuiService.SelectedObject
 	local focusName = focused and focused:IsDescendantOf(self.panelContent) and focused.Name
 	local grid = self.panelContent:FindFirstChild("CollectionGrid", true)
-	if grid and grid.CanvasPosition then self.gridScroll = grid.CanvasPosition.Y end
+	if grid and grid.ClassName == "ScrollingFrame" and grid.CanvasPosition then self.gridScroll = grid.CanvasPosition.Y end
 	self.previewModel, self.previewCamera = nil, nil
 	clear(self.panelContent)
 	local colors = {Shop = C.pink, Inventory = C.cyan, Quests = C.amber, Progress = C.green, Settings = C.card, Leaderboard = C.card, Results = C.amber}
 	local banner = colors[self.menu] or C.pink
-	self.panelBanner.BackgroundColor3 = banner
+	self.bannerGradient.Color = ColorSequence.new(shade(banner, 1.12), shade(banner, 0.82))
 	if self.menu == "Shop" or self.menu == "Inventory" then self:_renderShop()
 	elseif self.menu == "Quests" then self:_renderQuests()
 	elseif self.menu == "Progress" then self:_renderProgress()
@@ -770,7 +795,7 @@ function UIController:_renderShop()
 		label(card, text, {Name = "Status", Position = UDim2.new(0, 8, 1, -28), Size = UDim2.new(1, -16, 0, 20), Font = F.black, TextSize = 10, TextColor3 = color, TextTruncate = Enum.TextTruncate.AtEnd, ZIndex = 4})
 		if chosen then stroke(card, C.text, 0, 3) end
 	end
-	if grid.CanvasPosition and self.gridScroll and not compact then grid.CanvasPosition = Vector2.new(0, self.gridScroll) end
+	if not compact and grid.ClassName == "ScrollingFrame" and self.gridScroll then grid.CanvasPosition = Vector2.new(0, self.gridScroll) end
 	if #visible == 0 then
 		label(collection, "Your locker is empty here.\nVisit the shop to find something you love!", {Position = UDim2.fromOffset(12, 96), Size = UDim2.new(1, -24, 0, 80), TextWrapped = true, TextColor3 = C.muted, TextXAlignment = Enum.TextXAlignment.Center})
 		button(collection, "EXPLORE THE SHOP", function() self:OpenMenu("Shop") end, {Name = "ExploreShop", Position = UDim2.fromOffset(12, 186), Size = UDim2.new(1, -24, 0, 44), BackgroundColor3 = C.pink, TextSize = 13})
@@ -1152,10 +1177,10 @@ function UIController:_updateObjective(state, role)
 	self.objectiveRight.Text = tostring(state.aliveRunners or 0) .. " RUNNERS LEFT"
 	if role == "Hunter" then
 		local finds = record and record.finds or 0
-		self.objectiveText.Text = "Search hiding spots (E), scan (Q), tag every runner." .. (finds > 0 and ("  Found: " .. finds) or "")
+		self.objectiveText.Text = "Search (E) · Scan (Q) · Tag" .. (finds > 0 and ("  ·  Found: " .. finds) or "")
 	else
 		local count = math.max(record and record.pickups or 0, self.pickupCount or 0)
-		self.objectiveText.Text = "🪙 Coins " .. count .. "/" .. cap .. "   ·   Hide with E near fitting rooms & lockers"
+		self.objectiveText.Text = "🪙 Coins " .. count .. "/" .. cap .. "  ·  Hold E to hide"
 	end
 	local hiding = self.hideEndsAt ~= nil and role == "Runner"
 	self.hideMeter.Visible = hiding

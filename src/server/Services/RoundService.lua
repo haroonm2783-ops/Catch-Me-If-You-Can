@@ -106,6 +106,7 @@ function RoundService:Snapshot()
 				role = self:GetRole(player),
 				alive = entry ~= nil and entry.alive and self:_playingPhase(),
 				pickups = entry and entry.pickups or 0,
+				finds = entry and entry.finds or 0,
 			})
 		end
 	end

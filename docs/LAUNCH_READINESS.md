@@ -45,6 +45,14 @@ Nothing here is 9/10 because nothing has been seen in the real engine.
 | Performance | 4 | ~7,200 parts, 51 lights, StreamingEnabled off. Never measured. Biggest launch risk on phones. |
 | **Launch readiness overall** | **5** | Content-complete and well-tested on paper; zero engine playtests. |
 
+## Independent code review
+A separate reviewer read the client code against real Roblox behavior (no Studio). It found and I fixed: a crash that
+would have broken the Shop/Locker on phones (reading `CanvasPosition` on a plain Frame), gradients darkening their
+frames, an off-screen objective card on short screens, overlapping banners/toasts, tiny Leave-spot touch target,
+missing hunter `finds` in the state snapshot, unguarded client startup, and a slide/mood pose pop. The mock now throws
+on that class of error. Roblox's default player list is hidden (the CREW menu replaces it) and the chat window is
+moved to the lower left on wide screens: **verify chat and the HUD do not overlap in Studio.**
+
 ## What is NOT verified (needs a human in Studio / published test place)
 | Area | Why it matters | How to verify |
 | --- | --- | --- |
