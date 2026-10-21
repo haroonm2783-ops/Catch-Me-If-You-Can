@@ -9,9 +9,22 @@ local process = require("@lune/process")
 local Catalog = require("../src/shared/Catalog")
 local environment = {}
 for key, value in pairs(roblox) do environment[key] = value end
-local Appearance = luau.load(fs.readFile("src/shared/Appearance.lua"), {
-	environment=environment, debugName="Appearance",
-})()
+-- Appearance requires its sibling Trails module the way it does inside Roblox.
+local modules = {}
+local function loadModule(name)
+	local scoped = {}
+	for key, value in pairs(environment) do scoped[key] = value end
+	scoped.script = {Parent = {WaitForChild = function(_, sibling) return sibling end}}
+	scoped.require = function(sibling) return modules[sibling] end
+	modules[name] = luau.load(fs.readFile("src/shared/" .. name .. ".lua"), {environment=scoped, debugName=name})()
+	return modules[name]
+end
+loadModule("Trails")
+loadModule("Poses")
+loadModule("Emotes")
+local Appearance = loadModule("Appearance")
+local PreviewStage = loadModule("PreviewStage")
+local Emotes, Poses = modules.Emotes, modules.Poses
 
 local function names(category)
 	local result = {}
@@ -19,7 +32,7 @@ local function names(category)
 	return result
 end
 local skinItems, maskItems = names("skins"), names("masks")
-local sheets = {skins={}, masks={}}
+local sheets = {skins={}, masks={}, trails={}, emotes={}}
 -- Decals are not geometry, so the stock Roblox face is drawn as two eyes and a smile for the preview only.
 local function faceParts(rig)
 	local head = rig:FindFirstChild("Head")
@@ -34,11 +47,14 @@ local function faceParts(rig)
 	dot("FaceSmile", 0, -0.22, {0.46, 0.07}, {0.1, 0.1, 0.12})
 	return list
 end
-local function capture(sheet, title, subtitle, skin, mask, role, view, accent)
+local function capture(sheet, title, subtitle, skin, mask, role, view, accent, prepare)
 	local rig = Appearance.BuildPreview(skin, mask, {}, {userId=3})
 	if role then Appearance.ApplyRole(rig, role) end
+	local container = roblox.Instance.new("Model")
+	rig.Parent = container
+	local cleanup = prepare and prepare(rig, container)
 	local parts = {}
-	for _, part in ipairs(rig:GetDescendants()) do
+	for _, part in ipairs(container:GetDescendants()) do
 		if part:IsA("BasePart") and part.Transparency<0.99 then
 			local shape = part:IsA("WedgePart") and "Wedge" or part:IsA("Part") and part.Shape.Name or "Block"
 			local size = {part.Size.X,part.Size.Y,part.Size.Z}
@@ -61,7 +77,8 @@ local function capture(sheet, title, subtitle, skin, mask, role, view, accent)
 		return false
 	end)
 	table.insert(sheets[sheet],{title=title,subtitle=subtitle,parts=parts,view=view,accent=accent,count=#parts})
-	rig:Destroy()
+	if cleanup then cleanup() end
+	container:Destroy()
 end
 for _, item in ipairs(skinItems) do
 	capture("skins", string.upper(item.name), item.rarity .. " / " .. item.currency, item.id, "", nil, "full", item.accent)
@@ -69,6 +86,26 @@ end
 capture("skins", "HUNTER ROLE", "Original You + hunter identity", "skin_courier", "", "Hunter", "full", {255,84,70})
 for _, item in ipairs(maskItems) do
 	capture("masks", string.upper(item.name), item.rarity .. " / " .. item.currency, "skin_courier", item.id, nil, "head", item.accent)
+end
+-- Trails: the runner mid-lap with the trail drawn by Trails.Emulator, the same picture the Shop preview shows.
+for _, id in ipairs(modules.Trails.Order) do
+	local item = Catalog.Get(id)
+	capture("trails", string.upper(item.name), item.rarity .. " / " .. item.currency, "skin_courier", "", nil, "wide", item.accent, function(rig, container)
+		local stage = PreviewStage.new({world=container, camera=nil, rig=rig, kind="trail", id=id, motion=true})
+		for _ = 1, 66 do stage:Update(1/30) end
+		return function() stage:Destroy() end
+	end)
+end
+-- Emotes: four key frames of each emote on the same avatar.
+for _, id in ipairs(Emotes.Order) do
+	local item = Catalog.Get(id)
+	local def = Emotes.Defs[id]
+	for step, fraction in ipairs({0.18, 0.38, 0.6, 0.82}) do
+		capture("emotes", string.upper(item.name), string.format("t = %.1fs of %.1fs", def.duration * fraction, def.duration), "skin_courier", "", nil, "wide", item.accent, function(rig)
+			local pose = Poses.Preview(rig)
+			pose:Set(Emotes.Sample(id, def.duration * fraction, true) or {}, roblox.CFrame.new())
+		end)
+	end
 end
 local output = process.args[1] or ".tooling/character-geometry.json"
 fs.writeFile(output,serde.encode("json",{

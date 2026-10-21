@@ -1,12 +1,14 @@
 -- Avatar-first cosmetics, shared by live characters and viewport previews.
 --
--- Players keep their OWN Roblox avatar: body, face, clothes, hair and Roblox's standard animations are
--- never replaced. Skins are optional overlays made of chunky welded, massless, non-colliding pieces
--- (hats, back items, capes, wings, tails, belts) built from plain parts, so they need no uploaded assets.
--- Epic and Legendary skins add an ambient aura; a few full-body looks (like the gold statue) also tint the
--- player's limbs, which is reversible and restores the original colors on the next Apply.
+-- Players keep their OWN Roblox avatar: body, face, proportions and Roblox's standard animations are never
+-- replaced. A skin is an optional costume of chunky welded, massless, non-colliding pieces built from plain
+-- parts (so it needs no uploaded assets): body-conforming shells for the torso, arms and legs, plus hats, hoods,
+-- capes, wings, tails and boots. The player's own hair, hats and layered clothing are hidden while a costume is
+-- worn and restored exactly afterwards. Epic and Legendary skins add an ambient aura.
 -- Cosmetic only: nothing here touches collision, speed, hitboxes or tag raycasts.
-local Appearance = {Version = 4}
+local Trails = require(script.Parent:WaitForChild("Trails"))
+
+local Appearance = {Version = 5}
 
 local C = Color3.fromRGB
 local SIDES = {{"Left", -1}, {"Right", 1}}
@@ -123,323 +125,499 @@ function Appearance.IdentityColor(userId)
 	return Color3.fromHSV(hue, 0.65, 1)
 end
 
+
 -- ---------------------------------------------------------------------------------------
--- Skins. Each definition may declare: hidesHair (hat-like looks hide the player's hair/hat
--- accessories), tint (full-body look), aura (ambient particles) and a `build` of overlay parts.
--- Shapes are deliberately bold and simple so they read at a distance on a phone.
+-- Skins. Each definition may declare:
+--   hides      "hair" (hats/hoods) or "outfit" (a full costume) hides the player's own hair, hats and layered
+--              clothing so nothing clips through the costume (restored exactly when the look changes)
+--   headwear   true when the look sits on the head; masks then leave their "Top..." pieces off so nothing collides
+--   tint       full-body recolor (the gold statue), reversible
+--   aura       ambient particles for Epic and Legendary looks
+--   build      the overlay parts
+-- A costume is made of body-conforming "shells" (slightly larger than the avatar's own limbs, so every
+-- player's face, head and proportions still show) plus props: hats, hoods, capes, wings, boots, scarves.
+-- Shapes are bold and simple so they read at a distance on a phone.
 -- ---------------------------------------------------------------------------------------
 local skins = {}
 local M = Enum.Material
+local V = Vector3.new
 
 local function wristbands(k, color, material)
 	for _, s in ipairs(SIDES) do
-		k.p(s[1] .. "LowerArm", "Wristband_" .. s[1], Vector3.new(1.1, 0.24, 1.1), offset(0, -0.34, 0), color, material)
+		k.p(s[1] .. "LowerArm", "Wristband_" .. s[1], V(1.1, 0.24, 1.1), offset(0, -0.34, 0), color, material)
 	end
+end
+
+-- A body-conforming shell: the avatar's own part, grown a little, in a costume color.
+local function shell(k, target, name, color, grow, material, shift, shape)
+	return k.p(target, name, nominal[target] + (grow or V(0.12, 0.04, 0.12)), shift or offset(0, 0, 0), color, material, shape)
+end
+
+-- Complete clothing in one call. Every field is optional, so short sleeves, bare hands and shorts are easy.
+--   torso hips sleeve forearm glove thigh shin shoe sole   colors (a field may be {Left = c, Right = c})
+--   mat     material of the cloth pieces (default Fabric), shoeMat/gloveMat default SmoothPlastic
+local function suit(k, o)
+	local cloth = o.mat or M.Fabric
+	local function side(value, name) if type(value) == "table" and value.Left then return value[name] end return value end
+	if o.torso then shell(k, "UpperTorso", "Shirt", o.torso, V(0.14, 0.06, 0.14), cloth) end
+	if o.hips then shell(k, "LowerTorso", "Hips", o.hips, V(0.14, 0.06, 0.14), cloth) end
+	for _, s in ipairs(SIDES) do
+		local n = s[1]
+		if o.sleeve then shell(k, n .. "UpperArm", "Sleeve_" .. n, side(o.sleeve, n), V(0.12, 0.04, 0.12), cloth) end
+		if o.forearm then shell(k, n .. "LowerArm", "Forearm_" .. n, side(o.forearm, n), V(0.12, 0.04, 0.12), cloth) end
+		if o.glove then shell(k, n .. "Hand", "Glove_" .. n, side(o.glove, n), V(0.14, 0.14, 0.14), o.gloveMat, offset(0, -0.04, 0)) end
+		if o.thigh then shell(k, n .. "UpperLeg", "Thigh_" .. n, side(o.thigh, n), V(0.12, 0.04, 0.12), cloth) end
+		if o.shin then shell(k, n .. "LowerLeg", "Shin_" .. n, side(o.shin, n), V(0.12, 0.04, 0.12), cloth) end
+		if o.shoe then
+			k.p(n .. "Foot", "Shoe_" .. n, V(1.14, 0.46, 1.3), offset(0, 0.06, -0.12), side(o.shoe, n), o.shoeMat)
+			if o.sole then k.p(n .. "Foot", "Sole_" .. n, V(1.18, 0.14, 1.34), offset(0, -0.14, -0.12), side(o.sole, n)) end
+		end
+	end
+end
+
+-- A ring that wraps a limb or the torso: cuffs, stripes, belts, hems.
+local function ring(k, target, name, color, y, height, grow, material)
+	return k.p(target, name, V(nominal[target].X + grow, height, nominal[target].Z + grow), offset(0, y, 0), color, material)
 end
 
 -- Default: nothing is changed. The player's own avatar is the starting look.
 skins.skin_courier = {build = function() end}
 
-skins.skin_rooftop = {
-	hidesHair = true,
+-- COMMON ---------------------------------------------------------------------------------
+skins.skin_rooftop = { -- Skate Kid
+	hides = "outfit", headwear = true,
 	build = function(k)
-		local yellow, white, red, purple = C(255, 208, 40), C(255, 255, 255), C(236, 60, 70), C(140, 80, 230)
-		k.p("Head", "Beanie", Vector3.new(1.4, 0.95, 1.4), offset(0, 0.56, 0.02), yellow, nil, "Ball")
-		k.p("Head", "BeanieFold", Vector3.new(1.42, 0.26, 1.42), offset(0, 0.4, 0.02), white, nil, "Can")
-		k.p("Head", "BeanieStripe", Vector3.new(1.36, 0.12, 1.36), offset(0, 0.78, 0.02), red, nil, "Can")
-		k.p("Head", "Pompom", Vector3.new(0.42, 0.42, 0.42), offset(0, 1.12, 0.02), red, nil, "Ball")
+		local yellow, white, red, denim, ink = C(255, 208, 40), C(250, 250, 250), C(236, 60, 70), C(58, 104, 206), C(40, 40, 52)
+		suit(k, {torso = yellow, hips = yellow, sleeve = yellow, forearm = yellow, thigh = denim, shin = denim, shoe = white, sole = red})
+		-- Beanie with a fold, a stripe and a pompom.
+		k.p("Head", "Beanie", V(1.4, 0.95, 1.4), offset(0, 0.56, 0.02), yellow, nil, "Ball")
+		k.p("Head", "BeanieFold", V(1.42, 0.26, 1.42), offset(0, 0.4, 0.02), white, nil, "Can")
+		k.p("Head", "BeanieStripe", V(1.36, 0.12, 1.36), offset(0, 0.78, 0.02), red, nil, "Can")
+		k.p("Head", "Pompom", V(0.42, 0.42, 0.42), offset(0, 1.12, 0.02), red, nil, "Ball")
+		-- Hoodie pocket and drawstrings, knee pads.
+		k.p("UpperTorso", "HoodiePocket", V(1.2, 0.5, 0.06), offset(0, -0.45, -0.6), C(236, 176, 24))
+		for _, s in ipairs(SIDES) do
+			k.p("UpperTorso", "Drawstring_" .. s[1], V(0.07, 0.5, 0.07), offset(s[2] * 0.2, 0.42, -0.6), white)
+			k.p(s[1] .. "LowerLeg", "KneePad_" .. s[1], V(1.2, 0.36, 1.2), offset(0, 0.46, -0.04), red, M.SmoothPlastic)
+		end
 		-- A deck on the back gives a clear silhouette from behind.
-		k.p("UpperTorso", "SkateDeck", Vector3.new(1.0, 2.7, 0.14), offset(0, -0.1, 0.66, 0, 0, 12), purple)
-		k.p("UpperTorso", "DeckGrip", Vector3.new(0.9, 2.5, 0.05), offset(0, -0.1, 0.74, 0, 0, 12), C(40, 40, 48))
+		k.p("UpperTorso", "SkateDeck", V(1.0, 2.7, 0.14), offset(0, -0.1, 0.66, 0, 0, 12), C(140, 80, 230))
+		k.p("UpperTorso", "DeckGrip", V(0.9, 2.5, 0.05), offset(0, -0.1, 0.74, 0, 0, 12), ink)
 		for _, y in ipairs({-1.0, 0.8}) do
 			for _, x in ipairs({-0.32, 0.32}) do
-				k.p("UpperTorso", "SkateWheel", Vector3.new(0.26, 0.26, 0.26), offset(x - y * 0.06, y, 0.84), white, nil, "Ball")
+				k.p("UpperTorso", "SkateWheel", V(0.26, 0.26, 0.26), offset(x - y * 0.06, y, 0.84), white, nil, "Ball")
 			end
 		end
-		wristbands(k, red)
 	end,
 }
 
-skins.skin_pizza = {
-	hidesHair = true,
+skins.skin_pizza = { -- Pizza Courier
+	hides = "outfit", headwear = true,
 	build = function(k)
-		local red, white, cheese, pepperoni = C(230, 50, 50), C(255, 255, 255), C(255, 196, 60), C(200, 40, 40)
-		k.p("Head", "CapCrown", Vector3.new(1.38, 0.8, 1.38), offset(0, 0.56, 0.02), red, nil, "Ball")
-		k.p("Head", "CapBrim", Vector3.new(1.1, 0.09, 0.7), offset(0, 0.46, -0.82, 10), white)
-		k.p("Head", "CapBadge", Vector3.new(0.44, 0.44, 0.06), offset(0, 0.7, -0.66, -20), cheese, nil, "Disc")
-		k.p("Head", "CapPepperoni", Vector3.new(0.14, 0.14, 0.06), offset(0.06, 0.72, -0.7, -20), pepperoni, nil, "Disc")
+		local red, white, cheese, pepperoni, black = C(230, 50, 50), C(255, 255, 255), C(255, 196, 60), C(200, 40, 40), C(40, 40, 52)
+		-- Short-sleeve polo (forearms stay yours), black work pants, white sneakers.
+		suit(k, {torso = red, hips = red, sleeve = red, thigh = black, shin = black, shoe = white, sole = red})
+		for _, s in ipairs(SIDES) do
+			ring(k, s[1] .. "UpperArm", "SleeveHem_" .. s[1], white, -0.5, 0.14, 0.18)
+			k.p("UpperTorso", "CollarFlap_" .. s[1], V(0.5, 0.3, 0.1), offset(s[2] * 0.32, 0.72, -0.56, 0, 0, s[2] * 22), white)
+		end
+		k.p("UpperTorso", "NameTag", V(0.4, 0.4, 0.06), offset(0.55, 0.2, -0.6), cheese, nil, "Disc")
+		-- Delivery cap.
+		k.p("Head", "CapCrown", V(1.38, 0.8, 1.38), offset(0, 0.56, 0.02), red, nil, "Ball")
+		k.p("Head", "CapBrim", V(1.1, 0.09, 0.7), offset(0, 0.46, -0.82, 10), white)
+		k.p("Head", "CapBadge", V(0.44, 0.44, 0.06), offset(0, 0.7, -0.66, -20), cheese, nil, "Disc")
+		k.p("Head", "CapPepperoni", V(0.14, 0.14, 0.06), offset(0.06, 0.72, -0.7, -20), pepperoni, nil, "Disc")
 		-- A big flat delivery box carried on the back, with a pizza circle on the lid.
-		k.p("UpperTorso", "PizzaBox", Vector3.new(2.0, 2.0, 0.4), offset(0, 0.0, 0.72), white)
-		k.p("UpperTorso", "BoxStripe", Vector3.new(2.04, 0.3, 0.42), offset(0, 0.62, 0.72), red)
-		k.p("UpperTorso", "PizzaDisc", Vector3.new(1.3, 1.3, 0.06), offset(0, -0.2, 0.95), cheese, nil, "Disc")
-		for i, p in ipairs({{-0.3, 0.0}, {0.3, -0.1}, {0, -0.55}, {-0.25, -0.4}}) do
-			k.p("UpperTorso", "PizzaPepperoni" .. i, Vector3.new(0.26, 0.26, 0.06), offset(p[1], p[2] - 0.2, 0.99), pepperoni, nil, "Disc")
+		k.p("UpperTorso", "PizzaBox", V(2.0, 2.0, 0.4), offset(0, 0.0, 0.72), white)
+		k.p("UpperTorso", "BoxStripe", V(2.04, 0.3, 0.42), offset(0, 0.62, 0.72), red)
+		k.p("UpperTorso", "PizzaDisc", V(1.3, 1.3, 0.06), offset(0, -0.2, 0.95), cheese, nil, "Disc")
+		for i, p in ipairs({{-0.3, 0.0}, {0.3, -0.1}, {0, -0.55}}) do
+			k.p("UpperTorso", "PizzaPepperoni" .. i, V(0.26, 0.26, 0.06), offset(p[1], p[2] - 0.2, 0.99), pepperoni, nil, "Disc")
 		end
 		for _, s in ipairs(SIDES) do
-			k.p("UpperTorso", "BoxStrap_" .. s[1], Vector3.new(0.2, 1.7, 0.06), offset(s[2] * 0.62, 0, -0.52), red)
+			k.p("UpperTorso", "BoxStrap_" .. s[1], V(0.2, 1.7, 0.06), offset(s[2] * 0.62, 0, -0.62), red)
 		end
-		wristbands(k, red)
 	end,
 }
 
-skins.skin_bunny = {
+-- RARE -----------------------------------------------------------------------------------
+skins.skin_bunny = { -- Bunny Hop
+	hides = "outfit", headwear = true,
 	build = function(k)
-		local pink, white, deep = C(255, 150, 200), C(255, 255, 255), C(255, 100, 170)
-		k.p("Head", "BunnyBand", Vector3.new(1.3, 0.12, 1.3), offset(0, 0.52, 0.02), pink, nil, "Can")
+		local white, pink, deep = C(252, 250, 250), C(255, 160, 205), C(255, 100, 170)
+		suit(k, {torso = white, hips = white, sleeve = white, forearm = white, glove = pink, thigh = white, shin = white, shoe = white, sole = pink})
+		k.p("UpperTorso", "BellyPatch", V(1.1, 1.0, 0.06), offset(0, -0.1, -0.6), pink, nil, "Disc")
+		-- Floppy ears on a hood band.
+		k.p("Head", "BunnyBand", V(1.3, 0.12, 1.3), offset(0, 0.52, 0.02), pink, nil, "Can")
 		for _, s in ipairs(SIDES) do
-			k.p("Head", "BunnyEar_" .. s[1], Vector3.new(0.46, 1.7, 0.3), offset(s[2] * 0.3, 1.3, 0.05, 0, 0, s[2] * -9), white, nil, "Ball")
-			k.p("Head", "BunnyEarInner_" .. s[1], Vector3.new(0.26, 1.35, 0.16), offset(s[2] * 0.3 + s[2] * 0.02, 1.28, -0.07, 0, 0, s[2] * -9), pink, nil, "Ball")
+			k.p("Head", "BunnyEar_" .. s[1], V(0.46, 1.7, 0.3), offset(s[2] * 0.3, 1.3, 0.05, 0, 0, s[2] * -9), white, M.Fabric, "Ball")
+			k.p("Head", "BunnyEarInner_" .. s[1], V(0.26, 1.35, 0.16), offset(s[2] * 0.32, 1.28, -0.07, 0, 0, s[2] * -9), pink, nil, "Ball")
+			-- Slipper toe pads.
+			k.p(s[1] .. "Foot", "ToePad_" .. s[1], V(0.7, 0.1, 0.5), offset(0, 0.3, -0.5), pink, nil, "Can")
 		end
-		k.p("LowerTorso", "BunnyTail", Vector3.new(0.78, 0.78, 0.78), offset(0, 0.0, 0.62), white, nil, "Ball")
+		k.p("LowerTorso", "BunnyTail", V(0.78, 0.78, 0.78), offset(0, 0.0, 0.62), white, M.Fabric, "Ball")
 		-- Big ribbon collar.
 		for _, s in ipairs(SIDES) do
-			k.p("UpperTorso", "BowWing_" .. s[1], Vector3.new(0.56, 0.4, 0.14), offset(s[2] * 0.34, 0.7, -0.5, 0, 0, s[2] * 14), deep)
+			k.p("UpperTorso", "BowWing_" .. s[1], V(0.56, 0.4, 0.14), offset(s[2] * 0.34, 0.7, -0.6, 0, 0, s[2] * 14), deep)
 		end
-		k.p("UpperTorso", "BowKnot", Vector3.new(0.26, 0.26, 0.2), offset(0, 0.7, -0.52), deep, nil, "Ball")
-		for _, s in ipairs(SIDES) do
-			k.p(s[1] .. "LowerLeg", "FluffyCuff_" .. s[1], Vector3.new(1.18, 0.34, 1.18), offset(0, -0.4, 0), white, M.Fabric, "Can")
-		end
+		k.p("UpperTorso", "BowKnot", V(0.26, 0.26, 0.2), offset(0, 0.7, -0.62), deep, nil, "Ball")
 	end,
 }
 
-skins.skin_panda = {
-	hidesHair = true,
+skins.skin_panda = { -- Bamboo Panda
+	hides = "outfit", headwear = true,
 	build = function(k)
 		local white, black, green, dark = C(250, 250, 250), C(34, 34, 40), C(110, 200, 90), C(70, 150, 60)
+		suit(k, {torso = white, hips = white, sleeve = black, forearm = black, glove = black, thigh = black, shin = black, shoe = black, sole = white})
+		k.p("UpperTorso", "PandaBelly", V(1.2, 1.0, 0.06), offset(0, -0.1, -0.6), C(236, 236, 236), nil, "Disc")
 		-- Hood sits behind the face plane, so the player's own face stays visible.
-		k.p("Head", "PandaHood", Vector3.new(1.62, 1.46, 1.54), offset(0, 0.14, 0.2), white, nil, "Ball")
+		k.p("Head", "PandaHood", V(1.62, 1.46, 1.54), offset(0, 0.14, 0.2), white, M.Fabric, "Ball")
 		for _, s in ipairs(SIDES) do
-			k.p("Head", "PandaEar_" .. s[1], Vector3.new(0.62, 0.62, 0.34), offset(s[2] * 0.56, 0.86, 0.12), black, nil, "Ball")
-			k.p("Head", "PandaCheek_" .. s[1], Vector3.new(0.26, 0.9, 0.7), offset(s[2] * 0.7, -0.04, -0.02), white)
+			k.p("Head", "PandaEar_" .. s[1], V(0.62, 0.62, 0.34), offset(s[2] * 0.56, 0.86, 0.12), black, nil, "Ball")
+			k.p("Head", "PandaCheek_" .. s[1], V(0.26, 0.9, 0.7), offset(s[2] * 0.7, -0.04, -0.02), white)
 		end
-		k.p("Head", "PandaBrow", Vector3.new(1.3, 0.32, 0.8), offset(0, 0.62, -0.3, -12), white)
+		k.p("Head", "PandaBrow", V(1.3, 0.32, 0.8), offset(0, 0.62, -0.3, -12), white)
 		-- Bamboo stalks tied to the back.
 		for i, x in ipairs({-0.55, 0, 0.55}) do
 			local tall = 2.5 + (i % 2) * 0.5
-			k.p("UpperTorso", "Bamboo" .. i, Vector3.new(0.3, tall, 0.3), offset(x, 0.35 + (tall - 2.5) / 2, 0.74, 0, 0, (i - 2) * 8), green, nil, "Can")
-			for _, y in ipairs({-0.5, 0.4, 1.3}) do
-				k.p("UpperTorso", "BambooRing" .. i, Vector3.new(0.36, 0.1, 0.36), offset(x + (i - 2) * y * 0.14, y + 0.2, 0.74, 0, 0, (i - 2) * 8), dark, nil, "Can")
-			end
+			k.p("UpperTorso", "Bamboo" .. i, V(0.3, tall, 0.3), offset(x, 0.35 + (tall - 2.5) / 2, 0.74, 0, 0, (i - 2) * 8), green, nil, "Can")
+			k.p("UpperTorso", "BambooRing" .. i, V(0.36, 0.1, 0.36), offset(x + (i - 2) * 0.1, 0.5, 0.74, 0, 0, (i - 2) * 8), dark, nil, "Can")
 		end
-		k.p("UpperTorso", "BambooTie", Vector3.new(1.8, 0.14, 0.5), offset(0, 0.1, 0.62), C(230, 190, 120))
-		k.p("LowerTorso", "PandaBelt", Vector3.new(2.08, 0.2, 1.08), offset(0, 0.06, 0), black)
+		k.p("UpperTorso", "BambooTie", V(1.8, 0.14, 0.5), offset(0, 0.1, 0.62), C(230, 190, 120))
+		k.p("LowerTorso", "PandaTail", V(0.6, 0.6, 0.6), offset(0, -0.05, 0.62), white, M.Fabric, "Ball")
 	end,
 }
 
-skins.skin_streetwear = {
-	hidesHair = true,
+-- EPIC -----------------------------------------------------------------------------------
+skins.skin_streetwear = { -- Street Legend
+	hides = "outfit", headwear = true,
+	aura = {kind = "dust", color = {C(255, 230, 130), C(255, 190, 60)}, mount = "UpperTorso", at = offset(0, 0.2, 0.4)},
 	build = function(k)
-		local gold, red, blue, cream = C(255, 200, 40), C(235, 50, 60), C(40, 90, 220), C(255, 244, 214)
-		k.p("Head", "BucketCrown", Vector3.new(1.34, 0.7, 1.34), offset(0, 0.88, 0.02), cream, nil, "Can")
-		k.p("Head", "BucketTop", Vector3.new(1.2, 0.1, 1.2), offset(0, 1.24, 0.02), cream, nil, "Can")
-		k.p("Head", "BucketBrim", Vector3.new(2.0, 0.1, 2.0), offset(0, 0.56, 0.02), red, nil, "Can")
-		k.p("Head", "BucketBand", Vector3.new(1.4, 0.18, 1.4), offset(0, 0.68, 0.02), gold, M.Metal, "Can")
-		-- Chunky gold chain with a big pendant, and a crossbody bag.
-		local chain = {{-0.55, 0.62}, {-0.4, 0.4}, {-0.2, 0.26}, {0.2, 0.26}, {0.4, 0.4}, {0.55, 0.62}}
+		local gold, red, blue, cream, navy, grey = C(255, 200, 40), C(235, 50, 60), C(40, 90, 220), C(255, 244, 214), C(24, 40, 110), C(92, 98, 112)
+		-- Varsity jacket (cream body, blue sleeves), baggy cargo pants, chunky red-and-white sneakers.
+		suit(k, {torso = cream, hips = navy, sleeve = blue, forearm = blue, thigh = grey, shin = grey, shoe = red, sole = cream})
+		ring(k, "LowerTorso", "JacketHem", navy, -0.04, 0.24, 0.2, M.Fabric)
+		ring(k, "UpperTorso", "JacketCollar", navy, 0.72, 0.2, 0.2, M.Fabric)
+		for _, s in ipairs(SIDES) do
+			ring(k, s[1] .. "LowerArm", "RibbedCuff_" .. s[1], navy, -0.42, 0.24, 0.2, M.Fabric)
+			ring(k, s[1] .. "UpperArm", "SleeveStripe_" .. s[1], cream, 0.1, 0.12, 0.2, M.Fabric)
+			k.p(s[1] .. "UpperLeg", "CargoPocket_" .. s[1], V(0.4, 0.5, 0.2), offset(s[2] * 0.52, -0.1, -0.2), C(76, 82, 96))
+			ring(k, s[1] .. "LowerLeg", "CargoCuff_" .. s[1], C(60, 64, 76), -0.42, 0.24, 0.2, M.Fabric)
+		end
+		-- Gold star patch, chunky chain with a pendant, crossbody bag.
+		k.p("UpperTorso", "StarPatch", V(0.62, 0.62, 0.06), offset(0.5, 0.2, -0.62), gold, M.Metal, "Disc")
+		k.p("UpperTorso", "StarPatchCore", V(0.3, 0.3, 0.06), offset(0.5, 0.2, -0.67), red, nil, "Disc")
+		local chain = {{-0.5, 0.58}, {-0.32, 0.34}, {0, 0.24}, {0.32, 0.34}, {0.5, 0.58}}
 		for i, c in ipairs(chain) do
-			k.p("UpperTorso", "ChainLink" .. i, Vector3.new(0.17, 0.17, 0.17), offset(c[1], c[2], -0.56), gold, M.Metal, "Ball")
+			k.p("UpperTorso", "ChainLink" .. i, V(0.17, 0.17, 0.17), offset(c[1], c[2], -0.62), gold, M.Metal, "Ball")
 		end
-		k.p("UpperTorso", "ChainPendant", Vector3.new(0.5, 0.5, 0.1), offset(0, -0.02, -0.58), gold, M.Metal, "Disc")
-		k.p("UpperTorso", "ChainGem", Vector3.new(0.22, 0.22, 0.08), offset(0, -0.02, -0.64), red, nil, "Disc")
-		k.p("UpperTorso", "BagStrap", Vector3.new(0.2, 2.2, 0.08), offset(0, 0, -0.53, 0, 0, -38), blue)
-		k.p("LowerTorso", "BagBody", Vector3.new(0.9, 0.8, 0.44), offset(-0.85, -0.2, -0.3), blue)
-		k.p("LowerTorso", "BagFlap", Vector3.new(0.92, 0.26, 0.46), offset(-0.85, 0.06, -0.3), red)
-		wristbands(k, gold, M.Metal)
+		k.p("UpperTorso", "ChainPendant", V(0.46, 0.46, 0.1), offset(0, -0.1, -0.66), gold, M.Metal, "Disc")
+		k.p("UpperTorso", "BagStrap", V(0.2, 2.2, 0.08), offset(0, 0, -0.62, 0, 0, -38), C(30, 30, 40))
+		k.p("LowerTorso", "BagBody", V(0.9, 0.8, 0.44), offset(-0.85, -0.2, -0.4), C(30, 30, 40))
+		k.p("LowerTorso", "BagFlap", V(0.92, 0.26, 0.46), offset(-0.85, 0.06, -0.4), gold, M.Metal)
+		-- Bucket hat.
+		k.p("Head", "BucketCrown", V(1.34, 0.7, 1.34), offset(0, 0.88, 0.02), cream, nil, "Can")
+		k.p("Head", "BucketTop", V(1.2, 0.1, 1.2), offset(0, 1.24, 0.02), cream, nil, "Can")
+		k.p("Head", "BucketBrim", V(2.0, 0.1, 2.0), offset(0, 0.56, 0.02), red, nil, "Can")
+		k.p("Head", "BucketBand", V(1.4, 0.18, 1.4), offset(0, 0.68, 0.02), gold, M.Metal, "Can")
 	end,
 }
 
-skins.skin_cyber = {
-	build = function(k)
-		local steel, orange, teal, dark = C(200, 210, 224), C(255, 140, 40), C(60, 200, 220), C(60, 70, 90)
-		-- Pilot goggles on the forehead.
-		k.p("Head", "GoggleStrap", Vector3.new(1.34, 0.2, 1.34), offset(0, 0.5, 0.02), dark, nil, "Can")
-		for _, s in ipairs(SIDES) do
-			k.p("Head", "GoggleRim_" .. s[1], Vector3.new(0.52, 0.52, 0.12), offset(s[2] * 0.3, 0.62, -0.62), orange, M.Metal, "Disc")
-			k.p("Head", "GoggleLens_" .. s[1], Vector3.new(0.38, 0.38, 0.1), offset(s[2] * 0.3, 0.62, -0.68), teal, M.Glass, "Disc", {transparency = 0.25})
-		end
-		-- Jet pack with two nozzles, shoulder pads and orange gauntlets.
-		k.p("UpperTorso", "JetBody", Vector3.new(1.5, 1.3, 0.55), offset(0, 0.1, 0.78), steel, M.Metal)
-		k.p("UpperTorso", "JetStripe", Vector3.new(1.54, 0.2, 0.58), offset(0, 0.4, 0.78), orange)
-		for _, s in ipairs(SIDES) do
-			k.p("UpperTorso", "JetTank_" .. s[1], Vector3.new(0.58, 1.5, 0.58), offset(s[2] * 0.5, -0.1, 0.98), orange, M.Metal, "Can")
-			k.p("UpperTorso", "JetNozzle_" .. s[1], Vector3.new(0.44, 0.3, 0.44), offset(s[2] * 0.5, -0.95, 0.98), dark, M.Metal, "Can")
-			k.p("UpperTorso", "ShoulderPad_" .. s[1], Vector3.new(0.95, 0.34, 1.2), offset(s[2] * 1.0, 0.84, 0, 0, 0, s[2] * 12), orange, M.Metal)
-			k.p(s[1] .. "LowerArm", "Gauntlet_" .. s[1], Vector3.new(1.12, 0.56, 1.12), offset(0, -0.22, 0), steel, M.Metal)
-		end
-		k.p("UpperTorso", "ChestPlate", Vector3.new(0.7, 0.7, 0.1), offset(0, 0.25, -0.54), teal, M.Metal, "Disc")
-	end,
+skins.skin_cyber = { -- Jet Runner
+	hides = "outfit", headwear = true,
 	aura = {kind = "jet", color = {C(255, 200, 80), C(255, 100, 30)}, mount = "UpperTorso", at = offset(0, -1.1, 0.98)},
-}
-
-skins.skin_ninja = {
 	build = function(k)
-		local red, steel, wrap, black = C(230, 40, 50), C(190, 204, 220), C(220, 214, 196), C(34, 34, 42)
-		k.p("Head", "Headband", Vector3.new(1.32, 0.24, 1.32), offset(0, 0.48, 0.02), red, nil, "Can")
-		k.p("Head", "HeadbandPlate", Vector3.new(0.62, 0.34, 0.08), offset(0, 0.48, -0.66), steel, M.Metal)
-		k.p("Head", "HeadbandMark", Vector3.new(0.2, 0.2, 0.06), offset(0, 0.48, -0.72, 0, 0, 45), red)
+		local steel, orange, teal, dark, leather = C(200, 210, 224), C(255, 140, 40), C(60, 200, 220), C(60, 70, 90), C(112, 78, 52)
+		-- Orange flight suit with steel gloves and boots.
+		suit(k, {torso = orange, hips = orange, sleeve = orange, forearm = orange, glove = steel, gloveMat = M.Metal, thigh = orange, shin = orange, shoe = dark, shoeMat = M.Metal, sole = orange})
+		k.p("UpperTorso", "ChestPanel", V(1.1, 0.9, 0.1), offset(0, 0.2, -0.62), steel, M.Metal)
+		k.p("UpperTorso", "ChestLight", V(0.36, 0.36, 0.06), offset(0, 0.2, -0.69), teal, M.Metal, "Disc")
+		ring(k, "LowerTorso", "FlightBelt", dark, 0.04, 0.28, 0.2, M.Leather)
 		for _, s in ipairs(SIDES) do
-			k.p("Head", "HeadbandTail_" .. s[1], Vector3.new(0.22, 1.1, 0.08), offset(s[2] * 0.22, -0.3, 0.7, 14, 0, s[2] * -8), red)
+			k.p("UpperTorso", "ShoulderPad_" .. s[1], V(0.95, 0.34, 1.2), offset(s[2] * 1.0, 0.84, 0, 0, 0, s[2] * 12), steel, M.Metal)
+			k.p(s[1] .. "UpperLeg", "KneeGuard_" .. s[1], V(1.2, 0.34, 1.0), offset(0, -0.52, -0.1), steel, M.Metal)
+			ring(k, s[1] .. "LowerArm", "Gauntlet_" .. s[1], steel, -0.2, 0.34, 0.24, M.Metal)
 		end
-		k.p("LowerTorso", "Sash", Vector3.new(2.12, 0.4, 1.12), offset(0, 0.04, 0), red)
-		k.p("LowerTorso", "SashKnot", Vector3.new(0.46, 0.46, 0.18), offset(-0.5, 0.02, -0.6), red, nil, "Ball")
-		k.p("LowerTorso", "SashTailA", Vector3.new(0.26, 1.0, 0.08), offset(-0.55, -0.5, -0.62, 8, 0, 8), red)
-		k.p("LowerTorso", "SashTailB", Vector3.new(0.26, 0.9, 0.08), offset(-0.38, -0.46, -0.62, 8, 0, -10), red)
-		k.p("UpperTorso", "KatanaSheath", Vector3.new(0.22, 2.7, 0.2), offset(0, 0, 0.64, 0, 0, 38), black)
-		k.p("UpperTorso", "KatanaHandle", Vector3.new(0.26, 0.62, 0.26), offset(-0.88, 0.95, 0.64, 0, 0, 38), red)
-		k.p("UpperTorso", "KatanaGuard", Vector3.new(0.56, 0.1, 0.34), offset(-0.68, 0.66, 0.64, 0, 0, 38), C(255, 200, 60), M.Metal)
-		k.p("UpperTorso", "ChestStrap", Vector3.new(0.16, 2.0, 0.08), offset(0, 0, -0.53, 0, 0, 38), black)
+		-- Jet pack with two tanks and nozzles.
+		k.p("UpperTorso", "JetBody", V(1.5, 1.3, 0.55), offset(0, 0.1, 0.78), steel, M.Metal)
+		k.p("UpperTorso", "JetStripe", V(1.54, 0.2, 0.58), offset(0, 0.4, 0.78), orange)
 		for _, s in ipairs(SIDES) do
-			k.p(s[1] .. "LowerArm", "ForearmWrap_" .. s[1], Vector3.new(1.12, 0.74, 1.12), offset(0, -0.1, 0), wrap)
-			k.p(s[1] .. "LowerLeg", "ShinWrap_" .. s[1], Vector3.new(1.1, 0.74, 1.1), offset(0, -0.1, 0), wrap)
+			k.p("UpperTorso", "JetTank_" .. s[1], V(0.58, 1.5, 0.58), offset(s[2] * 0.5, -0.1, 0.98), orange, M.Metal, "Can")
+			k.p("UpperTorso", "JetNozzle_" .. s[1], V(0.44, 0.3, 0.44), offset(s[2] * 0.5, -0.95, 0.98), dark, M.Metal, "Can")
 		end
-		k.p("LowerTorso", "ShurikenA", Vector3.new(0.56, 0.1, 0.1), offset(0.85, 0, -0.58), steel, M.Metal)
-		k.p("LowerTorso", "ShurikenB", Vector3.new(0.1, 0.56, 0.1), offset(0.85, 0, -0.59), steel, M.Metal)
+		-- Aviator cap and goggles.
+		k.p("Head", "AviatorCap", V(1.38, 0.8, 1.38), offset(0, 0.5, 0.04), leather, M.Leather, "Ball")
+		k.p("Head", "GoggleStrap", V(1.4, 0.2, 1.4), offset(0, 0.46, 0.02), dark, nil, "Can")
+		for _, s in ipairs(SIDES) do
+			k.p("Head", "GoggleRim_" .. s[1], V(0.52, 0.52, 0.12), offset(s[2] * 0.3, 0.66, -0.62), orange, M.Metal, "Disc")
+			k.p("Head", "GoggleLens_" .. s[1], V(0.38, 0.38, 0.1), offset(s[2] * 0.3, 0.66, -0.68), teal, M.Glass, "Disc", {transparency = 0.25})
+			k.p("Head", "EarFlap_" .. s[1], V(0.16, 0.5, 0.5), offset(s[2] * 0.7, 0.1, 0.1), leather, M.Leather)
+		end
 	end,
 }
 
-skins.skin_neonphantom = {
-	hidesHair = true,
+skins.skin_ninja = { -- Shadow Runner
+	hides = "outfit", headwear = true,
+	aura = {kind = "smoke", color = {C(46, 34, 74), C(120, 84, 190)}, mount = "LowerTorso", at = offset(0, -0.4, 0.5)},
 	build = function(k)
-		local hood, dark, ghost, glow = C(120, 70, 210), C(80, 44, 150), C(245, 240, 255), C(200, 140, 255)
-		k.p("Head", "HoodShell", Vector3.new(1.64, 1.48, 1.56), offset(0, 0.14, 0.2), hood, nil, "Ball")
+		local charcoal, ink, violet, wrap, steel, deep = C(38, 38, 54), C(24, 24, 34), C(150, 90, 235), C(86, 88, 110), C(190, 204, 220), C(66, 46, 120)
+		-- Stealth parkour kit: charcoal hooded jacket, wrapped forearms and shins, split-sole boots.
+		suit(k, {torso = charcoal, hips = ink, sleeve = charcoal, forearm = wrap, glove = ink, thigh = ink, shin = wrap, shoe = ink, sole = violet})
 		for _, s in ipairs(SIDES) do
-			k.p("Head", "HoodCheek_" .. s[1], Vector3.new(0.28, 1.0, 0.8), offset(s[2] * 0.7, -0.04, -0.0), hood)
-			k.p("Head", "HoodPoint_" .. s[1], Vector3.new(0.5, 0.6, 0.4), offset(s[2] * 0.4, 0.92, 0.12, 0, 0, s[2] * -20), dark, nil, "Wedge")
+			ring(k, s[1] .. "UpperArm", "SleeveTrim_" .. s[1], violet, -0.3, 0.1, 0.2, M.Fabric)
+			ring(k, s[1] .. "LowerArm", "WrapBand_" .. s[1], violet, 0.1, 0.08, 0.2, M.Fabric)
+			k.p(s[1] .. "UpperLeg", "SideStripe_" .. s[1], V(0.07, 1.0, 0.5), offset(s[2] * 0.54, 0, 0), violet)
+			k.p(s[1] .. "LowerLeg", "KneeGuard_" .. s[1], V(1.2, 0.4, 1.2), offset(0, 0.44, -0.02), deep, M.SmoothPlastic)
+			k.p("UpperTorso", "ShoulderPlate_" .. s[1], V(1.0, 0.3, 1.2), offset(s[2] * 1.0, 0.8, 0, 0, 0, s[2] * 14), deep, M.SmoothPlastic)
 		end
-		k.p("Head", "HoodBrow", Vector3.new(1.34, 0.36, 0.86), offset(0, 0.62, -0.3, -12), hood)
-		-- A flowing bedsheet-ghost cape with a scalloped hem.
-		k.p("UpperTorso", "GhostCape", Vector3.new(1.9, 2.5, 0.12), offset(0, -0.55, 0.62, 8, 0, 0), ghost, nil, nil, {transparency = 0.18})
-		for i, x in ipairs({-0.72, -0.24, 0.24, 0.72}) do
-			k.p("UpperTorso", "GhostHem" .. i, Vector3.new(0.5, 0.5, 0.12), offset(x, -1.86, 0.86, 8), ghost, nil, "Ball", {transparency = 0.18})
-		end
-		for _, s in ipairs(SIDES) do
-			k.p("UpperTorso", "CapeClasp_" .. s[1], Vector3.new(0.3, 0.3, 0.14), offset(s[2] * 0.7, 0.72, 0.5), glow, nil, "Ball")
+		-- Chest straps, belt and a kunai pouch.
+		k.p("UpperTorso", "ChestStrap", V(0.18, 2.1, 0.08), offset(0, 0, -0.62, 0, 0, 38), ink)
+		k.p("UpperTorso", "StrapBuckle", V(0.28, 0.28, 0.1), offset(0, 0, -0.66, 0, 0, 38), steel, M.Metal)
+		ring(k, "LowerTorso", "Belt", ink, 0.04, 0.26, 0.2, M.Leather)
+		k.p("LowerTorso", "BeltBuckle", V(0.34, 0.26, 0.08), offset(0, 0.04, -0.62), violet)
+		k.p("RightUpperLeg", "KunaiPouch", V(0.4, 0.7, 0.32), offset(0.5, 0.1, -0.1), charcoal, M.Leather)
+		-- Hood (face stays open for the mask) and a long streaming scarf.
+		k.p("Head", "HoodShell", V(1.64, 1.48, 1.56), offset(0, 0.14, 0.2), charcoal, M.Fabric, "Ball")
+		k.p("Head", "HoodPoint", V(0.5, 0.8, 0.6), offset(0, 0.72, 0.48, 18), charcoal, M.Fabric, "Wedge")
+		k.p("Head", "HoodBrow", V(1.34, 0.3, 0.8), offset(0, 0.62, -0.3, -12), charcoal, M.Fabric)
+		ring(k, "UpperTorso", "ScarfRing", violet, 0.76, 0.3, 0.3, M.Fabric)
+		for i = 1, 3 do
+			k.p("UpperTorso", "ScarfTail" .. i, V(0.5, 0.34, 0.9), offset(-0.35 + (i % 2) * 0.1, 0.66 - i * 0.22, 0.76 + (i - 1) * 0.78, 10 + i * 8), i % 2 == 1 and violet or deep, M.Fabric)
+			k.p("UpperTorso", "ScarfFlap" .. i, V(0.4, 0.3, 0.8), offset(0.4 - (i % 2) * 0.1, 0.5 - i * 0.2, 0.9 + (i - 1) * 0.74, 8 + i * 7), i % 2 == 1 and deep or violet, M.Fabric)
 		end
 	end,
-	aura = {kind = "wisps", color = {C(200, 140, 255), C(120, 70, 210)}, mount = "UpperTorso", at = offset(0, -0.6, 0.7)},
 }
 
-skins.skin_midnight = {
-	hidesHair = true,
+skins.skin_neonphantom = { -- Mall Phantom
+	hides = "outfit", headwear = true,
+	aura = {kind = "wisps", color = {C(235, 225, 255), C(150, 120, 230)}, mount = "UpperTorso", at = offset(0, -0.6, 0.7)},
 	build = function(k)
-		local deep, band, gold, white, cape = C(80, 40, 160), C(255, 205, 60), C(255, 205, 60), C(255, 255, 255), C(104, 60, 200)
-		k.p("Head", "HatBrim", Vector3.new(1.9, 0.1, 1.9), offset(0, 0.56, 0.02), deep, nil, "Can")
-		k.p("Head", "HatCrown", Vector3.new(1.3, 1.0, 1.3), offset(0, 1.06, 0.02), deep, nil, "Can")
-		k.p("Head", "HatBand", Vector3.new(1.34, 0.24, 1.34), offset(0, 0.72, 0.02), band, nil, "Can")
-		k.p("Head", "HatStar", Vector3.new(0.34, 0.34, 0.06), offset(0.3, 0.74, -0.68, 0, 0, 45), white, nil, "Disc")
-		-- Long swishy cape, high collar, bow tie and white gloves.
-		k.p("UpperTorso", "Cape", Vector3.new(2.1, 3.0, 0.12), offset(0, -0.9, 0.62, 7, 0, 0), cape)
-		k.p("UpperTorso", "CapeLining", Vector3.new(1.9, 2.8, 0.06), offset(0, -0.9, 0.55, 7, 0, 0), C(255, 120, 200))
-		k.p("UpperTorso", "CapeTrim", Vector3.new(2.14, 0.16, 0.16), offset(0, -2.38, 0.84, 7, 0, 0), gold, M.Metal)
+		local black, white, red, gold, ink = C(24, 24, 34), C(250, 248, 244), C(196, 36, 60), C(255, 205, 70), C(14, 14, 22)
+		-- Black tailcoat with a white shirt front, red cravat, white gloves, spats.
+		suit(k, {torso = black, hips = black, sleeve = black, forearm = black, glove = white, thigh = ink, shin = ink, shoe = ink, shoeMat = M.SmoothPlastic, sole = white})
+		k.p("UpperTorso", "ShirtFront", V(0.82, 1.34, 0.06), offset(0, -0.1, -0.62), white)
+		k.p("UpperTorso", "ShirtButtonA", V(0.12, 0.12, 0.06), offset(0, 0.1, -0.67), gold, M.Metal, "Disc")
+		k.p("UpperTorso", "ShirtButtonB", V(0.12, 0.12, 0.06), offset(0, -0.3, -0.67), gold, M.Metal, "Disc")
 		for _, s in ipairs(SIDES) do
-			k.p("UpperTorso", "CapeCollar_" .. s[1], Vector3.new(0.5, 0.9, 0.16), offset(s[2] * 0.62, 0.9, 0.56, 0, 0, s[2] * -10), cape)
-			k.p(s[1] .. "LowerArm", "Glove_" .. s[1], Vector3.new(1.12, 0.5, 1.12), offset(0, -0.26, 0), white)
+			k.p("UpperTorso", "Lapel_" .. s[1], V(0.46, 1.2, 0.1), offset(s[2] * 0.62, 0.0, -0.6, 0, 0, s[2] * -8), red)
+			k.p("UpperTorso", "Cravat_" .. s[1], V(0.4, 0.32, 0.12), offset(s[2] * 0.2, 0.62, -0.66, 0, 0, s[2] * -22), red)
+			ring(k, s[1] .. "LowerArm", "WhiteCuff_" .. s[1], white, -0.4, 0.22, 0.2, M.Fabric)
+			ring(k, s[1] .. "Foot", "Spat_" .. s[1], white, 0.12, 0.2, 0.16)
+			k.p(s[1] .. "UpperLeg", "TrouserStripe_" .. s[1], V(0.06, 1.1, 0.4), offset(s[2] * 0.54, 0, 0), white)
+			-- Long coat tails with a crimson lining.
+			k.p("LowerTorso", "CoatTail_" .. s[1], V(0.9, 1.7, 0.14), offset(s[2] * 0.5, -0.9, 0.58, 10, 0, s[2] * 6), black, M.Fabric)
+			k.p("LowerTorso", "TailLining_" .. s[1], V(0.7, 1.5, 0.06), offset(s[2] * 0.5, -0.9, 0.5, 10, 0, s[2] * 6), red, M.Fabric)
 		end
+		k.p("UpperTorso", "CravatKnot", V(0.24, 0.24, 0.2), offset(0, 0.62, -0.66), red, nil, "Ball")
+		-- Opera cape: black outside, red lining, high collar and a gold clasp.
+		k.p("UpperTorso", "Cape", V(2.1, 2.7, 0.12), offset(0, -0.5, 0.64, 8, 0, 0), black, M.Fabric)
+		k.p("UpperTorso", "CapeLining", V(1.9, 2.5, 0.06), offset(0, -0.5, 0.57, 8, 0, 0), red, M.Fabric)
 		for _, s in ipairs(SIDES) do
-			k.p("UpperTorso", "BowTie_" .. s[1], Vector3.new(0.42, 0.34, 0.12), offset(s[2] * 0.24, 0.66, -0.52, 0, 0, s[2] * 12), C(235, 50, 80))
+			k.p("UpperTorso", "CapeCollar_" .. s[1], V(0.5, 0.9, 0.16), offset(s[2] * 0.66, 0.9, 0.5, 0, 0, s[2] * -12), black, M.Fabric)
+			k.p("UpperTorso", "CapeClasp_" .. s[1], V(0.26, 0.26, 0.12), offset(s[2] * 0.7, 0.66, -0.2), gold, M.Metal, "Ball")
 		end
-		k.p("UpperTorso", "BowKnot", Vector3.new(0.2, 0.2, 0.16), offset(0, 0.66, -0.54), C(235, 50, 80), nil, "Ball")
+		-- Short top hat.
+		k.p("Head", "HatBrim", V(1.7, 0.1, 1.7), offset(0, 0.56, 0.02), black, nil, "Can")
+		k.p("Head", "HatCrown", V(1.2, 0.9, 1.2), offset(0, 1.02, 0.02), black, nil, "Can")
+		k.p("Head", "HatBand", V(1.24, 0.2, 1.24), offset(0, 0.72, 0.02), red, nil, "Can")
 	end,
-	aura = {kind = "stars", color = {C(255, 230, 120), C(255, 160, 230)}, mount = "UpperTorso", at = offset(0, 0.3, 0.2)},
 }
 
-skins.skin_candy = {
-	hidesHair = true,
+skins.skin_trickster = { -- Royal Trickster
+	hides = "outfit", headwear = true,
+	aura = {kind = "confetti", color = {C(255, 120, 200), C(255, 210, 60)}, mount = "UpperTorso", at = offset(0, 0.6, 0.3)},
 	build = function(k)
-		local pink, mint, cone, cherry, white = C(255, 140, 200), C(120, 235, 200), C(236, 180, 100), C(230, 40, 60), C(255, 255, 255)
-		-- Ice-cream hat: a waffle band, two scoops and a cherry.
-		k.p("Head", "WaffleBand", Vector3.new(1.4, 0.34, 1.4), offset(0, 0.56, 0.02), cone, nil, "Can")
-		k.p("Head", "ScoopPink", Vector3.new(1.55, 1.1, 1.55), offset(0, 1.06, 0.02), pink, nil, "Ball")
-		k.p("Head", "ScoopMint", Vector3.new(1.1, 0.8, 1.1), offset(0, 1.66, 0.02), mint, nil, "Ball")
-		k.p("Head", "Cherry", Vector3.new(0.34, 0.34, 0.34), offset(0, 2.1, 0.02), cherry, nil, "Ball")
-		for i, p in ipairs({{-0.5, 1.2, -0.5}, {0.4, 0.9, -0.62}, {0.55, 1.3, 0.2}, {-0.55, 1.0, 0.3}}) do
-			k.p("Head", "Sprinkle" .. i, Vector3.new(0.18, 0.08, 0.08), offset(p[1], p[2], p[3], 0, i * 40, 0), white)
+		local purple, gold, pink, white, ink = C(132, 66, 224), C(255, 196, 40), C(255, 96, 170), C(252, 250, 250), C(30, 26, 44)
+		-- Harlequin motley: every limb and half of the torso swap purple and gold.
+		suit(k, {
+			sleeve = {Left = gold, Right = purple}, forearm = {Left = purple, Right = gold}, glove = white,
+			thigh = {Left = purple, Right = gold}, shin = {Left = gold, Right = purple}, shoe = {Left = pink, Right = pink}, sole = {Left = gold, Right = gold},
+		})
+		k.p("UpperTorso", "ShirtHalf_Left", V(1.08, 1.66, 1.14), offset(-0.52, 0, 0), purple, M.Fabric)
+		k.p("UpperTorso", "ShirtHalf_Right", V(1.08, 1.66, 1.14), offset(0.52, 0, 0), gold, M.Fabric)
+		k.p("LowerTorso", "HipsHalf_Left", V(1.08, 0.46, 1.14), offset(-0.52, 0, 0), gold, M.Fabric)
+		k.p("LowerTorso", "HipsHalf_Right", V(1.08, 0.46, 1.14), offset(0.52, 0, 0), purple, M.Fabric)
+		-- Diamond patches, belt and buckle.
+		for i, p in ipairs({{-0.55, 0.35, gold}, {0.55, 0.35, purple}, {-0.55, -0.35, pink}, {0.55, -0.35, pink}}) do
+			k.p("UpperTorso", "Diamond" .. i, V(0.34, 0.34, 0.06), offset(p[1], p[2], -0.62, 0, 0, 45), p[3])
+		end
+		ring(k, "LowerTorso", "Belt", ink, 0.04, 0.2, 0.22, M.Leather)
+		k.p("LowerTorso", "BeltDiamond", V(0.4, 0.4, 0.08), offset(0, 0.04, -0.62, 0, 0, 45), gold, M.Metal)
+		-- Ruffled collar.
+		for i = 0, 5 do
+			local a = math.rad(i * 60 + 30)
+			k.p("UpperTorso", "Ruffle" .. i, V(0.5, 0.5, 0.5), offset(math.sin(a) * 0.72, 0.84, math.cos(a) * 0.5), white, M.Fabric, "Ball")
+		end
+		-- Curled shoes with bells.
+		for _, s in ipairs(SIDES) do
+			k.p(s[1] .. "Foot", "ShoeCurl_" .. s[1], V(0.4, 0.5, 0.5), offset(0, 0.26, -0.82, -30), pink, nil, "Wedge")
+			k.p(s[1] .. "Foot", "ShoeBell_" .. s[1], V(0.26, 0.26, 0.26), offset(0, 0.54, -0.96), gold, M.Metal, "Ball")
+		end
+		-- Three-horned jester crown with bells.
+		k.p("Head", "CrownBand", V(1.36, 0.28, 1.36), offset(0, 0.58, 0.02), gold, M.Metal, "Can")
+		local horns = {{-0.5, purple, -34}, {0, pink, 0}, {0.5, gold, 34}}
+		for i, h in ipairs(horns) do
+			local x, color, tilt = h[1], h[2], h[3]
+			k.p("Head", "HornLow" .. i, V(0.46, 0.7, 0.46), offset(x * 0.8, 0.98, 0.04, 0, 0, tilt * 0.6), color, M.Fabric, "Can")
+			k.p("Head", "HornHigh" .. i, V(0.34, 0.7, 0.34), offset(x * 1.4, 1.54 - (i == 2 and 0 or 0.1), 0.04, 0, 0, tilt), color, M.Fabric, "Can")
+			k.p("Head", "HornBell" .. i, V(0.28, 0.28, 0.28), offset(x * 1.7, 1.96 - (i == 2 and 0 or 0.16), 0.04), white, M.Metal, "Ball")
+		end
+	end,
+}
+
+skins.skin_candy = { -- Candy Pop
+	hides = "outfit", headwear = true,
+	aura = {kind = "sprinkles", color = {C(255, 140, 200), C(120, 235, 200)}, mount = "UpperTorso", at = offset(0, 0.9, 0)},
+	build = function(k)
+		local pink, mint, cone, cherry, white, blue = C(255, 140, 200), C(120, 235, 200), C(236, 180, 100), C(230, 40, 60), C(255, 255, 255), C(150, 210, 255)
+		-- Peppermint outfit: pink top, mint pants with polka dots, mint sneakers.
+		suit(k, {torso = pink, hips = white, sleeve = pink, forearm = white, glove = white, thigh = mint, shin = mint, shoe = mint, sole = pink})
+		for i = 0, 2 do
+			k.p("UpperTorso", "CandyStripe" .. i, V(0.2, 1.6, 0.06), offset(-0.55 + i * 0.55, 0, -0.62), white)
+		end
+		for i, p in ipairs({{0.4, 0.2}, {-0.4, -0.15}}) do
+			k.p("RightUpperLeg", "PolkaDot_R" .. i, V(0.3, 0.3, 0.06), offset(p[1] * 0.4, p[2], -0.58), white, nil, "Disc")
+			k.p("LeftUpperLeg", "PolkaDot_L" .. i, V(0.3, 0.3, 0.06), offset(p[1] * 0.4, p[2], -0.58), white, nil, "Disc")
+		end
+		-- Cotton-candy shoulder puffs.
+		k.p("UpperTorso", "PuffPink", V(0.9, 0.9, 0.9), offset(-1.05, 0.9, 0), pink, nil, "Ball")
+		k.p("UpperTorso", "PuffBlue", V(0.9, 0.9, 0.9), offset(1.05, 0.9, 0), blue, nil, "Ball")
+		-- Ice-cream hat: waffle band, two scoops, a cherry and sprinkles.
+		k.p("Head", "WaffleBand", V(1.4, 0.34, 1.4), offset(0, 0.56, 0.02), cone, nil, "Can")
+		k.p("Head", "ScoopPink", V(1.55, 1.1, 1.55), offset(0, 1.06, 0.02), pink, nil, "Ball")
+		k.p("Head", "ScoopMint", V(1.1, 0.8, 1.1), offset(0, 1.66, 0.02), mint, nil, "Ball")
+		k.p("Head", "Cherry", V(0.34, 0.34, 0.34), offset(0, 2.1, 0.02), cherry, nil, "Ball")
+		for i, p in ipairs({{-0.5, 1.2, -0.5}, {0.4, 0.9, -0.62}, {0.55, 1.3, 0.2}}) do
+			k.p("Head", "Sprinkle" .. i, V(0.18, 0.08, 0.08), offset(p[1], p[2], p[3], 0, i * 40, 0), white)
 		end
 		-- Giant lollipop on the back.
-		k.p("UpperTorso", "LollipopStick", Vector3.new(0.14, 2.8, 0.14), offset(0.5, -0.1, 0.7, 0, 0, -14), white, nil, "Can")
-		k.p("UpperTorso", "LollipopSwirl", Vector3.new(1.5, 1.5, 0.16), offset(0.95, 1.35, 0.7), pink, nil, "Disc")
-		k.p("UpperTorso", "LollipopRing", Vector3.new(1.0, 1.0, 0.18), offset(0.95, 1.35, 0.74), white, nil, "Disc")
-		k.p("UpperTorso", "LollipopCore", Vector3.new(0.5, 0.5, 0.2), offset(0.95, 1.35, 0.78), mint, nil, "Disc")
-		-- Candy-stripe collar and wristbands.
-		for i = 0, 4 do
-			k.p("UpperTorso", "CandyCollar" .. i, Vector3.new(0.4, 0.28, 1.1), offset(-0.8 + i * 0.4, 0.8, 0), i % 2 == 0 and pink or white)
-		end
-		wristbands(k, pink)
+		k.p("UpperTorso", "LollipopStick", V(0.14, 2.8, 0.14), offset(0.5, -0.1, 0.7, 0, 0, -14), white, nil, "Can")
+		k.p("UpperTorso", "LollipopSwirl", V(1.5, 1.5, 0.16), offset(0.95, 1.35, 0.7), pink, nil, "Disc")
+		k.p("UpperTorso", "LollipopRing", V(1.0, 1.0, 0.18), offset(0.95, 1.35, 0.74), white, nil, "Disc")
+		k.p("UpperTorso", "LollipopCore", V(0.5, 0.5, 0.2), offset(0.95, 1.35, 0.78), mint, nil, "Disc")
 	end,
-	aura = {kind = "sprinkles", color = {C(255, 140, 200), C(120, 235, 200)}, mount = "UpperTorso", at = offset(0, 0.9, 0)},
 }
 
-skins.skin_golden = {
-	hidesHair = true,
+-- LEGENDARY ------------------------------------------------------------------------------
+skins.skin_galaxy = { -- Galaxy Escape Artist
+	hides = "outfit", headwear = true,
+	aura = {kind = "stardust", color = {C(140, 210, 255), C(255, 150, 230)}, mount = "UpperTorso", at = offset(0, 0.2, 0.5)},
+	build = function(k)
+		local night, violet, teal, gold, white, deep = C(26, 24, 78), C(104, 70, 200), C(60, 190, 210), C(255, 205, 70), C(250, 250, 255), C(18, 16, 52)
+		-- A midnight-blue magician's suit patterned with golden stars.
+		suit(k, {torso = night, hips = deep, sleeve = night, forearm = night, glove = white, thigh = deep, shin = deep, shoe = deep, shoeMat = M.SmoothPlastic, sole = gold})
+		local stars = {{"UpperTorso", -0.5, 0.3, -0.62}, {"UpperTorso", 0.45, -0.3, -0.62}, {"LeftUpperLeg", 0.1, 0.1, -0.58}, {"RightUpperLeg", -0.1, -0.2, -0.58},
+			{"LeftUpperArm", -0.1, 0.1, -0.58}, {"RightUpperArm", 0.1, -0.1, -0.58}}
+		for i, star in ipairs(stars) do
+			k.p(star[1], "StarPatch" .. i, V(0.3, 0.3, 0.06), offset(star[2], star[3], star[4], 0, 0, 45 + i * 9), gold, M.Metal, "Disc")
+		end
+		ring(k, "UpperTorso", "GoldTrim", gold, -0.7, 0.1, 0.2, M.Metal)
+		for _, s in ipairs(SIDES) do
+			ring(k, s[1] .. "LowerArm", "GoldCuff_" .. s[1], gold, -0.4, 0.2, 0.2, M.Metal)
+			k.p("UpperTorso", "Epaulette_" .. s[1], V(1.0, 0.24, 1.2), offset(s[2] * 1.0, 0.84, 0, 0, 0, s[2] * 12), gold, M.Metal)
+		end
+		-- Three-layer cosmic cape: opaque night, glassy violet, wisp of teal, with a crescent clasp.
+		k.p("UpperTorso", "CapeNight", V(2.1, 3.1, 0.1), offset(0, -0.9, 0.62, 7, 0, 0), night, M.Fabric)
+		k.p("UpperTorso", "CapeNebula", V(2.0, 2.9, 0.08), offset(0, -0.9, 0.7, 7, 0, 0), violet, M.Fabric, nil, {transparency = 0.3})
+		k.p("UpperTorso", "CapeWisp", V(1.7, 2.5, 0.06), offset(0, -0.8, 0.78, 7, 0, 0), teal, M.Fabric, nil, {transparency = 0.5})
+		for i, p in ipairs({{-0.6, -0.4}, {0.5, -0.9}, {-0.2, -1.5}, {0.65, -1.9}, {-0.65, -2.1}, {0.1, 0.3}}) do
+			k.p("UpperTorso", "CapeStar" .. i, V(0.2, 0.2, 0.05), offset(p[1], p[2], 0.86 + i * 0.012, 7, 0, i * 30), gold, M.Metal, "Disc")
+		end
+		k.p("UpperTorso", "MoonClasp", V(0.5, 0.5, 0.1), offset(0, 0.7, -0.64), gold, M.Metal, "Disc")
+		k.p("UpperTorso", "MoonCut", V(0.42, 0.42, 0.12), offset(0.12, 0.74, -0.7), night, nil, "Disc")
+		-- Top hat with a golden star band and a tiny ringed planet.
+		k.p("Head", "HatBrim", V(1.8, 0.1, 1.8), offset(0, 0.56, 0.02), night, nil, "Can")
+		k.p("Head", "HatCrown", V(1.26, 1.0, 1.26), offset(0, 1.06, 0.02), night, nil, "Can")
+		k.p("Head", "HatBand", V(1.3, 0.22, 1.3), offset(0, 0.72, 0.02), gold, M.Metal, "Can")
+		k.p("Head", "HatStar", V(0.36, 0.36, 0.06), offset(0.28, 0.74, -0.68, 0, 0, 45), white, nil, "Disc")
+		k.p("Head", "Planet", V(0.46, 0.46, 0.46), offset(0, 1.82, 0.02), violet, nil, "Ball")
+		k.p("Head", "PlanetRing", V(0.94, 0.06, 0.94), offset(0, 1.82, 0.02, 0, 0, 18), gold, M.Metal, "Can")
+	end,
+}
+
+skins.skin_golden = { -- Golden Champion
+	hides = "outfit", headwear = true,
 	tint = {color = C(255, 200, 50), material = M.Metal, stashClothes = true},
+	aura = {kind = "gold", color = {C(255, 240, 150), C(255, 190, 40)}, mount = "UpperTorso", at = offset(0, 0, 0)},
 	build = function(k)
 		local gold, ruby, purple, white = C(255, 210, 70), C(230, 40, 70), C(110, 50, 200), C(255, 255, 255)
 		-- Crown with five bold points and gems.
-		k.p("Head", "CrownBand", Vector3.new(1.36, 0.3, 1.36), offset(0, 0.62, 0.02), gold, M.Metal, "Can")
+		k.p("Head", "CrownBand", V(1.36, 0.3, 1.36), offset(0, 0.62, 0.02), gold, M.Metal, "Can")
 		for i, x in ipairs({-0.52, -0.26, 0, 0.26, 0.52}) do
 			local tall = i == 3 and 0.74 or 0.52
-			k.p("Head", "CrownSpike" .. i, Vector3.new(0.3, tall, 0.2), offset(x, 0.76 + tall / 2, -0.5 + math.abs(x) * 0.5), gold, M.Metal, "Wedge")
-			k.p("Head", "CrownJewel" .. i, Vector3.new(0.14, 0.14, 0.06), offset(x, 0.62, -0.7 + math.abs(x) * 0.2), i % 2 == 0 and white or ruby, nil, "Disc")
+			k.p("Head", "CrownSpike" .. i, V(0.3, tall, 0.2), offset(x, 0.76 + tall / 2, -0.5 + math.abs(x) * 0.5), gold, M.Metal, "Wedge")
+			k.p("Head", "CrownJewel" .. i, V(0.14, 0.14, 0.06), offset(x, 0.62, -0.7 + math.abs(x) * 0.2), i % 2 == 0 and white or ruby, nil, "Disc")
 		end
-		-- Royal cape, champion belt, medal and shoulder guards.
-		k.p("UpperTorso", "Cape", Vector3.new(2.1, 3.0, 0.12), offset(0, -0.9, 0.62, 7, 0, 0), purple)
-		k.p("UpperTorso", "CapeTrim", Vector3.new(2.14, 0.2, 0.18), offset(0, -2.38, 0.84, 7, 0, 0), gold, M.Metal)
+		-- Champion armor: chest plate, gauntlets, greaves and boots (the avatar underneath turns solid gold).
+		shell(k, "UpperTorso", "ChestPlate", gold, V(0.18, 0.08, 0.18), M.Metal)
+		k.p("UpperTorso", "ChestRuby", V(0.5, 0.5, 0.08), offset(0, 0.2, -0.64), ruby, nil, "Disc")
 		for _, s in ipairs(SIDES) do
-			k.p("UpperTorso", "Epaulette_" .. s[1], Vector3.new(1.0, 0.24, 1.2), offset(s[2] * 1.0, 0.84, 0, 0, 0, s[2] * 12), gold, M.Metal)
-			k.p("UpperTorso", "CapeFur_" .. s[1], Vector3.new(0.7, 0.4, 0.5), offset(s[2] * 0.56, 0.78, 0.5), white, nil, "Ball")
+			k.p("UpperTorso", "Epaulette_" .. s[1], V(1.0, 0.24, 1.2), offset(s[2] * 1.0, 0.84, 0, 0, 0, s[2] * 12), gold, M.Metal)
+			k.p("UpperTorso", "CapeFur_" .. s[1], V(0.7, 0.4, 0.5), offset(s[2] * 0.56, 0.78, 0.5), white, M.Fabric, "Ball")
+			ring(k, s[1] .. "LowerArm", "Gauntlet_" .. s[1], gold, -0.16, 0.5, 0.24, M.Metal)
+			ring(k, s[1] .. "LowerLeg", "Greave_" .. s[1], gold, -0.1, 0.8, 0.2, M.Metal)
+			k.p(s[1] .. "Foot", "Boot_" .. s[1], V(1.14, 0.46, 1.3), offset(0, 0.06, -0.12), gold, M.Metal)
 		end
-		k.p("LowerTorso", "ChampionBelt", Vector3.new(2.16, 0.38, 1.16), offset(0, 0.04, 0), gold, M.Metal)
-		k.p("LowerTorso", "BeltPlaque", Vector3.new(0.96, 0.6, 0.1), offset(0, 0.04, -0.6), purple)
-		k.p("LowerTorso", "BeltJewel", Vector3.new(0.4, 0.4, 0.08), offset(0, 0.04, -0.67), ruby, nil, "Disc")
-		k.p("UpperTorso", "MedalDisc", Vector3.new(0.56, 0.56, 0.08), offset(0, 0.1, -0.56), gold, M.Metal, "Disc")
-		k.p("UpperTorso", "MedalCore", Vector3.new(0.28, 0.28, 0.06), offset(0, 0.1, -0.62), ruby, nil, "Disc")
-		wristbands(k, gold, M.Metal)
+		k.p("UpperTorso", "Cape", V(2.1, 3.0, 0.12), offset(0, -0.9, 0.62, 7, 0, 0), purple, M.Fabric)
+		k.p("UpperTorso", "CapeTrim", V(2.14, 0.2, 0.18), offset(0, -2.38, 0.84, 7, 0, 0), gold, M.Metal)
+		k.p("LowerTorso", "ChampionBelt", V(2.16, 0.38, 1.16), offset(0, 0.04, 0), gold, M.Metal)
+		k.p("LowerTorso", "BeltPlaque", V(0.96, 0.6, 0.1), offset(0, 0.04, -0.6), purple)
+		k.p("LowerTorso", "BeltJewel", V(0.4, 0.4, 0.08), offset(0, 0.04, -0.67), ruby, nil, "Disc")
 	end,
-	aura = {kind = "gold", color = {C(255, 240, 150), C(255, 190, 40)}, mount = "UpperTorso", at = offset(0, 0, 0)},
 }
 
-skins.skin_dragon = {
+skins.skin_dragon = { -- Dragon Racer
+	hides = "outfit", headwear = true,
+	aura = {kind = "embers", color = {C(255, 210, 90), C(255, 80, 30)}, mount = "UpperTorso", at = offset(0, 0.2, 0.5)},
 	build = function(k)
-		local red, bone, orange, dark = C(215, 50, 40), C(250, 236, 206), C(255, 140, 40), C(120, 24, 30)
+		local red, bone, orange, dark, ash = C(215, 50, 40), C(250, 236, 206), C(255, 140, 40), C(120, 24, 30), C(60, 28, 32)
+		-- Scale-armor suit: red body with orange belly plates, dark limbs, claw gloves and spiked boots.
+		suit(k, {torso = red, hips = dark, sleeve = dark, forearm = red, glove = ash, gloveMat = M.Slate, thigh = dark, shin = red, shoe = ash, shoeMat = M.Slate, sole = bone, mat = M.Slate})
+		for i = 0, 3 do
+			k.p("UpperTorso", "BellyPlate" .. i, V(1.5, 0.22, 0.1), offset(0, 0.55 - i * 0.38, -0.62), orange, nil)
+		end
+		for _, s in ipairs(SIDES) do
+			ring(k, s[1] .. "UpperArm", "ArmScales_" .. s[1], red, 0.2, 0.2, 0.2, M.Slate)
+			ring(k, s[1] .. "UpperLeg", "LegScales_" .. s[1], red, 0.2, 0.2, 0.2, M.Slate)
+			k.p(s[1] .. "Hand", "Claw_" .. s[1], V(0.7, 0.14, 0.4), offset(0, -0.1, -0.66), bone, nil, "Wedge")
+			k.p(s[1] .. "Foot", "ToeClaw_" .. s[1], V(0.7, 0.16, 0.44), offset(0, 0.0, -0.9), bone, nil, "Wedge")
+		end
 		-- Swept-back horns and a spiny crest.
 		for _, s in ipairs(SIDES) do
-			k.p("Head", "HornBase_" .. s[1], Vector3.new(0.34, 0.5, 0.34), offset(s[2] * 0.4, 0.7, 0.1, -14, 0, s[2] * -12), bone, nil, "Can")
-			k.p("Head", "HornTip_" .. s[1], Vector3.new(0.26, 0.7, 0.26), offset(s[2] * 0.52, 1.18, 0.34, -40, 0, s[2] * -20), orange, nil, "Can")
+			k.p("Head", "HornBase_" .. s[1], V(0.34, 0.5, 0.34), offset(s[2] * 0.4, 0.7, 0.1, -14, 0, s[2] * -12), bone, nil, "Can")
+			k.p("Head", "HornTip_" .. s[1], V(0.26, 0.7, 0.26), offset(s[2] * 0.52, 1.18, 0.34, -40, 0, s[2] * -20), orange, nil, "Can")
 		end
 		for i = 1, 3 do
-			k.p("UpperTorso", "BackSpike" .. i, Vector3.new(0.34, 0.5, 0.34), offset(0, 0.9 - i * 0.5, 0.62, 25, 0, 0), bone, nil, "Wedge")
+			k.p("UpperTorso", "BackSpike" .. i, V(0.34, 0.5, 0.34), offset(0, 0.9 - i * 0.5, 0.62, 25, 0, 0), bone, nil, "Wedge")
 		end
 		-- Wings: a bone spar and four fanned feather panels per side, so the V reads from behind.
 		for _, s in ipairs(SIDES) do
 			local x = s[2]
 			local function fan(name, angle, length, width, color, material)
 				local a = math.rad(angle)
-				local base = Vector3.new(x * 0.55, 0.45, 0.72)
-				local center = base + Vector3.new(x * math.sin(a), math.cos(a), 0) * (length / 2)
-				return k.p("UpperTorso", name .. "_" .. s[1], Vector3.new(width, length, 0.1), offset(center.X, center.Y, center.Z, 0, 0, -x * angle), color, material)
+				local base = V(x * 0.55, 0.45, 0.72)
+				local center = base + V(x * math.sin(a), math.cos(a), 0) * (length / 2)
+				return k.p("UpperTorso", name .. "_" .. s[1], V(width, length, 0.1), offset(center.X, center.Y, center.Z, 0, 0, -x * angle), color, material)
 			end
 			fan("WingSpar", 38, 3.1, 0.22, bone)
 			fan("WingFeatherA", 14, 2.3, 0.7, red)
 			fan("WingFeatherB", 36, 2.9, 0.7, dark)
 			fan("WingFeatherC", 58, 2.6, 0.7, red)
 			fan("WingFeatherD", 80, 2.0, 0.7, dark)
-			k.p("UpperTorso", "WingClaw_" .. s[1], Vector3.new(0.22, 0.5, 0.22), offset(x * 2.5, 2.75, 0.76, 0, 0, -x * 38), orange, nil, "Wedge")
+			k.p("UpperTorso", "WingClaw_" .. s[1], V(0.22, 0.5, 0.22), offset(x * 2.5, 2.75, 0.76, 0, 0, -x * 38), orange, nil, "Wedge")
 		end
 		-- Tapering tail with a flame tip.
-		k.p("LowerTorso", "TailA", Vector3.new(0.6, 0.6, 1.0), offset(0, -0.1, 0.9, -12, 0, 0), red)
-		k.p("LowerTorso", "TailB", Vector3.new(0.46, 0.46, 1.0), offset(0, -0.34, 1.78, -22, 0, 0), red)
-		k.p("LowerTorso", "TailC", Vector3.new(0.3, 0.3, 0.9), offset(0, -0.72, 2.5, -30, 0, 0), dark)
-		k.p("LowerTorso", "TailFlame", Vector3.new(0.5, 0.6, 0.5), offset(0, -1.0, 3.0, -30, 0, 0), orange, nil, "Wedge")
-		for _, s in ipairs(SIDES) do
-			k.p(s[1] .. "LowerArm", "ClawBand_" .. s[1], Vector3.new(1.12, 0.3, 1.12), offset(0, -0.3, 0), bone, nil, "Can")
-		end
+		k.p("LowerTorso", "TailA", V(0.6, 0.6, 1.0), offset(0, -0.1, 0.9, -12, 0, 0), red)
+		k.p("LowerTorso", "TailB", V(0.46, 0.46, 1.0), offset(0, -0.34, 1.78, -22, 0, 0), red)
+		k.p("LowerTorso", "TailC", V(0.3, 0.3, 0.9), offset(0, -0.72, 2.5, -30, 0, 0), dark)
+		k.p("LowerTorso", "TailFlame", V(0.5, 0.6, 0.5), offset(0, -1.0, 3.0, -30, 0, 0), orange, nil, "Wedge")
 	end,
-	aura = {kind = "embers", color = {C(255, 210, 90), C(255, 80, 30)}, mount = "UpperTorso", at = offset(0, 0.2, 0.5)},
 }
 
-Appearance.SkinOrder = {"skin_courier", "skin_rooftop", "skin_pizza", "skin_bunny", "skin_panda", "skin_streetwear", "skin_cyber", "skin_ninja",
-	"skin_neonphantom", "skin_midnight", "skin_candy", "skin_golden", "skin_dragon"}
+Appearance.SkinOrder = {"skin_courier", "skin_rooftop", "skin_pizza", "skin_bunny", "skin_panda", "skin_streetwear", "skin_cyber",
+	"skin_ninja", "skin_neonphantom", "skin_trickster", "skin_candy", "skin_galaxy", "skin_golden", "skin_dragon"}
 function Appearance.HasSkin(id) return skins[id] ~= nil end
+function Appearance.SkinInfo(id) return skins[id] end
 
 -- Presentational mood is a replicated attribute only. Roblox's own animations and face are untouched.
 Appearance.Moods = {Idle = "idle", Run = "run", Hunt = "hunt", Scared = "scared", Hide = "hide", Win = "win", Lose = "lose"}
@@ -450,146 +628,217 @@ function Appearance.SetMood(rig, mood)
 end
 
 -- ---------------------------------------------------------------------------------------
--- Masks sit in front of the player's real face. Bold, simple shapes; a little metal, no glow.
+-- Masks sit in front of the player's real face (the head's front plane is z = -0.6). Bold, simple shapes, a
+-- little metal, no glow. Pieces named "Top..." sit above the head (ears, stems, rings) and are left off when the
+-- skin already has headwear, so masks and hats never collide. Every mask works with every skin.
 -- ---------------------------------------------------------------------------------------
 local masks = {
-	mask_street = true, mask_visor = true, mask_phantom = true, mask_kitsune = true,
-	mask_skull = true, mask_ninja = true, mask_jester = true, mask_pixel = true,
+	mask_street = true, mask_visor = true, mask_smile = true, mask_cat = true, mask_ninja = true, mask_pumpkin = true,
+	mask_jester = true, mask_pixel = true, mask_phantom = true, mask_kitsune = true, mask_skull = true, mask_astral = true,
 }
 function Appearance.HasMask(id) return masks[id] ~= nil end
-Appearance.MaskOrder = {"mask_street", "mask_visor", "mask_ninja", "mask_jester", "mask_phantom", "mask_kitsune", "mask_skull", "mask_pixel"}
+Appearance.MaskOrder = {"mask_street", "mask_visor", "mask_smile", "mask_cat", "mask_ninja", "mask_pumpkin", "mask_jester", "mask_pixel",
+	"mask_phantom", "mask_kitsune", "mask_skull", "mask_astral"}
 
 local function buildMask(k, maskId)
 	local white, ink, gold = C(250, 246, 240), C(30, 30, 44), C(255, 205, 60)
-	local m = function(name, size, cf, color, material, shape, opts) return k.p("Head", name, size, cf, color, material, shape, opts) end
+	local function m(name, size, cf, color, material, shape, opts)
+		if k.headwear and string.sub(name, 1, 3) == "Top" then return nil end
+		return k.p("Head", name, size, cf, color, material, shape, opts)
+	end
 	if maskId == "mask_street" then
 		local teal, light = C(30, 190, 200), C(255, 255, 255)
-		m("BandanaCloth", Vector3.new(1.34, 0.56, 0.24), offset(0, -0.26, -0.6), teal)
-		m("BandanaPoint", Vector3.new(0.6, 0.34, 0.24), offset(0, -0.62, -0.58, 0, 0, 180), teal, nil, "Wedge")
-		m("BandanaTopEdge", Vector3.new(1.34, 0.08, 0.26), offset(0, -0.02, -0.61), light)
-		for _, x in ipairs({-0.4, 0, 0.4}) do m("BandanaDot", Vector3.new(0.12, 0.12, 0.05), offset(x, -0.3, -0.73), light, nil, "Disc") end
-		m("BandanaKnot", Vector3.new(0.4, 0.34, 0.34), offset(0.3, -0.2, 0.66), teal, nil, "Ball")
-		m("BandanaStrap", Vector3.new(1.28, 0.2, 1.28), offset(0, -0.2, 0.0), teal, nil, "Can")
+		m("BandanaCloth", V(1.34, 0.56, 0.24), offset(0, -0.26, -0.6), teal, M.Fabric)
+		m("BandanaPoint", V(0.6, 0.34, 0.24), offset(0, -0.62, -0.58, 0, 0, 180), teal, M.Fabric, "Wedge")
+		m("BandanaTopEdge", V(1.34, 0.08, 0.26), offset(0, -0.02, -0.61), light)
+		for _, x in ipairs({-0.4, 0, 0.4}) do m("BandanaDot", V(0.12, 0.12, 0.05), offset(x, -0.3, -0.73), light, nil, "Disc") end
+		m("BandanaKnot", V(0.4, 0.34, 0.34), offset(0.3, -0.2, 0.66), teal, M.Fabric, "Ball")
+		m("BandanaStrap", V(1.28, 0.2, 1.28), offset(0, -0.2, 0.0), teal, M.Fabric, "Can")
 	elseif maskId == "mask_visor" then
-		-- Cool shades: opaque lenses, bright frame.
+		-- Cool shades: opaque lenses, hot-pink frame, a glint on each lens.
 		local frame = C(255, 90, 160)
-		m("ShadesBridge", Vector3.new(1.32, 0.12, 0.16), offset(0, 0.14, -0.64), frame)
+		m("ShadesBridge", V(1.32, 0.12, 0.16), offset(0, 0.14, -0.64), frame)
 		for _, s in ipairs(SIDES) do
-			m("ShadesLens_" .. s[1], Vector3.new(0.54, 0.4, 0.14), offset(s[2] * 0.3, 0.1, -0.66), ink, M.Glass, nil, {transparency = 0.1})
-			m("ShadesRim_" .. s[1], Vector3.new(0.6, 0.46, 0.1), offset(s[2] * 0.3, 0.1, -0.63), frame)
-			m("ShadesShine_" .. s[1], Vector3.new(0.14, 0.06, 0.06), offset(s[2] * 0.4, 0.2, -0.74, 0, 0, 20), white)
-			m("ShadesArm_" .. s[1], Vector3.new(0.1, 0.12, 1.0), offset(s[2] * 0.62, 0.14, -0.1), frame)
+			m("ShadesLens_" .. s[1], V(0.54, 0.4, 0.14), offset(s[2] * 0.3, 0.1, -0.66), ink, M.Glass, nil, {transparency = 0.1})
+			m("ShadesRim_" .. s[1], V(0.6, 0.46, 0.1), offset(s[2] * 0.3, 0.1, -0.63), frame)
+			m("ShadesShine_" .. s[1], V(0.14, 0.06, 0.06), offset(s[2] * 0.4, 0.2, -0.74, 0, 0, 20), white)
+			m("ShadesArm_" .. s[1], V(0.1, 0.12, 1.0), offset(s[2] * 0.62, 0.14, -0.1), frame)
+		end
+	elseif maskId == "mask_smile" then
+		-- Cartoon smiley: yellow face disc, oval eyes, rosy cheeks, a huge curved grin.
+		local yellow = C(255, 214, 40)
+		m("SmileFace", V(1.12, 1.12, 0.14), offset(0, -0.02, -0.66), yellow, nil, "Disc")
+		for _, s in ipairs(SIDES) do
+			m("SmileEye_" .. s[1], V(0.16, 0.3, 0.05), offset(s[2] * 0.25, 0.2, -0.75), ink, nil, "Disc")
+			m("SmileCheek_" .. s[1], V(0.22, 0.14, 0.04), offset(s[2] * 0.42, -0.12, -0.74), C(255, 130, 130), nil, "Disc")
+		end
+		for i = -2, 2 do
+			local x = i * 0.15
+			m("SmileGrin" .. i, V(0.17, 0.08, 0.05), offset(x, -0.26 + (i * i) * 0.035, -0.75, 0, 0, i * -12), ink)
+		end
+	elseif maskId == "mask_cat" then
+		-- Cartoon cat: orange face, cream muzzle, big eyes, pink nose, whiskers, pointed ears.
+		local orange, cream, pink = C(255, 156, 52), C(255, 240, 214), C(255, 128, 168)
+		m("CatFace", V(1.12, 1.04, 0.14), offset(0, -0.02, -0.66), orange, nil, "Disc")
+		m("CatMuzzle", V(0.62, 0.42, 0.06), offset(0, -0.24, -0.75), cream, nil, "Disc")
+		m("CatNose", V(0.2, 0.14, 0.06), offset(0, -0.12, -0.79, 0, 0, 180), pink, nil, "Wedge")
+		for _, s in ipairs(SIDES) do
+			m("CatEye_" .. s[1], V(0.26, 0.3, 0.05), offset(s[2] * 0.26, 0.16, -0.75), white, nil, "Disc")
+			m("CatPupil_" .. s[1], V(0.1, 0.24, 0.05), offset(s[2] * 0.26, 0.16, -0.79), ink, nil, "Disc")
+			for i = 1, 2 do
+				m("CatWhisker" .. i .. "_" .. s[1], V(0.5, 0.03, 0.03), offset(s[2] * 0.62, -0.2 - (i - 1.5) * 0.12, -0.74, 0, 0, s[2] * (i - 1.5) * 14), ink)
+			end
+			m("TopCatEar_" .. s[1], V(0.4, 0.5, 0.18), offset(s[2] * 0.42, 0.78, -0.3, 0, 0, s[2] * -12), orange, nil, "Wedge")
+			m("TopCatEarInner_" .. s[1], V(0.2, 0.28, 0.08), offset(s[2] * 0.42, 0.74, -0.4, 0, 0, s[2] * -12), pink, nil, "Wedge")
 		end
 	elseif maskId == "mask_ninja" then
 		local cloth, wrap = C(40, 44, 70), C(230, 40, 50)
-		m("WrapLower", Vector3.new(1.34, 0.62, 0.24), offset(0, -0.22, -0.6), cloth)
-		m("WrapNose", Vector3.new(0.5, 0.24, 0.26), offset(0, 0.06, -0.62), cloth, nil, "Wedge")
-		m("WrapStrap", Vector3.new(1.3, 0.24, 1.3), offset(0, -0.1, 0.0), cloth, nil, "Can")
-		m("WrapStripe", Vector3.new(1.36, 0.08, 0.26), offset(0, -0.46, -0.6), wrap)
-		m("WrapTail", Vector3.new(0.24, 0.9, 0.08), offset(0.4, -0.4, 0.68, 12, 0, -8), wrap)
+		m("WrapLower", V(1.34, 0.62, 0.24), offset(0, -0.22, -0.6), cloth, M.Fabric)
+		m("WrapNose", V(0.5, 0.24, 0.26), offset(0, 0.06, -0.62), cloth, M.Fabric, "Wedge")
+		m("WrapStrap", V(1.3, 0.24, 1.3), offset(0, -0.1, 0.0), cloth, M.Fabric, "Can")
+		m("WrapStripe", V(1.36, 0.08, 0.26), offset(0, -0.46, -0.6), wrap)
+		m("WrapTail", V(0.24, 0.9, 0.08), offset(0.4, -0.4, 0.68, 12, 0, -8), wrap, M.Fabric)
+	elseif maskId == "mask_pumpkin" then
+		-- Jack-o'-lantern: a squashed orange pumpkin with carved eyes and a jagged grin, a green stem on top.
+		local orange, dark, green, glow = C(255, 132, 30), C(200, 90, 20), C(80, 170, 70), C(255, 226, 120)
+		m("PumpkinBody", V(1.2, 1.08, 0.5), offset(0, -0.02, -0.68), orange, nil, "Ball")
+		for _, x in ipairs({-0.36, 0.36}) do m("PumpkinRib", V(0.1, 0.96, 0.1), offset(x, -0.02, -0.9), dark, nil, "Ball") end
+		for _, s in ipairs(SIDES) do
+			m("PumpkinEyeHole_" .. s[1], V(0.3, 0.3, 0.1), offset(s[2] * 0.26, 0.16, -0.9), ink, nil, "Wedge")
+			m("PumpkinEyeGlow_" .. s[1], V(0.16, 0.16, 0.06), offset(s[2] * 0.26, 0.12, -0.95), glow, nil, "Wedge")
+		end
+		m("PumpkinNose", V(0.16, 0.16, 0.08), offset(0, -0.06, -0.93, 0, 0, 180), ink, nil, "Wedge")
+		for i = -2, 2 do
+			m("PumpkinTooth" .. i, V(0.14, 0.18 + (i % 2 == 0 and 0.06 or 0), 0.08), offset(i * 0.17, -0.34, -0.93), glow)
+		end
+		m("TopPumpkinStem", V(0.2, 0.4, 0.2), offset(0.05, 0.68, -0.5, 14, 0, -10), green, nil, "Can")
+		m("TopPumpkinLeaf", V(0.4, 0.06, 0.22), offset(0.3, 0.7, -0.5, 0, 0, -20), green)
 	elseif maskId == "mask_jester" then
-		local purple = C(150, 80, 230)
-		m("JesterFace", Vector3.new(1.06, 0.84, 0.2), offset(0, -0.02, -0.62), white)
-		m("JesterHalf", Vector3.new(0.53, 0.84, 0.21), offset(0.265, -0.02, -0.63), purple)
+		local purple, pink = C(150, 80, 230), C(236, 70, 100)
+		m("JesterFace", V(1.06, 0.84, 0.2), offset(0, -0.02, -0.62), white)
+		m("JesterHalf", V(0.53, 0.84, 0.21), offset(0.265, -0.02, -0.63), purple)
 		for _, s in ipairs(SIDES) do
-			m("JesterEye_" .. s[1], Vector3.new(0.32, 0.24, 0.06), offset(s[2] * 0.26, 0.14, -0.74, 0, 0, s[2] * 18), ink)
-			m("JesterBrowPoint_" .. s[1], Vector3.new(0.4, 0.36, 0.22), offset(s[2] * 0.46, 0.52, -0.58, 0, 0, s[2] * -28), s[1] == "Left" and white or purple, nil, "Wedge")
-			m("JesterBell_" .. s[1], Vector3.new(0.26, 0.26, 0.26), offset(s[2] * 0.74, 0.8, -0.58), gold, M.Metal, "Ball")
+			m("JesterEye_" .. s[1], V(0.32, 0.24, 0.06), offset(s[2] * 0.26, 0.14, -0.74, 0, 0, s[2] * 18), ink)
+			m("JesterBrowPoint_" .. s[1], V(0.4, 0.36, 0.22), offset(s[2] * 0.46, 0.52, -0.58, 0, 0, s[2] * -28), s[1] == "Left" and white or purple, nil, "Wedge")
+			m("TopJesterBell_" .. s[1], V(0.26, 0.26, 0.26), offset(s[2] * 0.74, 0.8, -0.58), gold, M.Metal, "Ball")
+			m("JesterDiamond_" .. s[1], V(0.12, 0.12, 0.05), offset(s[2] * 0.42, -0.06, -0.74, 0, 0, 45), s[1] == "Left" and purple or pink)
 		end
-		m("JesterGrin", Vector3.new(0.74, 0.22, 0.06), offset(0, -0.26, -0.74), ink)
-		for x = -0.24, 0.24, 0.12 do m("JesterTooth", Vector3.new(0.07, 0.15, 0.06), offset(x, -0.24, -0.78), white) end
-		m("JesterNose", Vector3.new(0.22, 0.22, 0.22), offset(0, -0.06, -0.78), C(236, 70, 80), nil, "Ball")
-	elseif maskId == "mask_phantom" then
-		m("PhantomCeramic", Vector3.new(1.06, 0.9, 0.2), offset(0, -0.02, -0.62), white)
-		for _, s in ipairs(SIDES) do
-			m("PhantomCheek_" .. s[1], Vector3.new(0.36, 0.42, 0.16), offset(s[2] * 0.36, -0.3, -0.68, 0, 0, s[2] * 20), white, nil, "Wedge")
-			m("PhantomEye_" .. s[1], Vector3.new(0.34, 0.14, 0.06), offset(s[2] * 0.26, 0.12, -0.74, 0, 0, s[2] * 10), ink)
-			m("PhantomGoldBrow_" .. s[1], Vector3.new(0.38, 0.06, 0.06), offset(s[2] * 0.26, 0.26, -0.75, 0, 0, s[2] * 10), gold, M.Metal)
-			m("PhantomFiligree_" .. s[1], Vector3.new(0.08, 0.36, 0.06), offset(s[2] * 0.47, -0.03, -0.75, 0, 0, s[2] * 18), gold, M.Metal)
-		end
-		m("PhantomNose", Vector3.new(0.16, 0.28, 0.2), offset(0, -0.06, -0.78, 0, 0, 180), white, nil, "Wedge")
-		m("PhantomMouth", Vector3.new(0.26, 0.06, 0.04), offset(0, -0.3, -0.75), ink)
-	elseif maskId == "mask_kitsune" then
-		local vermilion = C(226, 70, 70)
-		m("FoxFace", Vector3.new(1.06, 0.82, 0.22), offset(0, -0.02, -0.63), white)
-		for _, s in ipairs(SIDES) do
-			m("FoxEar_" .. s[1], Vector3.new(0.4, 0.84, 0.2), offset(s[2] * 0.44, 0.66, -0.5, 0, 0, s[2] * -18), white, nil, "Wedge")
-			m("FoxEarInner_" .. s[1], Vector3.new(0.2, 0.5, 0.06), offset(s[2] * 0.45, 0.64, -0.62, 0, 0, s[2] * -18), vermilion, nil, "Wedge")
-			m("FoxEye_" .. s[1], Vector3.new(0.34, 0.1, 0.06), offset(s[2] * 0.26, 0.1, -0.75, 0, 0, s[2] * 20), vermilion)
-			m("FoxCheekMark_" .. s[1], Vector3.new(0.3, 0.08, 0.06), offset(s[2] * 0.34, -0.14, -0.75, 0, 0, s[2] * -25), vermilion)
-		end
-		m("FoxMuzzle", Vector3.new(0.42, 0.28, 0.26), offset(0, -0.26, -0.78), white)
-		m("FoxNose", Vector3.new(0.16, 0.1, 0.06), offset(0, -0.19, -0.92), ink)
-		m("FoxForeheadSeal", Vector3.new(0.2, 0.26, 0.05), offset(0, 0.28, -0.75, 0, 0, 45), vermilion)
-	elseif maskId == "mask_skull" then
-		m("SkullForehead", Vector3.new(1.08, 0.54, 0.24), offset(0, 0.2, -0.62), gold, M.Metal)
-		for _, s in ipairs(SIDES) do
-			m("SkullCheek_" .. s[1], Vector3.new(0.34, 0.4, 0.18), offset(s[2] * 0.4, -0.14, -0.66, 0, 0, s[2] * 18), gold, M.Metal)
-			m("SkullSocket_" .. s[1], Vector3.new(0.36, 0.3, 0.08), offset(s[2] * 0.27, 0.1, -0.78, 0, 0, s[2] * 9), ink)
-			m("SkullEye_" .. s[1], Vector3.new(0.12, 0.12, 0.05), offset(s[2] * 0.27, 0.1, -0.83), C(255, 90, 90), nil, "Disc")
-		end
-		m("SkullJaw", Vector3.new(0.7, 0.3, 0.22), offset(0, -0.34, -0.64), gold, M.Metal)
-		m("SkullNasal", Vector3.new(0.15, 0.19, 0.06), offset(0, -0.1, -0.8, 0, 0, 180), ink, nil, "Wedge")
-		for x = -0.24, 0.24, 0.12 do m("ToothGap", Vector3.new(0.04, 0.17, 0.04), offset(x, -0.34, -0.77), ink) end
+		m("JesterGrin", V(0.74, 0.22, 0.06), offset(0, -0.26, -0.74), ink)
+		for x = -0.24, 0.24, 0.12 do m("JesterTooth", V(0.07, 0.15, 0.06), offset(x, -0.24, -0.78), white) end
+		m("JesterNose", V(0.22, 0.22, 0.22), offset(0, -0.06, -0.78), pink, nil, "Ball")
 	elseif maskId == "mask_pixel" then
-		local screen, glow = C(34, 40, 66), C(80, 235, 160)
-		m("PixelScreen", Vector3.new(1.1, 0.9, 0.22), offset(0, -0.02, -0.62), screen, M.Metal)
-		m("PixelFrame", Vector3.new(1.18, 0.98, 0.14), offset(0, -0.02, -0.58), C(100, 110, 150), M.Metal)
+		-- Retro bot: a monitor face with a pixel smile.
+		local screen, glow, frame = C(34, 40, 66), C(80, 235, 160), C(100, 110, 150)
+		m("PixelScreen", V(1.1, 0.9, 0.22), offset(0, -0.02, -0.62), screen, M.Metal)
+		m("PixelFrame", V(1.18, 0.98, 0.14), offset(0, -0.02, -0.58), frame, M.Metal)
 		for _, s in ipairs(SIDES) do
-			m("PixelEye_" .. s[1], Vector3.new(0.26, 0.26, 0.06), offset(s[2] * 0.25, 0.14, -0.74), glow)
-			m("PixelCheek_" .. s[1], Vector3.new(0.12, 0.12, 0.06), offset(s[2] * 0.36, -0.2, -0.74), C(255, 120, 190))
+			m("PixelEye_" .. s[1], V(0.26, 0.26, 0.06), offset(s[2] * 0.25, 0.14, -0.74), glow)
+			m("PixelCheek_" .. s[1], V(0.12, 0.12, 0.06), offset(s[2] * 0.36, -0.2, -0.74), C(255, 120, 190))
+			m("PixelBolt_" .. s[1], V(0.12, 0.12, 0.08), offset(s[2] * 0.54, 0.4, -0.66), frame, M.Metal, "Ball")
 		end
 		for i, x in ipairs({-0.3, -0.15, 0, 0.15, 0.3}) do
-			m("PixelMouth" .. i, Vector3.new(0.12, 0.12, 0.06), offset(x, i % 2 == 0 and -0.34 or -0.28, -0.74), glow)
+			m("PixelMouth" .. i, V(0.12, 0.12, 0.06), offset(x, i % 2 == 0 and -0.34 or -0.28, -0.74), glow)
 		end
-		m("PixelAntenna", Vector3.new(0.06, 0.44, 0.06), offset(0, 0.78, -0.2), C(100, 110, 150), M.Metal)
-		m("PixelAntennaTip", Vector3.new(0.18, 0.18, 0.18), offset(0, 1.02, -0.2), glow, nil, "Ball")
+		m("TopPixelAntenna", V(0.06, 0.44, 0.06), offset(0, 0.78, -0.2), frame, M.Metal)
+		m("TopPixelAntennaTip", V(0.18, 0.18, 0.18), offset(0, 1.02, -0.2), glow, nil, "Ball")
+	elseif maskId == "mask_phantom" then
+		-- Half-face opera mask over the right side, gold trim and a music note.
+		m("PhantomPlate", V(0.66, 0.92, 0.2), offset(0.27, -0.02, -0.62), white)
+		m("PhantomBridge", V(0.5, 0.34, 0.2), offset(-0.04, 0.14, -0.62), white)
+		m("PhantomNose", V(0.18, 0.3, 0.2), offset(0, -0.1, -0.76, 0, 0, 180), white, nil, "Wedge")
+		m("PhantomEye", V(0.32, 0.14, 0.06), offset(0.28, 0.14, -0.74, 0, 0, 10), ink)
+		m("PhantomBrow", V(0.4, 0.06, 0.06), offset(0.28, 0.28, -0.75, 0, 0, 10), gold, M.Metal)
+		m("PhantomTrim", V(0.06, 0.9, 0.07), offset(-0.06, -0.02, -0.74), gold, M.Metal)
+		m("PhantomNoteHead", V(0.12, 0.1, 0.05), offset(0.42, -0.2, -0.74), gold, M.Metal, "Disc")
+		m("PhantomNoteStem", V(0.03, 0.26, 0.05), offset(0.47, -0.08, -0.74), gold, M.Metal)
+		m("PhantomEyebrowFlourish", V(0.22, 0.05, 0.05), offset(-0.3, 0.2, -0.7, 0, 0, -14), gold, M.Metal)
+	elseif maskId == "mask_kitsune" then
+		local vermilion = C(226, 70, 70)
+		m("FoxFace", V(1.06, 0.82, 0.22), offset(0, -0.02, -0.63), white)
+		for _, s in ipairs(SIDES) do
+			m("TopFoxEar_" .. s[1], V(0.4, 0.84, 0.2), offset(s[2] * 0.44, 0.66, -0.5, 0, 0, s[2] * -18), white, nil, "Wedge")
+			m("TopFoxEarInner_" .. s[1], V(0.2, 0.5, 0.06), offset(s[2] * 0.45, 0.64, -0.62, 0, 0, s[2] * -18), vermilion, nil, "Wedge")
+			m("FoxEye_" .. s[1], V(0.34, 0.1, 0.06), offset(s[2] * 0.26, 0.1, -0.75, 0, 0, s[2] * 20), vermilion)
+			m("FoxCheekMark_" .. s[1], V(0.3, 0.08, 0.06), offset(s[2] * 0.34, -0.14, -0.75, 0, 0, s[2] * -25), vermilion)
+			m("FoxCheekMarkB_" .. s[1], V(0.26, 0.07, 0.06), offset(s[2] * 0.36, -0.26, -0.75, 0, 0, s[2] * -25), vermilion)
+		end
+		m("FoxMuzzle", V(0.42, 0.28, 0.26), offset(0, -0.26, -0.78), white)
+		m("FoxNose", V(0.16, 0.1, 0.06), offset(0, -0.19, -0.92), ink)
+		m("FoxForeheadSeal", V(0.2, 0.26, 0.05), offset(0, 0.28, -0.75, 0, 0, 45), vermilion)
+	elseif maskId == "mask_skull" then
+		m("SkullForehead", V(1.08, 0.54, 0.24), offset(0, 0.2, -0.62), gold, M.Metal)
+		for _, s in ipairs(SIDES) do
+			m("SkullCheek_" .. s[1], V(0.34, 0.4, 0.18), offset(s[2] * 0.4, -0.14, -0.66, 0, 0, s[2] * 18), gold, M.Metal)
+			m("SkullSocket_" .. s[1], V(0.36, 0.3, 0.08), offset(s[2] * 0.27, 0.1, -0.78, 0, 0, s[2] * 9), ink)
+			m("SkullEye_" .. s[1], V(0.12, 0.12, 0.05), offset(s[2] * 0.27, 0.1, -0.83), C(255, 90, 90), nil, "Disc")
+			m("SkullBrowRidge_" .. s[1], V(0.4, 0.08, 0.08), offset(s[2] * 0.27, 0.3, -0.76, 0, 0, s[2] * 10), C(214, 160, 40), M.Metal)
+		end
+		m("SkullJaw", V(0.7, 0.3, 0.22), offset(0, -0.34, -0.64), gold, M.Metal)
+		m("SkullNasal", V(0.15, 0.19, 0.06), offset(0, -0.1, -0.8, 0, 0, 180), ink, nil, "Wedge")
+		for x = -0.24, 0.24, 0.12 do m("ToothGap", V(0.04, 0.17, 0.04), offset(x, -0.34, -0.77), ink) end
+	elseif maskId == "mask_astral" then
+		-- Astral visor: a wraparound glass lens full of stars, golden frame, temple modules and a tiny ringed planet.
+		local night, violet, teal = C(20, 22, 66), C(120, 80, 220), C(70, 200, 220)
+		m("VisorGlass", V(0.86, 0.46, 0.12), offset(0, 0.1, -0.7), night, M.Glass, nil, {transparency = 0.08})
+		for _, s in ipairs(SIDES) do
+			m("VisorWing_" .. s[1], V(0.46, 0.46, 0.12), offset(s[2] * 0.62, 0.1, -0.52, 0, s[2] * 60, 0), night, M.Glass, nil, {transparency = 0.08})
+			m("VisorModule_" .. s[1], V(0.2, 0.34, 0.34), offset(s[2] * 0.7, 0.1, -0.1), violet, M.Metal, "Can")
+		end
+		m("VisorFrameTop", V(1.3, 0.08, 0.08), offset(0, 0.36, -0.66), gold, M.Metal)
+		m("VisorFrameBottom", V(1.0, 0.08, 0.08), offset(0, -0.14, -0.74), gold, M.Metal)
+		m("VisorBridge", V(0.14, 0.34, 0.14), offset(0, 0.1, -0.76), gold, M.Metal)
+		for i, p in ipairs({{-0.3, 0.2}, {0.2, 0.0}, {0.34, 0.26}}) do m("VisorStar" .. i, V(0.07, 0.07, 0.04), offset(p[1], p[2], -0.78), C(255, 244, 190), nil, "Disc") end
+		m("TopPlanet", V(0.34, 0.34, 0.34), offset(0, 0.98, -0.1), teal, nil, "Ball")
+		m("TopPlanetRing", V(0.72, 0.05, 0.72), offset(0, 0.98, -0.1, 0, 0, 16), gold, M.Metal, "Can")
 	end
 end
 
 -- ---------------------------------------------------------------------------------------
 -- Effects: sprint trails and rarity auras. Both are tiny and switched off by distance LOD elsewhere.
 -- ---------------------------------------------------------------------------------------
+local function trailEnabled(rig, root, humanoid)
+	return rig:GetAttribute("CatchPreview") == true or (humanoid ~= nil and humanoid.Health > 0
+		and not root.Anchored and rig:GetAttribute("RoundFrozen") ~= true
+		and rig:GetAttribute("Sprinting") == true
+		and Vector3.new(root.AssemblyLinearVelocity.X, 0, root.AssemblyLinearVelocity.Z).Magnitude > 3)
+end
+
 local function addTrail(folder, rig, id)
-	if id ~= "trail_cyan" and id ~= "trail_sunset" and id ~= "trail_rainbow" and id ~= "trail_flame" and id ~= "trail_candy" then return end
+	if not Trails.Has(id) then return end
 	local root = rig:FindFirstChild("HumanoidRootPart")
 	local mount = attach(folder, root, "TrailMount", Vector3.new(0.05, 0.05, 0.05), offset(0, -0.55, 0.6), Color3.new())
 	if not mount then return end
 	mount.Transparency = 1
-	local a, b = Instance.new("Attachment"), Instance.new("Attachment")
-	a.Position, b.Position = Vector3.new(-0.5, 0, 0), Vector3.new(0.5, 0, 0)
-	a.Parent, b.Parent = mount, mount
-	local trail = Instance.new("Trail")
-	trail.Name = id
-	local humanoid = rig:FindFirstChildOfClass("Humanoid")
-	trail.Enabled = rig:GetAttribute("CatchPreview") == true or (humanoid ~= nil and humanoid.Health > 0
-		and not root.Anchored and rig:GetAttribute("RoundFrozen") ~= true
-		and rig:GetAttribute("Sprinting") == true
-		and Vector3.new(root.AssemblyLinearVelocity.X, 0, root.AssemblyLinearVelocity.Z).Magnitude > 3)
-	trail.Attachment0, trail.Attachment1 = a, b
-	if id == "trail_cyan" then trail.Color = ColorSequence.new(C(59, 236, 228), C(85, 123, 239))
-	elseif id == "trail_sunset" then trail.Color = ColorSequence.new(C(255, 196, 91), C(246, 86, 135))
-	elseif id == "trail_flame" then trail.Color = ColorSequence.new(C(255, 220, 90), C(255, 70, 20))
-	elseif id == "trail_candy" then trail.Color = ColorSequence.new(C(255, 140, 200), C(120, 235, 200))
-	else
-		trail.Color = ColorSequence.new({ColorSequenceKeypoint.new(0, C(255, 90, 120)), ColorSequenceKeypoint.new(0.35, C(255, 220, 90)),
-			ColorSequenceKeypoint.new(0.7, C(90, 240, 160)), ColorSequenceKeypoint.new(1, C(100, 150, 255))})
-	end
-	trail.Lifetime = 0.33
-	trail.MinLength = 0.08
-	trail.FaceCamera = true
-	trail.LightEmission = 0.4
-	trail.Transparency = NumberSequence.new({NumberSequenceKeypoint.new(0, 0.3), NumberSequenceKeypoint.new(1, 1)})
-	trail.WidthScale = NumberSequence.new({NumberSequenceKeypoint.new(0, 0.72), NumberSequenceKeypoint.new(1, 0)})
-	trail.Parent = folder
+	Trails.Populate(mount, id, trailEnabled(rig, root, rig:FindFirstChildOfClass("Humanoid")))
+	rig:SetAttribute("CatchTrail", id)
 end
 
--- Ambient auras: one small emitter per Epic/Legendary skin. `kind` shapes the motion.
+-- Ambient auras: one small emitter per Epic/Legendary skin. `kind` shapes the motion. Particle budget: at most
+-- 16 per second, one emitter per avatar.
+local AURA_TEXTURES = {
+	sparkles = "rbxasset://textures/particles/sparkles_main.dds",
+	smoke = "rbxasset://textures/particles/smoke_main.dds",
+}
+local AURAS = {
+	gold = {rate = 7, life = {1.0, 1.8}, speed = {0.5, 1.5}, spread = 180, accel = V(0, 0.8, 0), size = {0.5, 0}, emission = 0.5},
+	stars = {rate = 7, life = {1.0, 1.8}, speed = {0.5, 1.5}, spread = 180, accel = V(0, 0.8, 0), size = {0.5, 0}, emission = 0.5},
+	sprinkles = {rate = 7, life = {1.0, 1.8}, speed = {0.5, 1.5}, spread = 180, accel = V(0, 0.8, 0), size = {0.5, 0}, emission = 0.5},
+	dust = {rate = 5, life = {0.8, 1.4}, speed = {0.4, 1.2}, spread = 180, accel = V(0, 0.5, 0), size = {0.4, 0}, emission = 0.5},
+	confetti = {rate = 9, life = {1.0, 1.6}, speed = {1, 3}, spread = 180, accel = V(0, -1.5, 0), size = {0.4, 0.2}, emission = 0.3},
+	stardust = {rate = 10, life = {1.2, 2.0}, speed = {0.4, 1.4}, spread = 180, accel = V(0, 0.5, 0), size = {0.55, 0}, emission = 0.8},
+	embers = {rate = 9, life = {0.9, 1.6}, speed = {1.5, 3}, spread = 30, accel = V(0, 4, 0), size = {0.4, 0}, emission = 0.6},
+	jet = {rate = 14, life = {0.25, 0.45}, speed = {5, 8}, spread = 8, accel = V(0, -6, 0), size = {0.5, 0}, emission = 0.7},
+	wisps = {rate = 6, life = {1.2, 2.0}, speed = {0.8, 1.6}, spread = 60, accel = V(0, 1.2, 0), size = {0.7, 0.1}, emission = 0.3},
+	smoke = {rate = 5, life = {1.0, 1.6}, speed = {0.3, 0.9}, spread = 80, accel = V(0, 0.6, 0), size = {0.8, 1.8}, emission = 0, texture = "smoke", alpha = 0.5},
+}
+Appearance.AuraKinds = AURAS
+
 local function addAura(folder, rig, definition)
 	local aura = definition.aura
 	if not aura then return end
+	local spec = AURAS[aura.kind] or AURAS.wisps
 	local target = bodyPart(rig, aura.mount or "UpperTorso")
-	local mount = attach(folder, target, "AuraMount", Vector3.new(0.2, 0.2, 0.2), aura.at or offset(0, 0, 0), Color3.new())
+	local mount = attach(folder, target, "AuraMount", V(0.2, 0.2, 0.2), aura.at or offset(0, 0, 0), Color3.new())
 	if not mount then return end
 	mount.Transparency = 1
 	local e = Instance.new("ParticleEmitter")
@@ -597,29 +846,15 @@ local function addAura(folder, rig, definition)
 	e.Color = ColorSequence.new(aura.color[1], aura.color[2])
 	e.LockedToPart = aura.kind == "jet"
 	e.Shape = Enum.ParticleEmitterShape.Sphere
-	e.Texture = "rbxasset://textures/particles/sparkles_main.dds"
-	if aura.kind == "gold" or aura.kind == "stars" or aura.kind == "sprinkles" then
-		e.Rate, e.Lifetime, e.Speed, e.SpreadAngle = 7, NumberRange.new(1.0, 1.8), NumberRange.new(0.5, 1.5), Vector2.new(180, 180)
-		e.Acceleration = Vector3.new(0, 0.8, 0)
-		e.Size = NumberSequence.new({NumberSequenceKeypoint.new(0, 0.5), NumberSequenceKeypoint.new(1, 0)})
-		e.LightEmission = 0.5
-	elseif aura.kind == "embers" then
-		e.Rate, e.Lifetime, e.Speed, e.SpreadAngle = 9, NumberRange.new(0.9, 1.6), NumberRange.new(1.5, 3), Vector2.new(30, 30)
-		e.Acceleration = Vector3.new(0, 4, 0)
-		e.Size = NumberSequence.new({NumberSequenceKeypoint.new(0, 0.4), NumberSequenceKeypoint.new(1, 0)})
-		e.LightEmission = 0.6
-	elseif aura.kind == "jet" then
-		e.Rate, e.Lifetime, e.Speed, e.SpreadAngle = 14, NumberRange.new(0.25, 0.45), NumberRange.new(5, 8), Vector2.new(8, 8)
-		e.Acceleration = Vector3.new(0, -6, 0)
-		e.Size = NumberSequence.new({NumberSequenceKeypoint.new(0, 0.5), NumberSequenceKeypoint.new(1, 0)})
-		e.LightEmission = 0.7
-	else -- wisps
-		e.Rate, e.Lifetime, e.Speed, e.SpreadAngle = 6, NumberRange.new(1.2, 2.0), NumberRange.new(0.8, 1.6), Vector2.new(60, 60)
-		e.Acceleration = Vector3.new(0, 1.2, 0)
-		e.Size = NumberSequence.new({NumberSequenceKeypoint.new(0, 0.7), NumberSequenceKeypoint.new(1, 0.1)})
-		e.LightEmission = 0.3
-	end
-	e.Transparency = NumberSequence.new({NumberSequenceKeypoint.new(0, 0.2), NumberSequenceKeypoint.new(1, 1)})
+	e.Texture = AURA_TEXTURES[spec.texture or "sparkles"]
+	e.Rate = spec.rate
+	e.Lifetime = NumberRange.new(spec.life[1], spec.life[2])
+	e.Speed = NumberRange.new(spec.speed[1], spec.speed[2])
+	e.SpreadAngle = Vector2.new(spec.spread, spec.spread)
+	e.Acceleration = spec.accel
+	e.Size = NumberSequence.new({NumberSequenceKeypoint.new(0, spec.size[1]), NumberSequenceKeypoint.new(1, spec.size[2])})
+	e.LightEmission = spec.emission
+	e.Transparency = NumberSequence.new({NumberSequenceKeypoint.new(0, spec.alpha or 0.2), NumberSequenceKeypoint.new(1, 1)})
 	e.Enabled = true
 	e.Parent = mount
 end
@@ -655,11 +890,22 @@ end
 local TINT_PARTS = {"Head", "UpperTorso", "LowerTorso", "LeftUpperArm", "RightUpperArm", "LeftLowerArm", "RightLowerArm", "LeftHand", "RightHand",
 	"LeftUpperLeg", "RightUpperLeg", "LeftLowerLeg", "RightLowerLeg", "LeftFoot", "RightFoot", "Torso", "Left Arm", "Right Arm", "Left Leg", "Right Leg"}
 
-local function hideHair(rig)
+-- Accessory kinds hidden while a costume is worn. "hair" is just hair and hats; "outfit" also hides layered clothing,
+-- back/shoulder/waist items and shoes so nothing pokes through the costume shells.
+local HIDDEN = {
+	hair = {Hair = true, Hat = true},
+	outfit = {Hair = true, Hat = true, Neck = true, Shoulder = true, Front = true, Back = true, Waist = true, TShirt = true, Shirt = true,
+		Pants = true, Jacket = true, Sweater = true, Shorts = true, LeftShoe = true, RightShoe = true, DressSkirt = true},
+	face = {Face = true},
+}
+
+local function hideWorn(rig, mode)
+	local kinds = HIDDEN[mode]
+	if not kinds then return end
 	for _, child in ipairs(rig:GetChildren()) do
 		if child:IsA("Accessory") then
-			local kind = child.AccessoryType
-			if kind == Enum.AccessoryType.Hair or kind == Enum.AccessoryType.Hat then
+			local ok, kindName = pcall(function() return child.AccessoryType.Name end)
+			if ok and kinds[kindName] then
 				for _, part in ipairs(child:GetDescendants()) do
 					if part:IsA("BasePart") then
 						if part:GetAttribute("CatchOriginalTransparency") == nil then part:SetAttribute("CatchOriginalTransparency", part.Transparency) end
@@ -668,6 +914,18 @@ local function hideHair(rig)
 				end
 			end
 		end
+	end
+end
+
+local function stashClothes(rig)
+	local stash = rig:FindFirstChild("CatchStash")
+	if not stash then
+		stash = Instance.new("Folder")
+		stash.Name = "CatchStash"
+		stash.Parent = rig
+	end
+	for _, child in ipairs(rig:GetChildren()) do
+		if child:IsA("Shirt") or child:IsA("Pants") or child:IsA("ShirtGraphic") or child:IsA("CharacterMesh") then child.Parent = stash end
 	end
 end
 
@@ -682,17 +940,7 @@ local function tintAvatar(rig, tint)
 			part.Color, part.Material = tint.color, tint.material
 		end
 	end
-	if tint.stashClothes then
-		local stash = rig:FindFirstChild("CatchStash")
-		if not stash then
-			stash = Instance.new("Folder")
-			stash.Name = "CatchStash"
-			stash.Parent = rig
-		end
-		for _, child in ipairs(rig:GetChildren()) do
-			if child:IsA("Shirt") or child:IsA("Pants") or child:IsA("ShirtGraphic") or child:IsA("CharacterMesh") then child.Parent = stash end
-		end
-	end
+	if tint.stashClothes then stashClothes(rig) end
 end
 
 function Appearance.Apply(rig, skinId, maskId, equipped, identity)
@@ -705,18 +953,23 @@ function Appearance.Apply(rig, skinId, maskId, equipped, identity)
 	skinId = skins[skinId] and skinId or "skin_courier"
 	maskId = masks[maskId] and maskId or ""
 	local definition = skins[skinId]
-	if definition.hidesHair then hideHair(rig) end
+	if definition.hides then
+		hideWorn(rig, definition.hides)
+		if definition.hides == "outfit" then stashClothes(rig) end
+	end
+	if maskId ~= "" then hideWorn(rig, "face") end
 	if definition.tint then tintAvatar(rig, definition.tint) end
 	local folder = Instance.new("Folder")
 	folder.Name = "CatchAppearance"
 	folder.Parent = rig
-	local kit = {isR6 = rig:FindFirstChild("UpperTorso") == nil}
+	local kit = {isR6 = rig:FindFirstChild("UpperTorso") == nil, headwear = definition.headwear == true}
 	kit.p = function(targetName, name, size, cf, color, material, shape, opts)
 		return attach(folder, bodyPart(rig, targetName), name, size, cf, color, material, shape, opts)
 	end
 	definition.build(kit)
 	buildMask(kit, maskId)
 	addAura(folder, rig, definition)
+	rig:SetAttribute("CatchTrail", nil)
 	if equipped then addTrail(folder, rig, equipped.trails) end
 	folder:SetAttribute("AppearanceVersion", Appearance.Version)
 	folder:SetAttribute("SkinId", skinId)
@@ -882,44 +1135,6 @@ function Appearance.BuildPreview(skinId, maskId, extra, identity, base)
 	rig = rig or Appearance.BuildMannequin(identity)
 	Appearance.Apply(rig, skinId, maskId, extra, identity)
 	return rig
-end
-
--- Anchored showroom models cannot rely on live Motor6D physics. Animate the arm
--- geometry and its clothing together, preserving the same pose after PivotTo.
--- The returned animator is intentionally unavailable for live character rigs.
-function Appearance.CreatePreviewPose(rig, victoryId)
-	if not rig or not rig:IsA("Model") or rig:GetAttribute("CatchPreview") ~= true then return nil end
-	if victoryId ~= "victory_wave" and victoryId ~= "victory_spin" and victoryId ~= "victory_flex" then return nil end
-	local root = rig:FindFirstChild("HumanoidRootPart")
-	if not root then return nil end
-	local parts = {}
-	local sides = {LeftUpperArm = -1, LeftLowerArm = -1, LeftHand = -1, RightUpperArm = 1, RightLowerArm = 1, RightHand = 1}
-	for _, part in ipairs(rig:GetDescendants()) do
-		if part:IsA("BasePart") then
-			if not part.Anchored then return nil end
-			local weld = part:FindFirstChildOfClass("WeldConstraint")
-			local targetName = weld and weld.Part0 and weld.Part0.Name or part.Name
-			local side = sides[targetName]
-			if side then table.insert(parts, {part = part, side = side, rest = root.CFrame:ToObjectSpace(part.CFrame)}) end
-		end
-	end
-	Appearance.SetMood(rig, "Win")
-	return function(elapsed)
-		if not rig.Parent or not root.Parent then return end
-		elapsed = type(elapsed) == "number" and elapsed == elapsed and math.abs(elapsed) < math.huge and elapsed or 0
-		local wave = math.sin(elapsed * 5.5)
-		for _, item in ipairs(parts) do
-			if item.part.Parent then
-				local angle
-				if victoryId == "victory_spin" then angle = item.side * 72
-				elseif victoryId == "victory_flex" then angle = item.side * (95 + math.sin(elapsed * 4) * 8)
-				else angle = item.side == 1 and 138 + wave * 11 or -8 end
-				local pivot = CFrame.new(item.side * 1.5, 1.65, 0)
-				local rotation = pivot * CFrame.Angles(0, 0, math.rad(angle)) * pivot:Inverse()
-				item.part.CFrame = root.CFrame * rotation * item.rest
-			end
-		end
-	end
 end
 
 return Appearance

@@ -220,7 +220,12 @@ end
 function UIController:Start()
 	if self.started then return end
 	self.started = true
-	self.Appearance = require(ReplicatedStorage:WaitForChild("CatchShared"):WaitForChild("Appearance"))
+	local shared = ReplicatedStorage:WaitForChild("CatchShared")
+	self.Appearance = require(shared:WaitForChild("Appearance"))
+	self.PreviewStage = require(shared:WaitForChild("PreviewStage"))
+	self.Emotes = require(shared:WaitForChild("Emotes"))
+	self.Poses = require(shared:WaitForChild("Poses"))
+	self.Trails = require(shared:WaitForChild("Trails"))
 	self.gui = node("ScreenGui", {
 		Name = "CatchMallUI", ResetOnSpawn = false, IgnoreGuiInset = false,
 		DisplayOrder = 20, ZIndexBehavior = Enum.ZIndexBehavior.Sibling,
@@ -240,7 +245,8 @@ function UIController:Start()
 	self:_buildLoading()
 	self.connections[#self.connections + 1] = UserInputService.InputBegan:Connect(function(input)
 		if input.KeyCode == Enum.KeyCode.Escape then
-			if self.menu then self:CloseMenu() elseif self.moreMenu.Visible then self:CloseMore() end
+			if self.inspect then self:_closeInspect()
+			elseif self.menu then self:CloseMenu() elseif self.moreMenu.Visible then self:CloseMore() end
 		end
 	end)
 	-- B must be consumed before the movement binding, including the closing press.
@@ -275,11 +281,9 @@ function UIController:Start()
 	self.connections[#self.connections + 1] = RunService.Heartbeat:Connect(function(dt)
 		accumulated += dt
 		if accumulated >= 0.1 then accumulated = 0 self:_tick() end
-		if self.previewCamera and self.previewModel then
-			self.previewTime = (self.previewTime or 0) + dt
-			local angle = self.previewAngle + (self:_motion() and math.sin(self.previewTime * 0.38) * 0.12 or 0)
-			self.previewCamera.CFrame = CFrame.lookAt(Vector3.new(math.sin(angle) * 11, 1.4, -math.cos(angle) * 11), Vector3.new(0, 0.15, 0))
-		end
+		local motion = self:_motion()
+		if self.stage then self.stage:SetMotion(motion) self.stage:Update(dt) end
+		if self.inspectStage then self.inspectStage:SetMotion(motion) self.inspectStage:Update(dt) end
 	end)
 	self:_makeRoomForCoreUi()
 	self:_responsive()
@@ -699,8 +703,7 @@ function UIController:CloseMenu()
 	self.menu = nil
 	self.player:SetAttribute("CatchMenuOpen", false)
 	self.panel.Visible = false
-	self.previewModel = nil
-	self.previewCamera = nil
+	self:_destroyStages()
 	clear(self.panelContent)
 	GuiService.SelectedObject = nil
 	self:_responsive()
@@ -711,7 +714,7 @@ function UIController:_renderMenu()
 	local focusName = focused and focused:IsDescendantOf(self.panelContent) and focused.Name
 	local grid = self.panelContent:FindFirstChild("CollectionGrid", true)
 	if grid and grid.ClassName == "ScrollingFrame" and grid.CanvasPosition then self.gridScroll = grid.CanvasPosition.Y end
-	self.previewModel, self.previewCamera = nil, nil
+	self:_destroyStages()
 	clear(self.panelContent)
 	local colors = {Shop = C.pink, Inventory = C.blue, Quests = C.amber, Progress = C.green, Settings = C.line, Leaderboard = C.cyan}
 	local banner = colors[self.menu] or C.pink
@@ -734,7 +737,7 @@ end
 function UIController:_itemPrice(item)
 	if item.currency == "Coins" then return number(item.price) .. " COINS" end
 	if item.currency == "Robux" then
-		if not item.gamePassId or item.gamePassId == 0 then return "NOT CONFIGURED" end
+		if not item.gamePassId or item.gamePassId == 0 then return "COMING SOON" end
 		return "VIEW ROBUX PRICE"
 	end
 	if item.currency == "Milestone" then
@@ -745,52 +748,279 @@ function UIController:_itemPrice(item)
 	return "FREE"
 end
 
--- Short card caption: never says "NOT CONFIGURED" on a card, the action button is honest about that.
+-- How far along a milestone item is: (progress, goal) or nil.
+function UIController:_milestone(item)
+	local milestone = item.milestone
+	if item.currency ~= "Milestone" or not milestone then return nil end
+	local profile = self.ctx.Profile
+	local progress = (profile.stats or {})[milestone.stat] or profile[milestone.stat] or 0
+	return math.min(progress, milestone.value), milestone.value
+end
+
+-- Short card caption. Locked milestones show their progress; unconfigured Robux items say so instead of showing a price.
 function UIController:_cardStatus(item, owned, equipped)
 	if equipped[item.category] == item.id then return "EQUIPPED", C.green end
 	if owned[item.id] then return "OWNED", C.cyan end
-	if item.currency == "Robux" then return "R$ " .. number(item.price), C.amber end
+	if item.currency == "Robux" then
+		if (item.gamePassId or 0) == 0 then return "COMING SOON", C.muted end
+		return "R$ " .. number(item.price), C.amber
+	end
+	local progress, goal = self:_milestone(item)
+	if progress then return "🔒 " .. number(progress) .. "/" .. number(goal) .. " " .. string.gsub(self:_itemPrice(item), "%s%d[%d,]*$", ""), C.amber end
 	return self:_itemPrice(item), C.amber
 end
 
--- Skin and mask thumbnails come from a cached preview rig so browsing does not rebuild avatars.
-function UIController:_thumbnail(parent, item, equipped)
-	local key = item.id .. "|" .. (item.category == "masks" and tostring(equipped.skins) or tostring(equipped.masks)) .. "|" .. (self.avatarBase and "avatar" or "mannequin")
-	local view = node("ViewportFrame", {
-		Name = "Thumb", BackgroundTransparency = 1, Size = UDim2.fromScale(1, 1), ZIndex = 3,
-		Ambient = Color3.fromRGB(200, 205, 235), LightColor = Color3.fromRGB(255, 244, 225), LightDirection = Vector3.new(-1, -0.6, -1),
-	}, parent)
-	local world = node("WorldModel", {}, view)
-	local rig = self.thumbs[key]
-	local clone
-	if rig then
-		local ok, copy = pcall(function() return rig:Clone() end)
-		if ok then clone = copy end
-	else
-		local extra = table.clone(equipped)
-		local skin, mask
-		if item.category == "masks" then
-			skin = equipped.skins ~= "" and equipped.skins or "skin_courier"
-			mask = item.id
-		else
-			skin = item.id
-			mask = ""
+function UIController:_cosmeticDefs()
+	if not self.defs then
+		self.defs = {HasSkin = self.Appearance.HasSkin, HasMask = self.Appearance.HasMask, HasTrail = self.Trails.Has, HasEmote = self.Emotes.Has}
+	end
+	return self.defs
+end
+
+-- A cosmetic is only offered for sale when its look, trail or emote is actually implemented.
+function UIController:_isReady(item)
+	return self.ctx.Catalog.IsReady(item, self:_cosmeticDefs())
+end
+
+-- What the showroom shows for an item: the stage kind, the id that drives it and the equipment the avatar wears.
+function UIController:_previewSpec(item)
+	local catalog = self.ctx.Catalog
+	local extra = table.clone((self.ctx.Profile.equipped or {}))
+	local kind = self.PreviewStage.Kind(item)
+	local id = item.id
+	if item.grants then
+		-- Collections: the whole matching set is worn; chips switch between the look, its trail and its emote.
+		for _, grantedId in ipairs(item.grants) do
+			local granted = catalog.Get(grantedId)
+			if granted and catalog.IsEquippable(granted.category) then extra[granted.category] = granted.id end
 		end
-		local ok, built = pcall(self.Appearance.BuildPreview, skin, mask, extra, {userId = self.player.UserId}, self.avatarBase)
-		if ok and built then
-			self.thumbCount = (self.thumbCount or 0) + 1
-			if self.thumbCount > 48 then self.thumbs, self.thumbCount = {}, 1 end
-			self.thumbs[key] = built
-			local copied, copy = pcall(function() return built:Clone() end)
-			clone = copied and copy or built
+		local mode = self.bundleMode or "look"
+		if mode == "trail" then kind, id = "trail", extra.trails
+		elseif mode == "emote" then kind, id = "emote", extra.emotes
+		else kind, id = "skin", item.id end
+	elseif catalog.IsEquippable(item.category) then
+		extra[item.category] = item.id
+	end
+	return kind, id, extra
+end
+
+function UIController:_previewRig(extra)
+	local skin = extra.skins ~= "" and extra.skins or "skin_courier"
+	local mask = extra.masks or ""
+	local ok, rig = pcall(self.Appearance.BuildPreview, skin, mask, extra, {userId = self.player.UserId}, self.avatarBase)
+	if ok and rig then return rig end
+	return nil
+end
+
+function UIController:_destroyStages()
+	if self.stage then self.stage:Destroy() self.stage = nil end
+	if self.inspectStage then self.inspectStage:Destroy() self.inspectStage = nil end
+	if self.inspect then self.inspect:Destroy() self.inspect = nil end
+	self.previewModel, self.previewCamera = nil, nil
+end
+
+function UIController:_closeInspect()
+	if self.inspectStage then self.inspectStage:Destroy() self.inspectStage = nil end
+	if self.inspect then self.inspect:Destroy() self.inspect = nil end
+end
+
+local function previewLight(view)
+	view.Ambient = Color3.fromRGB(205, 210, 240)
+	view.LightColor = Color3.fromRGB(255, 244, 225)
+	view.LightDirection = Vector3.new(-1, -0.6, -1)
+end
+
+-- Drag (mouse or touch) turns the model; the buttons turn it in steps.
+function UIController:_dragToRotate(view, getStage)
+	view.Active = true
+	local dragging = false
+	view.InputBegan:Connect(function(input)
+		if input.UserInputType == Enum.UserInputType.MouseButton1 or input.UserInputType == Enum.UserInputType.Touch then dragging = true end
+	end)
+	view.InputChanged:Connect(function(input)
+		local stage = getStage()
+		if dragging and stage and (input.UserInputType == Enum.UserInputType.MouseMovement or input.UserInputType == Enum.UserInputType.Touch) then
+			stage:SetAngle(stage.angle - input.Delta.X * 0.012)
+		end
+	end)
+	view.InputEnded:Connect(function(input)
+		if input.UserInputType == Enum.UserInputType.MouseButton1 or input.UserInputType == Enum.UserInputType.Touch then dragging = false end
+	end)
+end
+
+-- Rotate / front / back / replay / full-screen controls for a stage. Returns the control bar height.
+function UIController:_previewControls(parent, getStage, animated, onFull, width)
+	local single = width >= 470
+	local height = single and 34 or 70
+	local controls = frame(parent, {Name = "PreviewControls", AnchorPoint = Vector2.new(0.5, 1), Position = UDim2.new(0.5, 0, 1, 0), Size = UDim2.new(1, -4, 0, height), BackgroundTransparency = 1})
+	local specs = {
+		{"PreviewLeft", "<", 40, function(stage) stage:Rotate(-math.pi / 4) end},
+		{"PreviewFront", "FRONT", 66, function(stage) stage:Front() end},
+		{"PreviewBack", "BACK", 60, function(stage) stage:Back() end},
+		{"PreviewRight", ">", 40, function(stage) stage:Rotate(math.pi / 4) end},
+	}
+	if animated then table.insert(specs, {"PreviewReplay", "REPLAY", 82, function(stage) stage:Replay() end}) end
+	if onFull then table.insert(specs, {"PreviewFullscreen", "FULL", 60, false}) end
+	local rows = {{}, {}}
+	if single then rows[1] = specs else
+		for index, spec in ipairs(specs) do table.insert(rows[index <= 4 and 1 or 2], spec) end
+	end
+	for rowIndex, row in ipairs(rows) do
+		if #row > 0 then
+			local holder = frame(controls, {Name = "Row" .. rowIndex, Position = UDim2.fromOffset(0, (rowIndex - 1) * 36), Size = UDim2.new(1, 0, 0, 32), BackgroundTransparency = 1})
+			local layout = list(holder, true, 6)
+			layout.HorizontalAlignment = Enum.HorizontalAlignment.Center
+			for order, spec in ipairs(row) do
+				local replay = spec[1] == "PreviewReplay"
+				button(holder, spec[2], function()
+					if spec[4] then local stage = getStage() if stage then spec[4](stage) end
+					elseif onFull then onFull() end
+				end, {Name = spec[1], LayoutOrder = order, Size = UDim2.fromOffset(spec[3], 32), TextSize = 10,
+					BackgroundColor3 = replay and C.green or C.card, TextColor3 = replay and C.ink or C.text})
+			end
 		end
 	end
-	if not clone then view:Destroy() return end
-	clone.Parent = world
-	local camera = node("Camera", {FieldOfView = item.category == "masks" and 28 or 40,
-		CFrame = item.category == "masks" and CFrame.lookAt(Vector3.new(0.5, 2.5, -6.4), Vector3.new(0, 2.35, 0))
-			or CFrame.lookAt(Vector3.new(1.2, 0.2, -12.5), Vector3.new(0, -0.1, 0))}, view)
+	return height
+end
+
+local KIND_TITLE = {skin = "TRY IT ON", mask = "MASK CLOSE-UP", trail = "TRAIL TEST RUN", emote = "EMOTE PREVIEW", tag = "CATCH EFFECT"}
+
+function UIController:_openInspect(item)
+	self:_closeInspect()
+	local kind, id, extra = self:_previewSpec(item)
+	local rig = self:_previewRig(extra)
+	if not rig then return end
+	local size = self.root.AbsoluteSize
+	local width = math.max(220, size.X - (self.rightMargin or 80) - 16)
+	local overlay = frame(self.root, {Name = "InspectOverlay", Position = UDim2.fromOffset(8, 8), Size = UDim2.fromOffset(width, size.Y - 16),
+		BackgroundColor3 = Color3.fromRGB(20, 24, 54), ZIndex = 40}, 18)
+	stroke(overlay, rarityColor(item), 0, 3)
+	label(overlay, string.upper(item.name), {Position = UDim2.fromOffset(16, 8), Size = UDim2.new(1, -72, 0, 32), Font = F.title, TextSize = 22, ZIndex = 41, TextTruncate = Enum.TextTruncate.AtEnd})
+	button(overlay, "X", function() self:_closeInspect() end, {Name = "InspectClose", AnchorPoint = Vector2.new(1, 0), Position = UDim2.new(1, -8, 0, 8), Size = UDim2.fromOffset(40, 34), BackgroundColor3 = C.coral, ZIndex = 42})
+	local viewHeight = size.Y - 16 - 52 - 80
+	local view = node("ViewportFrame", {Name = "InspectView", BackgroundColor3 = Color3.fromRGB(46, 36, 112), BackgroundTransparency = 0.25, Position = UDim2.fromOffset(8, 48),
+		Size = UDim2.new(1, -16, 1, -48 - 78), ZIndex = 41}, overlay)
+	corner(view, 14)
+	previewLight(view)
+	local world = node("WorldModel", {}, view)
+	rig.Parent = world
+	local camera = node("Camera", {}, view)
 	view.CurrentCamera = camera
+	self.inspectStage = self.PreviewStage.new({world = world, camera = camera, rig = rig, kind = kind, id = id, motion = self:_motion(), aspect = math.max(0.4, (width - 16) / math.max(120, viewHeight)), angle = 0.18})
+	self:_dragToRotate(view, function() return self.inspectStage end)
+	local animated = kind == "emote" or kind == "trail" or kind == "tag"
+	local bar = self:_previewControls(overlay, function() return self.inspectStage end, animated, nil, width)
+	self.inspect = overlay
+end
+
+-- Card thumbnails. Skins, masks, collections and emotes are small viewport renders of the player's own avatar (cached,
+-- cloned per card); trails, catch effects and nameplates are drawn from the same definitions the game uses.
+local THUMB_KINDS = {skins = true, masks = true, bundles = true, vip = true, emotes = true, victories = true}
+
+function UIController:_thumbnail(parent, item, equipped)
+	local catalog = self.ctx.Catalog
+	local skin = equipped.skins ~= "" and equipped.skins or "skin_courier"
+	local mask = equipped.masks or ""
+	local extra = table.clone(equipped)
+	local kind = "skin"
+	if item.category == "masks" then
+		mask, kind, extra.masks = item.id, "mask", item.id
+	elseif item.category == "skins" then
+		skin, mask, extra.skins, extra.masks = item.id, "", item.id, ""
+	elseif item.grants then
+		skin, mask = "skin_courier", ""
+		for _, grantedId in ipairs(item.grants) do
+			local granted = catalog.Get(grantedId)
+			if granted and granted.category == "skins" then skin = granted.id end
+			if granted and granted.category == "masks" then mask = granted.id end
+		end
+		extra.skins, extra.masks = skin, mask
+	elseif item.category == "emotes" or item.category == "victories" then
+		kind = "emote"
+	end
+	local key = item.id .. "|" .. skin .. "|" .. mask .. "|" .. (self.avatarBase and "avatar" or "mannequin")
+	local view = node("ViewportFrame", {Name = "Thumb", BackgroundTransparency = 1, Size = UDim2.fromScale(1, 1), ZIndex = 3}, parent)
+	previewLight(view)
+	local world = node("WorldModel", {}, view)
+	local entry = self.thumbs[key]
+	if not entry then
+		local ok, built = pcall(self.Appearance.BuildPreview, skin, mask, extra, {userId = self.player.UserId}, self.avatarBase)
+		if ok and built then
+			if kind == "emote" then
+				local pose = self.Poses.Preview(built)
+				if pose and self.Emotes.Has(item.id) then pose:Set(self.Emotes.Sample(item.id, self.Emotes.Duration(item.id) * 0.4, true) or {}, pose.restRoot) end
+			end
+			local lo, hi = self.PreviewStage.Bounds(built, kind == "mask")
+			local fov, margin = kind == "mask" and 30 or 40, kind == "mask" and 1.4 or 1.08
+			entry = {rig = built, center = (lo + hi) / 2, fov = fov, distance = self.PreviewStage.Fit(lo, hi, fov, 1.0, margin)}
+			self.thumbCount = (self.thumbCount or 0) + 1
+			if self.thumbCount > 60 then self.thumbs, self.thumbCount = {}, 1 end
+			self.thumbs[key] = entry
+		end
+	end
+	if not entry then view:Destroy() return end
+	local copied, clone = pcall(function() return entry.rig:Clone() end)
+	clone = copied and clone or entry.rig
+	clone.Parent = world
+	local camera = node("Camera", {FieldOfView = entry.fov,
+		CFrame = CFrame.lookAt(entry.center + Vector3.new(0.18, 0.06, -1).Unit * entry.distance, entry.center)}, view)
+	view.CurrentCamera = camera
+end
+
+local function dot(parent, x, y, size, color, transparency)
+	local object = frame(parent, {AnchorPoint = Vector2.new(0.5, 0.5), Position = UDim2.fromScale(x, y), Size = UDim2.fromOffset(size, size), BackgroundColor3 = color, BackgroundTransparency = transparency or 0, ZIndex = 4}, size)
+	return object
+end
+
+-- A trail card shows the trail's real ribbon colors and fade, plus its particles, drawn from Trails.Defs.
+function UIController:_trailSwatch(art, item)
+	local def = self.Trails.Defs[item.id]
+	if not def then label(art, CATEGORY_ICON.trails, {TextSize = 40, TextXAlignment = Enum.TextXAlignment.Center, ZIndex = 3}) return end
+	local ribbons = def.ribbons or {}
+	local gap = 0.17
+	local top = 0.5 - (#ribbons - 1) * gap / 2
+	for index, ribbon in ipairs(ribbons) do
+		local colors, alphas = {}, {}
+		for step = #ribbon.color, 1, -1 do
+			local p = ribbon.color[step]
+			table.insert(colors, ColorSequenceKeypoint.new(1 - p[1], Color3.fromRGB(p[2], p[3], p[4])))
+		end
+		for step = #ribbon.alpha, 1, -1 do
+			local p = ribbon.alpha[step]
+			table.insert(alphas, NumberSequenceKeypoint.new(1 - p[1], p[2]))
+		end
+		local bar = frame(art, {Name = "Ribbon" .. index, AnchorPoint = Vector2.new(0.5, 0.5), Position = UDim2.fromScale(0.46, top + (index - 1) * gap),
+			Size = UDim2.new(0.78, 0, 0, math.max(7, math.floor(ribbon.hw * 26))), BackgroundColor3 = Color3.new(1, 1, 1), ZIndex = 4}, 8)
+		node("UIGradient", {Color = ColorSequence.new(colors), Transparency = NumberSequence.new(alphas)}, bar)
+	end
+	for index, emitter in ipairs(def.emitters or {}) do
+		local c = emitter.color[1]
+		for spark = 1, 4 do
+			dot(art, 0.18 + ((spark * 0.21 + index * 0.13) % 0.62), 0.22 + ((spark * 0.37 + index * 0.2) % 0.56), 4 + (spark % 3) * 2, Color3.fromRGB(c[2], c[3], c[4]), 0.1 * spark)
+		end
+	end
+	if def.footprints then
+		local gold = Color3.fromRGB(def.footprints.color[1], def.footprints.color[2], def.footprints.color[3])
+		for step = 1, 3 do dot(art, 0.2 + step * 0.2, step % 2 == 0 and 0.78 or 0.68, 9, gold, 0.1 * step) end
+	end
+	-- The runner's silhouette: a small bright disc at the head of the ribbon.
+	dot(art, 0.86, 0.5, 14, C.text, 0.15)
+end
+
+function UIController:_burstSwatch(art, item)
+	local palette = self.PreviewStage.BurstPalettes[item.id] or {{item.accent[1], item.accent[2], item.accent[3]}}
+	for index = 1, 10 do
+		local angle = index * math.pi * 2 / 10
+		local c = palette[(index % #palette) + 1]
+		dot(art, 0.5 + math.cos(angle) * 0.3, 0.5 + math.sin(angle) * 0.3, index % 2 == 0 and 10 or 7, Color3.fromRGB(c[1], c[2], c[3]), 0)
+	end
+	dot(art, 0.5, 0.5, 16, C.text, 0.1)
+end
+
+function UIController:_plateSwatch(art, item)
+	local plate = frame(art, {Name = "PlatePreview", AnchorPoint = Vector2.new(0.5, 0.5), Position = UDim2.fromScale(0.5, 0.5), Size = UDim2.new(0.9, 0, 0, 30), BackgroundColor3 = C.ink, ZIndex = 4}, 10)
+	stroke(plate, accent(item), 0, 2)
+	label(plate, item.name, {Size = UDim2.fromScale(1, 1), TextSize = 11, Font = F.black, TextColor3 = accent(item), TextXAlignment = Enum.TextXAlignment.Center, TextScaled = false, ZIndex = 5, TextTruncate = Enum.TextTruncate.AtEnd})
 end
 
 function UIController:_renderShop()
@@ -867,16 +1097,23 @@ function UIController:_renderShop()
 		local art = frame(card, {Name = "Art", Position = UDim2.fromOffset(6, 6), Size = UDim2.new(1, -12, 0, cellHeight - 74), BackgroundColor3 = shade(rarity, 0.4), ZIndex = 2}, 10)
 		gradient(art, shade(rarity, 0.75), shade(rarity, 0.35), 90)
 		local tier = (self.ctx.Perf or {}).tier or 1
-		local wantsThumb = (item.category == "skins" or item.category == "masks") and (tier == 1 or (tier == 2 and index <= 6))
-		if wantsThumb then
+		local category = item.category
+		local wantsThumb = THUMB_KINDS[category] and (tier == 1 or (tier == 2 and index <= 6))
+		if wantsThumb and self:_isReady(item) then
 			self:_thumbnail(art, item, equipped)
-		elseif item.category == "skins" or item.category == "masks" then
-			label(art, CATEGORY_ICON[item.category], {TextSize = 40, TextXAlignment = Enum.TextXAlignment.Center, ZIndex = 3})
-		elseif item.category == "tones" or item.category == "hairColors" then
-			local swatch = frame(art, {AnchorPoint = Vector2.new(0.5, 0.5), Position = UDim2.fromScale(0.5, 0.5), Size = UDim2.fromOffset(54, 54), BackgroundColor3 = accent(item), ZIndex = 3}, 27)
-			stroke(swatch, C.text, 0, 3)
+		elseif THUMB_KINDS[category] then
+			label(art, self:_isReady(item) and (CATEGORY_ICON[category] or "🎁") or "SOON", {TextSize = self:_isReady(item) and 40 or 12, TextXAlignment = Enum.TextXAlignment.Center, ZIndex = 3})
+		elseif category == "trails" then self:_trailSwatch(art, item)
+		elseif category == "tagEffects" then self:_burstSwatch(art, item)
+		elseif category == "nameplates" then self:_plateSwatch(art, item)
 		else
-			label(art, CATEGORY_ICON[item.category] or "🎁", {TextSize = 40, TextXAlignment = Enum.TextXAlignment.Center, ZIndex = 3})
+			label(art, CATEGORY_ICON[category] or "🎁", {TextSize = 40, TextXAlignment = Enum.TextXAlignment.Center, ZIndex = 3})
+		end
+		if equipped[category] == item.id then
+			local badge = frame(card, {Name = "EquippedBadge", AnchorPoint = Vector2.new(1, 0), Position = UDim2.new(1, -10, 0, 10), Size = UDim2.fromOffset(22, 22), BackgroundColor3 = C.green, ZIndex = 5}, 11)
+			label(badge, "✓", {TextXAlignment = Enum.TextXAlignment.Center, TextColor3 = C.ink, TextSize = 14, ZIndex = 6})
+		elseif not owned[item.id] and self:_milestone(item) then
+			label(card, "🔒", {Name = "LockBadge", AnchorPoint = Vector2.new(1, 0), Position = UDim2.new(1, -10, 0, 8), Size = UDim2.fromOffset(24, 22), TextSize = 14, ZIndex = 5})
 		end
 		label(card, string.upper(item.rarity or "Common"), {Name = "Rarity", Position = UDim2.fromOffset(10, 10), Size = UDim2.fromOffset(80, 14), TextSize = 9, Font = F.black, TextColor3 = C.text, TextStrokeTransparency = 0.4, ZIndex = 4})
 		label(card, item.name, {Name = "Name", Position = UDim2.new(0, 8, 1, -64), Size = UDim2.new(1, -16, 0, 34), Font = F.black, TextSize = portrait and 11 or 13, TextWrapped = true, TextYAlignment = Enum.TextYAlignment.Center, ZIndex = 4})
@@ -916,65 +1153,120 @@ end
 
 function UIController:_renderItemDetail(parent, item, horizontal)
 	if not item then label(parent, "PICK SOMETHING FUN", {TextColor3 = C.muted, TextSize = 12, TextXAlignment = Enum.TextXAlignment.Center}) return end
+	local catalog = self.ctx.Catalog
 	local profile = self.ctx.Profile
 	local owned = (profile.owned or {})[item.id] == true
 	local equipped = profile.equipped or {}
 	local rarity = rarityColor(item)
-	label(parent, "TRY IT ON / " .. string.upper(item.category), {Position = UDim2.fromOffset(16, 13), Size = UDim2.new(1, -32, 0, 17), Font = F.black, TextSize = 10, TextColor3 = C.cyan})
-	local stage = frame(parent, {Name = "PreviewStage", Position = UDim2.fromOffset(8, 35), Size = horizontal and UDim2.new(0.46, -8, 1, -43) or UDim2.new(1, -16, 1, -249), BackgroundTransparency = 1})
-	local plate = frame(stage, {AnchorPoint = Vector2.new(0.5, 1), Position = UDim2.new(0.5, 0, 1, -42), Size = UDim2.new(0.72, 0, 0, 25), BackgroundColor3 = rarity, BackgroundTransparency = 0.7}, 100)
-	stroke(plate, rarity, 0.4, 2)
-	local view = node("ViewportFrame", {
-		Name = "CharacterPreview", BackgroundTransparency = 1, Size = UDim2.new(1, 0, 1, -36),
-		Ambient = Color3.fromRGB(205, 210, 240), LightColor = Color3.fromRGB(255, 244, 225), LightDirection = Vector3.new(-1, -0.6, -1),
-	}, stage)
-	local world = node("WorldModel", {}, view)
-	local extra = table.clone(equipped)
-	if self.ctx.Catalog.IsEquippable(item.category) then extra[item.category] = item.id end
-	for _, grantedId in ipairs(item.grants or {}) do
-		local granted = self.ctx.Catalog.Get(grantedId)
-		if granted and self.ctx.Catalog.IsEquippable(granted.category) then extra[granted.category] = granted.id end
-	end
-	local skin = extra.skins ~= "" and extra.skins or "skin_courier"
-	local mask = extra.masks or ""
-	local success, rig = pcall(self.Appearance.BuildPreview, skin, mask, extra, {userId = self.player.UserId}, self.avatarBase)
-	if success and rig then
+	local ready = self:_isReady(item)
+	local kind, previewId, extra = self:_previewSpec(item)
+	label(parent, (KIND_TITLE[kind] or "TRY IT ON") .. " / " .. string.upper(item.category), {Name = "StageTitle", Position = UDim2.fromOffset(16, 13), Size = UDim2.new(1, -32, 0, 17), Font = F.black, TextSize = 10, TextColor3 = C.cyan})
+	local infoHeight = horizontal and 0 or 238
+	local stage = frame(parent, {Name = "PreviewStage", Position = UDim2.fromOffset(8, 35), Size = horizontal and UDim2.new(0.46, -8, 1, -43) or UDim2.new(1, -16, 1, -(infoHeight + 52)), BackgroundTransparency = 1})
+	local animated = kind == "emote" or kind == "trail" or kind == "tag"
+	local controlsHeight = self:_previewControls(stage, function() return self.stage end, animated, function() self:_openInspect(item) end, math.floor(stage.AbsoluteSize.X))
+	local view
+	local rig = ready and self:_previewRig(extra) or nil
+	if rig then
+		local plate = frame(stage, {AnchorPoint = Vector2.new(0.5, 1), Position = UDim2.new(0.5, 0, 1, -(controlsHeight + 8)), Size = UDim2.new(0.6, 0, 0, 22), BackgroundColor3 = rarity, BackgroundTransparency = 0.72}, 100)
+		stroke(plate, rarity, 0.4, 2)
+		view = node("ViewportFrame", {Name = "CharacterPreview", BackgroundTransparency = 1, Size = UDim2.new(1, 0, 1, -(controlsHeight + 4))}, stage)
+		previewLight(view)
+		local world = node("WorldModel", {}, view)
 		rig.Parent = world
-		self.previewModel = rig
-		self.previewAngle, self.previewTime = 0.18, 0
-		local camera = node("Camera", {FieldOfView = 38, CFrame = CFrame.lookAt(Vector3.new(2, 1.4, -11), Vector3.new(0, 0.15, 0))}, view)
-		view.CurrentCamera = camera self.previewCamera = camera
+		local camera = node("Camera", {}, view)
+		view.CurrentCamera = camera
+		self.previewModel, self.previewCamera = rig, camera
+		local size = view.AbsoluteSize
+		self.stage = self.PreviewStage.new({world = world, camera = camera, rig = rig, kind = kind, id = previewId, motion = self:_motion(), aspect = size.X / math.max(1, size.Y)})
+		self:_dragToRotate(view, function() return self.stage end)
 	else
-		label(stage, "PREVIEW UNAVAILABLE", {Size = view.Size, TextColor3 = C.muted, TextSize = 10, TextXAlignment = Enum.TextXAlignment.Center})
+		label(stage, ready and "PREVIEW UNAVAILABLE" or "NOT READY FOR SALE", {Name = "PreviewMissing", Size = UDim2.new(1, 0, 1, -(controlsHeight + 4)), TextColor3 = C.muted, TextSize = 11, TextXAlignment = Enum.TextXAlignment.Center})
 	end
-	local controls = frame(stage, {AnchorPoint = Vector2.new(0.5, 1), Position = UDim2.fromScale(0.5, 1), Size = UDim2.fromOffset(184, 34), BackgroundTransparency = 1})
-	button(controls, "<", function() self.previewAngle -= math.pi / 4 end, {Name = "PreviewLeft", Size = UDim2.fromOffset(40, 32), TextSize = 16})
-	button(controls, "FRONT", function() self.previewAngle, self.previewTime = 0, 0 end, {Name = "PreviewFront", Position = UDim2.fromOffset(46, 0), Size = UDim2.fromOffset(92, 32), TextSize = 10})
-	button(controls, ">", function() self.previewAngle += math.pi / 4 end, {Name = "PreviewRight", Position = UDim2.fromOffset(144, 0), Size = UDim2.fromOffset(40, 32), TextSize = 16})
-	local info = frame(parent, {Name = "ItemInformation", Position = horizontal and UDim2.new(0.46, 8, 0, 42) or UDim2.new(0, 18, 1, -196), Size = horizontal and UDim2.new(0.54, -26, 1, -60) or UDim2.new(1, -36, 0, 178), BackgroundTransparency = 1})
-	label(info, string.upper(item.rarity or "COMMON"), {Size = UDim2.new(1, 0, 0, 15), TextSize = 10, Font = F.black, TextColor3 = rarity})
-	label(info, item.name, {Position = UDim2.fromOffset(0, 18), Size = UDim2.new(1, 0, 0, 38), TextSize = 22, Font = F.title, TextWrapped = true})
-	label(info, item.description or "", {Position = UDim2.fromOffset(0, 60), Size = UDim2.new(1, 0, 0, 62), TextSize = 11, TextColor3 = C.muted, TextWrapped = true, TextYAlignment = Enum.TextYAlignment.Top, Font = F.medium})
-	if self:_inRound() and self.ctx.Catalog.IsEquippable(item.category) then
-		label(info, "Saves now, shows up after this round.", {Name = "RoundHint", Position = UDim2.fromOffset(0, 118), Size = UDim2.new(1, 0, 0, 14), TextSize = 10, TextColor3 = C.amber})
+	-- Collections let you flip between the whole look, its running trail and its emote.
+	if item.grants then
+		for index, mode in ipairs({"look", "trail", "emote"}) do
+			local chosen = (self.bundleMode or "look") == mode
+			button(stage, string.upper(mode), function() self.bundleMode = mode self:_renderMenu() end, {Name = "BundleMode_" .. mode, Position = UDim2.fromOffset(2 + (index - 1) * 64, 2), Size = UDim2.fromOffset(60, 26), TextSize = 10,
+				BackgroundColor3 = chosen and C.amber or C.card, TextColor3 = chosen and C.ink or C.text, ZIndex = 5})
+		end
+	end
+	local info = frame(parent, {Name = "ItemInformation", Position = horizontal and UDim2.new(0.46, 8, 0, 42) or UDim2.new(0, 18, 1, -(infoHeight - 6)), Size = horizontal and UDim2.new(0.54, -26, 1, -52) or UDim2.new(1, -36, 0, infoHeight - 14), BackgroundTransparency = 1})
+	list(info, false, 4)
+	local order = 0
+	local function row(text, height, props)
+		order += 1
+		local values = {Size = UDim2.new(1, 0, 0, height), LayoutOrder = order, TextSize = 11, TextColor3 = C.muted, TextWrapped = true, TextYAlignment = Enum.TextYAlignment.Top, Font = F.medium}
+		for key, value in pairs(props or {}) do values[key] = value end
+		return label(info, text, values)
+	end
+	row(string.upper(item.rarity or "COMMON"), 15, {TextSize = 10, Font = F.black, TextColor3 = rarity, Name = "RarityTier"})
+	row(item.name, 28, {TextSize = 20, Font = F.title, TextColor3 = C.text, Name = "ItemName", TextTruncate = Enum.TextTruncate.AtEnd, TextWrapped = false})
+	row(item.description or "", horizontal and 58 or 44, {Name = "ItemDescription"})
+	if item.grants then
+		local lines, have = {}, 0
+		for _, grantedId in ipairs(item.grants) do
+			local granted = catalog.Get(grantedId)
+			if granted then
+				local mine = (profile.owned or {})[grantedId] == true
+				if mine then have += 1 end
+				table.insert(lines, (mine and "✓ " or "• ") .. granted.name)
+			end
+		end
+		row("INCLUDES (" .. have .. "/" .. #lines .. " yours):  " .. table.concat(lines, "  ·  "), horizontal and 46 or 40, {Name = "Includes", TextSize = 10, TextColor3 = C.text})
+	end
+	-- Price and state, in plain words.
+	local priceText, priceColor
+	local coinsHave = profile.coins or 0
+	if owned then priceText, priceColor = equipped[item.category] == item.id and "Equipped right now" or "In your collection", C.green
+	elseif not ready then priceText, priceColor = "Not available yet", C.muted
+	elseif item.currency == "Free" then priceText, priceColor = "Free", C.green
+	elseif item.currency == "Coins" then
+		priceText, priceColor = "🪙 " .. number(item.price) .. " coins  (you have " .. number(coinsHave) .. ")", coinsHave >= item.price and C.amber or C.coral
+	elseif item.currency == "Robux" then
+		if (item.gamePassId or 0) > 0 then priceText, priceColor = "R$ " .. number(item.price) .. " on Roblox", C.amber
+		else priceText, priceColor = "Planned price R$ " .. number(item.price) .. " · not on sale yet", C.muted end
+	else
+		local progress, goal = self:_milestone(item)
+		priceText, priceColor = "🔒 " .. self:_itemPrice(item) .. (progress and ("  (" .. number(progress) .. "/" .. number(goal) .. ")") or ""), C.amber
+	end
+	row(priceText, 16, {Name = "PriceLine", TextColor3 = priceColor, Font = F.black, TextSize = 11})
+	if self:_inRound() and catalog.IsEquippable(item.category) then
+		row("Saves now, shows up after this round.", 14, {Name = "RoundHint", TextSize = 10, TextColor3 = C.amber})
 	end
 	local configured = item.currency ~= "Robux" or (item.gamePassId or 0) > 0
 	local canUnequip = owned and equipped[item.category] == item.id
-		and (item.category ~= "skins" or item.id ~= self.ctx.Catalog.DefaultEquipment.skins)
-		and self.ctx.Catalog.IsEquippable(item.category) and self.menu == "Inventory"
+		and (item.category ~= "skins" or item.id ~= catalog.DefaultEquipment.skins)
+		and catalog.IsEquippable(item.category) and self.menu == "Inventory"
+	local affordable = item.currency ~= "Coins" or coinsHave >= item.price
 	local actionText
 	if self.pendingId == item.id then actionText = "WAITING FOR SERVER..."
 	elseif canUnequip then actionText = item.category == "skins" and "USE DEFAULT LOOK" or "UNEQUIP"
 	elseif owned and equipped[item.category] == item.id then actionText = "EQUIPPED"
-	elseif owned and self.ctx.Catalog.IsEquippable(item.category) then actionText = "EQUIP"
+	elseif owned and catalog.IsEquippable(item.category) then actionText = "EQUIP"
 	elseif owned then actionText = "OWNED"
-	elseif not configured then actionText = "NOT CONFIGURED"
+	elseif not ready then actionText = "NOT AVAILABLE YET"
+	elseif not configured then actionText = "COMING SOON"
 	elseif item.currency == "Milestone" then actionText = self:_itemPrice(item)
+	elseif item.currency == "Coins" and not affordable then actionText = "NEED " .. number(item.price - coinsHave) .. " MORE COINS"
 	else actionText = item.currency == "Free" and "CLAIM FREE" or self:_itemPrice(item) end
-	local canAct = not self.pendingId and (canUnequip or (owned and self.ctx.Catalog.IsEquippable(item.category) and equipped[item.category] ~= item.id) or (not owned and configured and item.currency ~= "Milestone"))
+	local canAct = not self.pendingId and (canUnequip or (owned and catalog.IsEquippable(item.category) and equipped[item.category] ~= item.id)
+		or (not owned and ready and configured and affordable and item.currency ~= "Milestone"))
+	-- Owned emotes can be played right away (lobby and results screen only).
+	if owned and item.category == "emotes" then
+		order += 1
+		local playable = not self:_inRound()
+		local play = button(info, playable and "▶ PLAY ON MY AVATAR" or "EMOTES PLAY IN THE LOBBY", function()
+			if playable then self:_send("Emote", {id = item.id}) else self:Toast("Emotes play in the lobby and on the results screen.") end
+		end, {Name = "EmotePlay", Size = UDim2.new(1, 0, 0, 34), LayoutOrder = order, TextSize = 12,
+			BackgroundColor3 = playable and C.blue or C.card, TextColor3 = playable and C.text or C.muted})
+	end
+	order += 1
 	button(info, actionText, function()
 		if not canAct then
-			if not configured and not owned then self:Toast("This item is not configured for purchase yet.") end
+			if not ready and not owned then self:Toast("This item is not available yet.")
+			elseif not configured and not owned then self:Toast("This item is not on sale yet.")
+			elseif item.currency == "Coins" and not owned and not affordable then self:Toast("Play rounds and collect coins to afford this.") end
 			return
 		end
 		-- Set pending before firing so an immediate profile response wins the race.
@@ -988,7 +1280,7 @@ function UIController:_renderItemDetail(parent, item, horizontal)
 				if self.menu == "Shop" or self.menu == "Inventory" then self:_renderMenu() end
 			end
 		end)
-	end, {Name = "ItemAction", AnchorPoint = Vector2.new(0, 1), Position = UDim2.new(0, 0, 1, 0), Size = UDim2.new(1, 0, 0, 44), TextSize = 13, BackgroundColor3 = canAct and C.green or C.card, TextColor3 = canAct and C.ink or C.muted})
+	end, {Name = "ItemAction", Size = UDim2.new(1, 0, 0, 44), LayoutOrder = order, TextSize = 13, BackgroundColor3 = canAct and C.green or C.card, TextColor3 = canAct and C.ink or C.muted})
 end
 
 local function progressBar(parent, position, size, ratio, color)
@@ -1481,6 +1773,7 @@ function UIController:Destroy()
 	for _, connection in ipairs(self.connections) do connection:Disconnect() end
 	self.player:SetAttribute("CatchMenuOpen", false)
 	self:_restoreCamera()
+	self:_destroyStages()
 	if self.avatarBase then self.avatarBase:Destroy() self.avatarBase = nil end
 	if self.gui then self.gui:Destroy() end
 end

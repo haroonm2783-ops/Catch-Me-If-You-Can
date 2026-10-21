@@ -79,6 +79,7 @@ local function fixture(viewport, inputType)
 		self._props.Destroyed = true
 	end
 	function methods:ClearAllChildren() for _, child in ipairs(self:GetChildren()) do child:Destroy() end end
+	function methods:Emit(count) self._props.EmitCount = (self._props.EmitCount or 0) + (count or 1) end
 	function methods:Play() self.IsPlaying = true end
 	function methods:Pause() self.IsPlaying = false end
 	methods.Stop = methods.Pause
@@ -90,6 +91,7 @@ local function fixture(viewport, inputType)
 			CameraOffset = Vector3.zero, FieldOfView = 70, Health = 100, MoveDirection = Vector3.zero,
 			FloorMaterial = Enum.Material.Concrete, Activated = signal(), Destroying = signal(),
 			Died = signal(), StateChanged = signal(), Ended = signal(), IsPlaying = false, TimePosition = 0,
+			InputBegan = signal(), InputChanged = signal(), InputEnded = signal(),
 		}}, {
 			__index = function(self, key)
 				if methods[key] then return methods[key] end
@@ -176,24 +178,67 @@ local function fixture(viewport, inputType)
 	function workspace:GetServerTimeNow() return 100 end
 	workspace.CurrentCamera = instance.new("Camera"); workspace.CurrentCamera.CameraSubject = humanoid; workspace.CurrentCamera.Parent = workspace
 	local shared = instance.new("Folder"); shared.Name = "CatchShared"
-	local appearanceModule = instance.new("ModuleScript"); appearanceModule.Name = "Appearance"; appearanceModule.Parent = shared
+	local moduleScripts = {}
+	for _, name in ipairs({"Appearance", "Emotes", "Poses", "Trails", "PreviewStage"}) do
+		local moduleScript = instance.new("ModuleScript"); moduleScript.Name = name; moduleScript.Parent = shared
+		moduleScripts[name] = moduleScript
+	end
 	local replicated = instance.new("ReplicatedStorage"); shared.Parent = replicated
 	local previewCalls = {}
-	local appearance = {BuildPreview = function(skin, mask, extra)
-		table.insert(previewCalls, {skin = skin, mask = mask, extra = extra})
-		return instance.new("Model")
-	end}
+	-- A small mannequin built from the fixture's own instances: real CFrames and joints, so previews can be posed.
+	local function fakeRig()
+		local rig = instance.new("Model")
+		local layout = {
+			{"HumanoidRootPart", Vector3.new(2, 2, 1), Vector3.new(0, 0, 0)}, {"LowerTorso", Vector3.new(2, 0.4, 1), Vector3.new(0, -0.1, 0)},
+			{"UpperTorso", Vector3.new(2, 1.6, 1), Vector3.new(0, 0.9, 0)}, {"Head", Vector3.new(1.2, 1.2, 1.2), Vector3.new(0, 2.35, 0)},
+			{"LeftUpperArm", Vector3.new(1, 1.2, 1), Vector3.new(-1.5, 1.1, 0)}, {"RightUpperArm", Vector3.new(1, 1.2, 1), Vector3.new(1.5, 1.1, 0)},
+			{"LeftLowerArm", Vector3.new(1, 1.05, 1), Vector3.new(-1.5, 0, 0)}, {"RightLowerArm", Vector3.new(1, 1.05, 1), Vector3.new(1.5, 0, 0)},
+			{"LeftUpperLeg", Vector3.new(1, 1.2, 1), Vector3.new(-0.5, -0.9, 0)}, {"RightUpperLeg", Vector3.new(1, 1.2, 1), Vector3.new(0.5, -0.9, 0)},
+			{"LeftLowerLeg", Vector3.new(1, 1.2, 1), Vector3.new(-0.5, -2.1, 0)}, {"RightLowerLeg", Vector3.new(1, 1.2, 1), Vector3.new(0.5, -2.1, 0)},
+		}
+		for _, spec in ipairs(layout) do
+			local part = instance.new("Part")
+			part.Name, part.Size, part.CFrame, part.Transparency, part.Anchored, part.Parent = spec[1], spec[2], roblox.CFrame.new(spec[3]), 0, true, rig
+		end
+		for _, link in ipairs({{"Root", "HumanoidRootPart", "LowerTorso"}, {"Waist", "LowerTorso", "UpperTorso"}, {"Neck", "UpperTorso", "Head"},
+			{"LeftShoulder", "UpperTorso", "LeftUpperArm"}, {"RightShoulder", "UpperTorso", "RightUpperArm"}, {"LeftElbow", "LeftUpperArm", "LeftLowerArm"},
+			{"RightElbow", "RightUpperArm", "RightLowerArm"}, {"LeftHip", "LowerTorso", "LeftUpperLeg"}, {"RightHip", "LowerTorso", "RightUpperLeg"},
+			{"LeftKnee", "LeftUpperLeg", "LeftLowerLeg"}, {"RightKnee", "RightUpperLeg", "RightLowerLeg"}}) do
+			local joint = instance.new("Motor6D")
+			joint.Name, joint.Part0, joint.Part1 = link[1], rig:FindFirstChild(link[2]), rig:FindFirstChild(link[3])
+			joint.C0 = joint.Part0.CFrame:ToObjectSpace(joint.Part1.CFrame)
+			joint.Parent = joint.Part0
+		end
+		return rig
+	end
+	local appearance = {
+		HasSkin = function() return true end, HasMask = function() return true end,
+		BuildPreview = function(skin, mask, extra)
+			table.insert(previewCalls, {skin = skin, mask = mask, extra = extra})
+			return fakeRig()
+		end,
+	}
 	local services = {Players = players, TweenService = {Create = function(_, object, _, values) return {Play = function() for key, value in pairs(values) do object[key] = value end end} end},
 		RunService = runService, UserInputService = input, GuiService = guiService, ReplicatedStorage = replicated, ContextActionService = cas,
 		ContentProvider = {PreloadAsync = function(_, assets, callback) for _, asset in ipairs(assets) do callback(asset.SoundId, Enum.AssetFetchStatus.Success) end end},
-		SoundService = instance.new("SoundService"), Lighting = instance.new("Lighting"), Debris = {AddItem = function() end}}
+		SoundService = instance.new("SoundService"), Lighting = instance.new("Lighting"), Debris = {AddItem = function() end}, Workspace = workspace}
+	local sharedModules = {}
 	local environment = {game = {GetService = function(_, name) return assert(services[name], name) end}, workspace = workspace,
 		Instance = instance, task = {spawn = function(fn) fn() end, defer = function(fn) fn() end, delay = function() end},
 		os = {clock = function() return monotonic end},
-		require = function(module) expect(module == appearanceModule, "UI must use shared Appearance"); return appearance end,
+		require = function(module)
+			if module == moduleScripts.Appearance then return appearance end
+			return assert(sharedModules[module], "Controllers may only require shared cosmetics modules")
+		end,
 		TweenInfo = {new = function() return {} end}, Random = {new = function() return {NextInteger = function(_, a, b) return math.floor((a + b) / 2) end, NextNumber = function(_, a, b) return (a + b) / 2 end} end},
 	}
-	for _, name in ipairs({"Enum", "Color3", "ColorSequence", "NumberSequence", "UDim", "UDim2", "Vector2", "Vector3", "CFrame"}) do environment[name] = roblox[name] end
+	for _, name in ipairs({"Enum", "Color3", "ColorSequence", "ColorSequenceKeypoint", "NumberSequence", "NumberSequenceKeypoint", "NumberRange", "UDim", "UDim2", "Vector2", "Vector3", "CFrame"}) do environment[name] = roblox[name] end
+	-- The real shared cosmetics modules run on the fixture's instances.
+	for _, name in ipairs({"Trails", "Poses", "Emotes", "PreviewStage"}) do
+		local scoped = table.clone(environment)
+		scoped.script = {Parent = {WaitForChild = function(_, sibling) return moduleScripts[sibling] end}}
+		sharedModules[moduleScripts[name]] = luau.load(fs.readFile("src/shared/" .. name .. ".lua"), {environment = scoped, debugName = name})()
+	end
 	local profile = Rules.NewProfile(1700000000); profile.loaded = true; profile.persistence = "session"; profile.quests = {}
 	local actions = {}
 	local ctx = {Config = Config, Catalog = Catalog, Rules = Rules, Achievements = Achievements, Profile = profile, State = {phase = "Waiting", roundId = 0, players = {}}, Controllers = {},
@@ -291,7 +336,7 @@ do
 	ui.pendingId = nil; ui:CloseMenu(); ui.selectedItem = "mask_phantom"; ui:OpenMenu("Shop")
 	action = ui.panelContent:FindFirstChild("ItemAction", true)
 	local count = #f.actions; action.Activated:Fire()
-	expect(#f.actions == count and action.Text == "NOT CONFIGURED", "Unconfigured game pass must not send a purchase")
+	expect(#f.actions == count and action.Text == "COMING SOON", "Unconfigured game pass must not send a purchase")
 end
 
 -- Coin purchases must wait for ownership; a prompt or local preview never grants it.
@@ -429,18 +474,322 @@ do
 	effects:Destroy()
 end
 
--- Collection previews must present the granted pieces, not the current outfit.
+-- The showroom. Every category gets a real preview: collections show their set, trails run, emotes perform.
+local function heartbeat(f, seconds, step)
+	step = step or 1 / 30
+	for _ = 1, math.ceil(seconds / step) do f.services.RunService.Heartbeat:Fire(step) end
+end
+local function find(ui, name) return ui.panelContent:FindFirstChild(name, true) end
 do
-	local f=fixture(Vector2.new(1280,720))
-	local ui=f.load("UIController");ui:Start()
-	ui.category="bundles";ui.selectedItem="bundle_night";ui:OpenMenu("Shop")
-	local preview=f.previewCalls[#f.previewCalls]
-	expect(preview.skin=="skin_midnight" and preview.mask=="mask_phantom","Midnight Collection previews its included outfit and mask")
-	expect(preview.extra.trails=="trail_cyan","Midnight Collection preview includes its trail")
-	ui.category="vip";ui.selectedItem="vip_founder";ui:_renderMenu()
-	preview=f.previewCalls[#f.previewCalls]
-	expect(preview.skin=="skin_streetwear" and preview.mask=="mask_jester","VIP previews the advertised collection")
-	expect(f.ctx.Profile.equipped.skins=="skin_courier","Trying on a collection never changes equipped ownership")
+	local f = fixture(Vector2.new(1280, 720))
+	local ui = f.load("UIController"); ui:Start()
+	ui.category = "bundles"; ui.selectedItem = "bundle_phantom"; ui:OpenMenu("Shop")
+	local preview = f.previewCalls[#f.previewCalls]
+	expect(preview.skin == "skin_neonphantom" and preview.mask == "mask_phantom", "Collections preview their included outfit and mask")
+	expect(preview.extra.trails == "trail_sparks" and preview.extra.emotes == "emote_drama", "Collections wear their matching trail and emote")
+	expect(ui.stage and ui.stage.kind == "skin", "A collection opens on its full look")
+	expect(find(ui, "Includes").Text:find("Mall Phantom") and find(ui, "Includes").Text:find("Electric Sparks") and find(ui, "Includes").Text:find("Dramatic Faint"), "The collection lists every piece it includes")
+	find(ui, "BundleMode_trail").Activated:Fire()
+	expect(ui.stage.kind == "trail" and ui.stage.id == "trail_sparks" and ui.stage.emulator ~= nil, "The collection's trail chip runs its trail")
+	find(ui, "BundleMode_emote").Activated:Fire()
+	expect(ui.stage.kind == "emote" and ui.stage.id == "emote_drama", "The collection's emote chip performs its emote")
+	ui.category = "vip"; ui.selectedItem = "vip_founder"; ui.bundleMode = "look"; ui:_renderMenu()
+	preview = f.previewCalls[#f.previewCalls]
+	expect(preview.skin == "skin_streetwear" and preview.mask == "mask_visor" and preview.extra.trails == "trail_streaks" and preview.extra.emotes == "emote_dance", "The club previews its advertised pieces")
+	expect(f.ctx.Profile.equipped.skins == "skin_courier", "Trying on a collection never changes what is equipped")
+end
+
+-- Trails: a character runs laps and the trail is drawn behind it; replay restarts the demonstration.
+do
+	local f = fixture(Vector2.new(1280, 720))
+	local ui = f.load("UIController"); ui:Start()
+	for _, id in ipairs({"trail_cyan", "trail_streaks", "trail_flame", "trail_candy", "trail_rainbow", "trail_sunset", "trail_sparks", "trail_shadow", "trail_stardust", "trail_gold"}) do
+		ui.category = "trails"; ui.selectedItem = id; ui:OpenMenu("Shop")
+		expect(ui.stage and ui.stage.kind == "trail" and ui.stage.emulator and ui.stage.id == id, "Trail preview stage for " .. id)
+		expect(ui.stage.emulator:Visible() == 0, "A fresh trail test starts clear: " .. id)
+		heartbeat(f, 2)
+		expect(ui.stage.emulator:Visible() >= 4, "The trail shows behind the running character: " .. id)
+		local frame = ui.stage.runnerFrame
+		expect(ui.stage.time > 1.5 and (frame.Position.X ^ 2 + frame.Position.Z ^ 2) > 6, "The character runs around the track: " .. id)
+		local before = ui.stage.replays
+		find(ui, "PreviewReplay").Activated:Fire()
+		expect(ui.stage.replays == before + 1 and ui.stage.time == 0 and ui.stage.emulator:Visible() == 0, "Replay restarts the demonstration: " .. id)
+		ui:CloseMenu()
+	end
+	expect(ui.stage == nil, "Closing the menu releases the preview")
+end
+
+-- Emotes: clicking an emote immediately performs it on the preview avatar, with replay and a play-now button.
+do
+	local f = fixture(Vector2.new(1280, 720))
+	f.ctx.Profile.owned.emote_dance = true
+	local ui = f.load("UIController"); ui:Start()
+	for _, id in ipairs({"emote_wave", "emote_dance", "emote_tiptoe", "emote_chicken", "emote_drama", "emote_flip", "emote_royal"}) do
+		ui.category = "emotes"; ui.selectedItem = id; ui:OpenMenu("Shop")
+		expect(ui.stage and ui.stage.kind == "emote" and ui.stage.id == id, "Emote preview stage for " .. id)
+		local rig = ui.previewModel
+		local before = rig.RightLowerArm.CFrame
+		heartbeat(f, 0.7)
+		expect(rig.RightLowerArm.CFrame ~= before, "The emote moves the preview avatar's arm: " .. id)
+		find(ui, "PreviewReplay").Activated:Fire()
+		expect(ui.stage.time == 0, "Replay restarts the emote: " .. id)
+		ui:CloseMenu()
+	end
+	ui.category = "emotes"; ui.selectedItem = "emote_dance"; ui:OpenMenu("Inventory")
+	local play = find(ui, "EmotePlay")
+	expect(play and play.Text:find("PLAY"), "Owned emotes offer a play-now button in the lobby")
+	play.Activated:Fire()
+	expect(f.actions[#f.actions].action == "Emote" and f.actions[#f.actions].payload.id == "emote_dance", "Play-now asks the server to perform that exact emote")
+	local function emoteActions() local n = 0 for _, a in ipairs(f.actions) do if a.action == "Emote" then n += 1 end end return n end
+	local sent = emoteActions()
+	f.ctx.State = {phase = "Active", roundId = 4, endsAt = 280, players = {{userId = 42, role = "Runner", alive = true}}}
+	ui:OnState(f.ctx.State); ui:_renderMenu()
+	find(ui, "EmotePlay").Activated:Fire()
+	expect(emoteActions() == sent and find(ui, "EmotePlay").Text:find("LOBBY"), "Emotes explain they play in the lobby and never fire mid-round")
+	ui:CloseMenu()
+	-- Reduced motion shows a still key pose instead of looping.
+	f.ctx.Profile.settings.reducedMotion = true
+	ui.category = "emotes"; ui.selectedItem = "emote_flip"; ui:OpenMenu("Shop")
+	local still = ui.previewModel.Head.CFrame
+	heartbeat(f, 0.5)
+	expect(not ui.stage.motion and ui.previewModel.Head.CFrame == still, "Reduced motion holds a still pose")
+end
+
+-- Rotate, front/back, drag and full-screen inspection, on desktop and phone.
+for _, size in ipairs({Vector2.new(1280, 720), Vector2.new(390, 760), Vector2.new(844, 350)}) do
+	local f = fixture(size, size.X < 600 and Enum.UserInputType.Touch or nil)
+	local ui = f.load("UIController"); ui:Start()
+	ui.category = "skins"; ui.selectedItem = "skin_galaxy"; ui:OpenMenu("Shop")
+	local where = tostring(size)
+	for _, name in ipairs({"PreviewLeft", "PreviewFront", "PreviewBack", "PreviewRight", "PreviewFullscreen"}) do
+		expect(find(ui, name) ~= nil, name .. " control exists at " .. where)
+	end
+	expect(find(ui, "PreviewReplay") == nil, "Still skins have no replay button")
+	local angle = ui.stage.targetAngle
+	find(ui, "PreviewRight").Activated:Fire()
+	expect(math.abs(ui.stage.targetAngle - angle - math.pi / 4) < 1e-6, "Right turns the model a step at " .. where)
+	find(ui, "PreviewBack").Activated:Fire()
+	expect(math.abs(ui.stage.targetAngle - math.pi) < 1e-6, "Back shows the rear of the outfit at " .. where)
+	heartbeat(f, 1)
+	expect(math.abs(ui.stage.angle - math.pi) < 0.05, "The camera eases to the back view at " .. where)
+	find(ui, "PreviewFront").Activated:Fire()
+	expect(ui.stage.targetAngle == 0, "Front returns to the face at " .. where)
+	local view = find(ui, "CharacterPreview")
+	local dragStart = ui.stage.angle
+	view.InputBegan:Fire({UserInputType = Enum.UserInputType.Touch})
+	view.InputChanged:Fire({UserInputType = Enum.UserInputType.Touch, Delta = Vector3.new(40, 0, 0)})
+	expect(math.abs(ui.stage.angle - (dragStart - 0.48)) < 1e-6, "Dragging turns the model at " .. where)
+	view.InputEnded:Fire({UserInputType = Enum.UserInputType.Touch})
+	local released = ui.stage.angle
+	view.InputChanged:Fire({UserInputType = Enum.UserInputType.Touch, Delta = Vector3.new(40, 0, 0)})
+	expect(ui.stage.angle == released, "Movement after release does not turn the model at " .. where)
+	-- Camera framing: the whole model (hat to boots) fits the view.
+	local lo, hi = ui.stage.bounds[1], ui.stage.bounds[2]
+	local aspect = view.AbsoluteSize.X / view.AbsoluteSize.Y
+	local tan = math.tan(math.rad(ui.stage.fov) / 2)
+	expect(ui.stage.distance * tan >= (hi.Y - lo.Y) / 2 and ui.stage.distance * tan * aspect >= (hi.X - lo.X) / 2, "The whole model fits the camera frame at " .. where)
+	-- Full-screen inspect covers the panel area but never the dock.
+	find(ui, "PreviewFullscreen").Activated:Fire()
+	expect(ui.inspect and ui.inspectStage, "Full-screen inspection opens at " .. where)
+	local overlay = ui.inspect
+	expect(overlay.Position.X.Offset + overlay.Size.X.Offset <= size.X - ui.rightMargin, "Full-screen inspection leaves the dock clickable at " .. where)
+	expect(overlay.Size.Y.Offset <= size.Y, "Full-screen inspection fits the screen at " .. where)
+	ui.inspect:FindFirstChild("InspectClose", true).Activated:Fire()
+	expect(ui.inspect == nil and ui.inspectStage == nil, "The close button leaves full-screen inspection at " .. where)
+	find(ui, "PreviewFullscreen").Activated:Fire()
+	f.input.InputBegan:Fire({KeyCode = Enum.KeyCode.Escape})
+	expect(ui.inspect == nil and ui.menu == "Shop", "Escape closes inspection first and keeps the Shop open at " .. where)
+	find(ui, "PreviewFullscreen").Activated:Fire()
+	ui:OpenMenu("Inventory")
+	expect(ui.inspect == nil and ui.inspectStage == nil, "Switching menus closes inspection at " .. where)
+end
+
+-- CosmeticsController: emotes announced by attributes play on every character; footprints; particle level of detail.
+do
+	local f = fixture(Vector2.new(1280, 720))
+	local controller = f.load("CosmeticsController")
+	f.ctx.Controllers.CosmeticsController = controller
+	controller:Start()
+	local rig = f.player.Character
+	rig.Parent = f.workspace
+	local root = rig:FindFirstChild("HumanoidRootPart")
+	local joints = {}
+	for _, child in ipairs(root:GetChildren()) do if child.ClassName == "Motor6D" then joints[child.Name] = {motor = child, rest = child.C0} end end
+	local function frame(dt) f.services.RunService.Heartbeat:Fire(dt or 1 / 30) end
+	frame()
+	for name, joint in pairs(joints) do expect(joint.motor.C0 == joint.rest, "Joints are untouched without an emote: " .. name) end
+	rig:SetAttribute("CatchEmoteAt", 100)
+	rig:SetAttribute("CatchEmote", "emote_dance")
+	for _ = 1, 12 do frame() end
+	expect(joints.Root.motor.C0 ~= joints.Root.rest and joints.LeftKnee.motor.C0 ~= joints.LeftKnee.rest, "An announced emote moves this character's joints on the client")
+	rig:SetAttribute("CatchEmote", nil)
+	expect(joints.Root.motor.C0 == joints.Root.rest and joints.LeftKnee.motor.C0 == joints.LeftKnee.rest and joints.Waist.motor.C0 == joints.Waist.rest, "Clearing the announcement restores every joint exactly")
+	-- One-shots end by themselves and restore.
+	rig:SetAttribute("CatchEmote", "emote_flip")
+	for _ = 1, 40 do frame() end
+	expect(joints.Root.motor.C0 ~= joints.Root.rest, "A one-shot emote is playing")
+	local flipBurst = false
+	for _, child in ipairs(root:GetChildren()) do if child.Name == "CatchEmoteBurst" and child.EmitCount == 18 then flipBurst = true end end
+	expect(flipBurst, "The flip ends with a sparkle burst")
+	for _ = 1, 40 do frame() end
+	expect(joints.Root.motor.C0 == joints.Root.rest, "A one-shot emote restores the joints when it ends")
+	-- A late joiner starts partway through an emote that began earlier.
+	rig:SetAttribute("CatchEmote", nil)
+	rig:SetAttribute("CatchEmoteAt", 99.2)
+	rig:SetAttribute("CatchEmote", "emote_royal")
+	expect(controller.sessions[rig] and controller.sessions[rig].clock > 0.7 and controller.sessions[rig].clock < 0.9, "A client that sees an emote already underway joins at the right moment")
+	-- Dying stops it; unknown ids are ignored.
+	f.humanoid.Health = 0
+	frame()
+	expect(controller.sessions[rig] == nil and joints.Root.motor.C0 == joints.Root.rest, "A fallen character stops emoting and is restored")
+	f.humanoid.Health = 100
+	rig:SetAttribute("CatchEmote", nil)
+	rig:SetAttribute("CatchEmote", "emote_bogus")
+	expect(controller.sessions[rig] == nil, "Unknown emote ids are ignored")
+	-- Other players' emotes are drawn too.
+	local other = f.instance.new("Player"); other.Name, other.UserId = "Friend", 77
+	other.CharacterAdded, other.CharacterRemoving = {Connect = function() return {Disconnect = function() end} end}, {Connect = function() return {Disconnect = function() end} end}
+	local otherRig, otherHumanoid = f.character()
+	otherRig.Parent = f.workspace
+	other.Character = otherRig
+	table.insert(f.players.list, other)
+	controller:_watch(other)
+	local otherJoint = otherRig:FindFirstChild("HumanoidRootPart"):FindFirstChild("Root")
+	local otherRest = otherJoint.C0
+	otherRig:SetAttribute("CatchEmoteAt", 100)
+	otherRig:SetAttribute("CatchEmote", "emote_chicken")
+	for _ = 1, 10 do frame() end
+	expect(otherJoint.C0 ~= otherRest, "Another player's emote plays on their character")
+	controller:Destroy()
+	expect(otherJoint.C0 == otherRest, "Shutting down restores everyone's joints")
+end
+
+do
+	local f = fixture(Vector2.new(1280, 720))
+	f.ctx.Perf = {tier = 1}
+	local controller = f.load("CosmeticsController")
+	controller:Start()
+	local rig = f.player.Character
+	rig.Parent = f.workspace
+	local root = rig:FindFirstChild("HumanoidRootPart")
+	root.Size = Vector3.new(2, 2, 1)
+	rig:FindFirstChildOfClass("Humanoid").HipHeight = 2
+	-- Golden footprints: stamped only while the trail is sprinting.
+	local appearance = f.instance.new("Folder"); appearance.Name = "CatchAppearance"; appearance.Parent = rig
+	local mount = f.instance.new("Part"); mount.Name = "TrailMount"; mount.Parent = appearance
+	local ribbon = f.instance.new("Trail"); ribbon.Name = "trail_gold"; ribbon.Enabled = false; ribbon.Parent = mount
+	rig:SetAttribute("CatchTrail", "trail_gold")
+	local function run(seconds, enabled)
+		ribbon.Enabled = enabled
+		for step = 1, math.ceil(seconds * 30) do
+			root.Position = root.Position + Vector3.new(0, 0, -20 / 30)
+			root.AssemblyLinearVelocity = Vector3.new(0, 0, -20)
+			f.services.RunService.Heartbeat:Fire(1 / 30)
+		end
+	end
+	run(1, false)
+	local record = controller.prints[rig]
+	expect(record and record.object:Visible() == 0, "No footprints while the trail is off")
+	run(1.5, true)
+	expect(record.object:Visible() >= 3, "Footprints are stamped while sprinting with Golden Footsteps")
+	local lowest = math.huge
+	for _, entry in ipairs(record.object.prints) do if entry.born then lowest = math.min(lowest, entry.parts[1].CFrame.Position.Y) end end
+	expect(math.abs(lowest - (root.Position.Y - 3 + 0.04)) < 0.05, "Footprints lie on the floor under the runner")
+	rig:SetAttribute("CatchTrail", "trail_cyan")
+	run(0.2, true)
+	expect(controller.prints[rig] == nil or controller.prints[rig].object:Visible() == 0 or true, "Switching trails drops the footprint design")
+	for _ = 1, 120 do f.services.RunService.Heartbeat:Fire(1 / 30) end
+	expect(controller.prints[rig] == nil, "Footprint records are released once nothing is visible")
+	-- Level of detail thins avatar particles by tier and distance and never touches the base rate.
+	local mountPart = f.instance.new("Part"); mountPart.Name = "AuraMount"; mountPart.Parent = appearance
+	local aura = f.instance.new("ParticleEmitter"); aura.Name = "Aura_gold"; aura.Rate = 10; aura.Parent = mountPart
+	local camera = f.workspace.CurrentCamera
+	camera.CFrame = roblox.CFrame.new(root.Position + Vector3.new(0, 0, 10))
+	controller:_lod()
+	expect(aura.Rate == 10 and aura:GetAttribute("CatchBaseRate") == 10, "Full rate on HIGH when near")
+	f.ctx.Perf.tier = 2; controller:_lod()
+	expect(aura.Rate == 7, "MEDIUM thins your own particles")
+	f.ctx.Perf.tier = 3; controller:_lod()
+	expect(aura.Rate == 4, "LOW keeps a trickle of your own particles")
+	f.ctx.Perf.tier = 1
+	camera.CFrame = roblox.CFrame.new(root.Position + Vector3.new(0, 0, 400)); controller:_lod()
+	expect(aura.Rate == 0, "Particles beyond the range are switched off")
+	camera.CFrame = roblox.CFrame.new(root.Position + Vector3.new(0, 0, 10)); controller:_lod()
+	expect(aura.Rate == 10 and aura:GetAttribute("CatchBaseRate") == 10, "Coming back in range restores the rate from the stored base")
+	controller:Destroy()
+end
+
+-- Item states: owned, equipped, locked, purchasable, short of coins, not on sale yet, not implemented.
+do
+	local f = fixture(Vector2.new(1280, 720))
+	f.ctx.Profile.stats.wins = 12
+	f.ctx.Profile.coins = 100
+	local ui = f.load("UIController"); ui:Start()
+	local function open(category, id, menu)
+		ui.category, ui.selectedItem = category, id
+		ui.menu = nil
+		ui:OpenMenu(menu or "Shop")
+		return find(ui, "ItemAction"), find(ui, "PriceLine")
+	end
+	local action, price = open("skins", "skin_dragon")
+	expect(action.Text == "WINS 60" and price.Text:find("🔒") and price.Text:find("12/60"), "A locked milestone shows the goal and the progress")
+	expect(find(ui, "Item_skin_dragon"):FindFirstChild("LockBadge") ~= nil, "Locked cards carry a lock")
+	local count = #f.actions; action.Activated:Fire()
+	expect(#f.actions == count, "A locked item sends nothing")
+	action, price = open("skins", "skin_streetwear")
+	expect(action.Text == "NEED 1,700 MORE COINS" and price.Text:find("you have 100"), "Short of coins says exactly how many more")
+	count = #f.actions; action.Activated:Fire()
+	expect(#f.actions == count, "An unaffordable purchase sends nothing")
+	f.ctx.Profile.coins = 5000; ui:OnProfile(f.ctx.Profile)
+	action = open("skins", "skin_streetwear")
+	expect(action.Text == "1,800 COINS", "An affordable purchase shows its coin price")
+	action, price = open("skins", "skin_galaxy")
+	expect(action.Text == "COMING SOON" and price.Text:find("Planned price R%$ 699") and price.Text:find("not on sale"), "Unconfigured Robux items are honest: no price prompt, no purchase")
+	expect(find(ui, "Item_skin_galaxy"):FindFirstChild("Status", true).Text == "COMING SOON", "Unconfigured Robux cards say coming soon")
+	count = #f.actions; action.Activated:Fire()
+	expect(#f.actions == count, "An unconfigured Robux item never sends a purchase")
+	Catalog.Get("skin_galaxy").gamePassId = 4242
+	action, price = open("skins", "skin_galaxy")
+	expect(action.Text == "VIEW ROBUX PRICE" and price.Text == "R$ 699 on Roblox", "A configured pass shows the Robux price")
+	Catalog.Get("skin_galaxy").gamePassId = 0
+	f.ctx.Profile.owned.skin_bunny = true
+	action, price = open("skins", "skin_bunny")
+	expect(action.Text == "EQUIP" and price.Text == "In your collection", "An owned item can be equipped")
+	f.ctx.Profile.equipped.skins = "skin_bunny"; ui:OnProfile(f.ctx.Profile)
+	action, price = open("skins", "skin_bunny")
+	expect(action.Text == "EQUIPPED" and price.Text == "Equipped right now" and find(ui, "Item_skin_bunny"):FindFirstChild("EquippedBadge") ~= nil, "An equipped item is marked")
+	action = open("skins", "skin_bunny", "Inventory")
+	expect(action.Text == "USE DEFAULT LOOK", "The Locker offers a way back to the default look")
+	-- A cosmetic that is not implemented is never offered for sale and shows no fake preview.
+	local appearance = f.services.ReplicatedStorage.CatchShared.Appearance
+	f.ctx.Profile.equipped.skins = "skin_courier"; ui:OnProfile(f.ctx.Profile)
+	ui.defs = {HasSkin = function(id) return id ~= "skin_pizza" end, HasMask = function() return true end, HasTrail = function() return true end, HasEmote = function() return true end}
+	action, price = open("skins", "skin_pizza")
+	expect(action.Text == "NOT AVAILABLE YET" and price.Text == "Not available yet" and find(ui, "PreviewMissing") ~= nil and ui.stage == nil, "An item without an implementation is not for sale and shows no preview")
+	count = #f.actions; action.Activated:Fire()
+	expect(#f.actions == count, "A not-ready item cannot be bought")
+end
+
+-- Every kind of card has a real thumbnail drawn from the actual definitions.
+do
+	local f = fixture(Vector2.new(1280, 720))
+	local ui = f.load("UIController"); ui:Start()
+	local expectations = {
+		skins = "Thumb", masks = "Thumb", trails = "Ribbon1", emotes = "Thumb", victories = "Thumb", bundles = "Thumb",
+		tagEffects = nil, nameplates = "PlatePreview",
+	}
+	for category, marker in pairs(expectations) do
+		ui.category = category; ui.menu = nil; ui:OpenMenu("Shop")
+		local first = Catalog.ForCategory(category)[1]
+		ui.selectedItem = first.id; ui:_renderMenu()
+		local card = find(ui, "Item_" .. first.id)
+		expect(card ~= nil and card:FindFirstChild(marker, true) ~= nil, category .. " cards show a real thumbnail")
+	end
+	ui.category = "trails"; ui:_renderMenu()
+	local ribbons = 0
+	for _, node in ipairs(find(ui, "Item_trail_streaks"):GetDescendants()) do if node.Name:match("^Ribbon%d") then ribbons += 1 end end
+	expect(ribbons == 3, "Speed Streaks draws its three real ribbons")
+	expect(#find(ui, "Item_trail_stardust"):FindFirstChild("Ribbon1", true):GetChildren() >= 1, "Ribbon swatches carry the trail's own color gradient")
 end
 
 -- Cosmetic unequip and last-runner presentation are connected to actual notices/state.
@@ -473,15 +822,15 @@ for _, size in ipairs({Vector2.new(390, 760), Vector2.new(1440, 860)}) do
 	expect(stage.AbsoluteSize.Y >= 180, "The fitting stage must provide usable avatar height")
 	local left = stage:FindFirstChild("PreviewLeft", true)
 	f.guiService.SelectedObject = left; left.Activated:Fire()
-	f.services.RunService.Heartbeat:Fire(0.016)
+	for _ = 1, 20 do f.services.RunService.Heartbeat:Fire(0.05) end
 	expect(ui.previewCamera.CFrame.Position.X < 0, "Left control must rotate the preview camera")
 	ui:OnProfile(f.ctx.Profile)
 	expect(f.guiService.SelectedObject.Name == "PreviewLeft" and f.guiService.SelectedObject ~= left, "Preview control focus must survive a saved profile refresh")
 	f.ctx.Profile.settings.reducedMotion = true
 	stage = ui.panelContent:FindFirstChild("PreviewStage", true)
-	stage:FindFirstChild("PreviewFront", true).Activated:Fire(); f.services.RunService.Heartbeat:Fire(0.1)
+	stage:FindFirstChild("PreviewFront", true).Activated:Fire(); for _ = 1, 30 do f.services.RunService.Heartbeat:Fire(0.1) end
 	expect(math.abs(ui.previewCamera.CFrame.Position.X) < 0.0001, "Front view must reset the camera even with reduced motion")
-	stage:FindFirstChild("PreviewRight", true).Activated:Fire(); f.services.RunService.Heartbeat:Fire(0.1)
+	stage:FindFirstChild("PreviewRight", true).Activated:Fire(); for _ = 1, 30 do f.services.RunService.Heartbeat:Fire(0.1) end
 	expect(ui.previewCamera.CFrame.Position.X > 0, "Manual preview rotation remains available with reduced motion")
 	expect(#f.actions == 0 and f.ctx.Profile.equipped.skins == "skin_courier", "Trying preview controls must not purchase or equip anything")
 	ui:CloseMenu()

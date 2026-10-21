@@ -58,6 +58,11 @@ function ShopService:Purchase(player, id)
 	if not item then self:_Notice(player, "This item is unavailable."); return false end
 	local profile = data:Get(player)
 	if profile.owned[id] then self:_Notice(player, "You already own " .. item.name .. ". Equip it from your inventory."); return true end
+	-- Never sell something that cannot be previewed and worn.
+	if self.ctx.CosmeticDefs and not self.ctx.Catalog.IsReady(item, self.ctx.CosmeticDefs) then
+		self:_Notice(player, item.name .. " is not available yet.")
+		return false
+	end
 	if item.currency == "Free" then
 		local ok = data:Grant(player, { id }, "Added " .. item.name .. " to your inventory.")
 		return ok

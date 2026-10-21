@@ -103,6 +103,11 @@ def draw_model(image, parts, box, camera, view="full"):
         scale = min(width,height)/2.9
         ox = width/2 - focus[0]*scale
         oy = height/2 - focus[1]*scale
+    elif view == "wide":
+        focus = np.array([0,-0.2,0.0]) @ projection
+        scale = min((width-20)/9.0,(height-20)/8.4)
+        ox = width/2 - focus[0]*scale
+        oy = height/2 - focus[1]*scale
     else:
         focus = np.array([0,-0.15,0.0]) @ projection
         scale = min((width-20)/4.6,(height-20)/6.9)
@@ -165,6 +170,8 @@ def main():
     sheets = json.loads(args.input.read_text())["sheets"]
     sheet(sheets["skins"],4,(760,520),"CATCH ME IF YOU CAN / SKINS",[(0,0.35,-10),(-6,1.0,-10),(5,1.0,10)],args.outdir/"Character-lineup.png")
     sheet(sheets["masks"],4,(420,380),"CATCH ME IF YOU CAN / MASKS",[(0,0.2,-10),(-6,0.6,-10)],args.outdir/"Mask-lineup.png")
+    sheet(sheets["trails"],2,(760,470),"CATCH ME IF YOU CAN / TRAILS (runner mid-lap)",[(-7,3.5,-12),(4,2.5,12)],args.outdir/"Trail-previews.png")
+    sheet(sheets["emotes"],4,(430,400),"CATCH ME IF YOU CAN / EMOTES (key frames)",[(0,0.4,-12)],args.outdir/"Emote-frames.png")
 
 
 if __name__=="__main__":

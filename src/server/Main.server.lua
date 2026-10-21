@@ -19,7 +19,15 @@ for _, name in ipairs({"State", "Action", "Profile", "Notice", "Query"}) do
 	remote.Parent = remotesFolder
 	remotes[name] = remote
 end
+local Appearance = require(shared.Appearance)
+local Trails = require(shared.Trails)
+local Emotes = require(shared.Emotes)
 local ctx = {Config=Config, Catalog=Catalog, Rules=Rules, Modifiers=Modifiers, Achievements=Achievements, Remotes=remotes, Services={}}
+-- A cosmetic is only sold if its look, trail or emote is actually implemented (see Catalog.IsReady).
+ctx.CosmeticDefs = {HasSkin=Appearance.HasSkin, HasMask=Appearance.HasMask, HasTrail=Trails.Has, HasEmote=Emotes.Has}
+for _, item in pairs(Catalog.Items) do
+	if not Catalog.IsReady(item, ctx.CosmeticDefs) then warn("[Catch] Cosmetic "..item.id.." has no implementation and will not be sold.") end
+end
 ctx.World = MapBuilder.Build()
 for _, name in ipairs({"DataService", "CosmeticService", "ShopService", "MovementService", "RoundService", "HideService", "HubService"}) do
 	ctx.Services[name] = require(script.Parent.Services[name]).new(ctx)

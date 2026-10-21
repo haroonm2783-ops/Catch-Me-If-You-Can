@@ -278,12 +278,13 @@ do
 	expect(f.shop:_Verify(f.player, item.gamePassId, true), "Server-confirmed pass should grant cosmetic")
 	expect(f.data:Get(f.player).owned.skin_ninja, "Verified pass cosmetic should be owned")
 	item.gamePassId = previousId
-	local bundle = Catalog.Get("bundle_night")
+	local bundle = Catalog.Get("bundle_galaxy")
 	previousId = bundle.gamePassId
 	bundle.gamePassId = 789012
 	f.marketplace.owns["42:789012"] = true
 	f.shop:_Refresh(f.player)
-	expect(f.data:Get(f.player).owned.bundle_night and f.data:Get(f.player).owned.mask_phantom and f.data:Get(f.player).owned.trail_cyan, "Join refresh should restore all verified bundle grants")
+	local owned = f.data:Get(f.player).owned
+	expect(owned.bundle_galaxy and owned.skin_galaxy and owned.mask_astral and owned.trail_stardust and owned.emote_royal, "Join refresh should restore all verified collection grants (outfit, mask, trail and emote)")
 	bundle.gamePassId = previousId
 end
 
@@ -453,11 +454,11 @@ do
 	local count = #f.notices
 	f.data:Grant(f.player, {"skin_golden"}, "Again.")
 	expect(#f.notices == count, "Items that are already owned send no second celebration")
-	f.data:Grant(f.player, {"skin_pizza"}, "Added Pizza Courier.")
+	f.data:Grant(f.player, {"skin_bunny"}, "Added Bunny Hop.")
 	expect(f.notices[#f.notices].reveal and f.notices[#f.notices].reveal.rarity == "Rare", "Rare items are revealed too")
-	f.data:Grant(f.player, {"bundle_night"}, "Bundle.")
+	f.data:Grant(f.player, {"bundle_galaxy"}, "Bundle.")
 	local bundle = f.notices[#f.notices].reveal
-	expect(bundle and bundle.id == "bundle_night" and bundle.rarity == "Legendary", "A collection is revealed as the best thing it newly grants")
+	expect(bundle and bundle.rarity == "Legendary", "A collection is revealed as the best thing it newly grants")
 end
 
 do
@@ -481,6 +482,54 @@ do
 	local finalServer = fixture(false, f.store)
 	finalServer.data:_Load(finalServer.player)
 	expect(finalServer.data:Get(finalServer.player).equipped.masks == "", "An intentionally empty mask slot stays empty on rejoin")
+end
+
+-- Every kind of cosmetic equipment persists across a reconnect: outfit, mask, trail and emote, plus independent unequip.
+do
+	local f = fixture(false)
+	f.data:_Load(f.player)
+	local profile = f.data:Get(f.player)
+	profile.coins = 30000
+	for _, id in ipairs({"skin_bunny", "mask_cat", "trail_streaks", "emote_tiptoe", "trail_flame"}) do
+		expect(f.data:_PurchaseWithCoins(f.player, id), "Coin purchase works: " .. id)
+	end
+	expect(f.data:Equip(f.player, "skins", "skin_bunny") and f.data:Equip(f.player, "masks", "mask_cat") and f.data:Equip(f.player, "trails", "trail_streaks") and f.data:Equip(f.player, "emotes", "emote_tiptoe"), "Owned outfit, mask, trail and emote all equip")
+	expect(not f.data:Equip(f.player, "trails", "emote_tiptoe") and not f.data:Equip(f.player, "emotes", "trail_streaks"), "An item cannot be equipped into the wrong slot")
+	expect(not f.data:Equip(f.player, "trails", "trail_gold") and not f.data:Equip(f.player, "emotes", "emote_royal"), "Unowned premium trails and emotes cannot be equipped")
+	expect(f.data:_SaveRecord(f.data.records[f.player], true), "Equipment saves")
+	local nextServer = fixture(false, f.store)
+	nextServer.data:_Load(nextServer.player)
+	local restored = nextServer.data:Get(nextServer.player)
+	expect(restored.equipped.skins == "skin_bunny" and restored.equipped.masks == "mask_cat" and restored.equipped.trails == "trail_streaks" and restored.equipped.emotes == "emote_tiptoe", "A new server restores outfit, mask, trail and emote")
+	expect(nextServer.data:Equip(nextServer.player, "trails", "trail_flame") and restored.equipped.trails == "trail_flame" and restored.equipped.emotes == "emote_tiptoe", "Switching trails leaves the emote alone")
+	expect(nextServer.data:Equip(nextServer.player, "trails", "") and restored.equipped.trails == "", "A trail can be taken off")
+	expect(nextServer.data:_SaveRecord(nextServer.data.records[nextServer.player], true), "Unequipped trail saves")
+	local finalServer = fixture(false, f.store)
+	finalServer.data:_Load(finalServer.player)
+	expect(finalServer.data:Get(finalServer.player).equipped.trails == "" and finalServer.data:Get(finalServer.player).equipped.emotes == "emote_tiptoe", "An intentionally empty trail slot stays empty on rejoin")
+end
+
+-- Replaced items keep their owners; unknown ids from old saves are dropped.
+do
+	local f = fixture(false)
+	local legacy = f.ctx.Rules.NewProfile(1700000000)
+	legacy.owned.skin_midnight, legacy.owned.skin_removed_long_ago, legacy.equipped.skins = true, true, "skin_midnight"
+	local clean = f.data:_Sanitize(legacy)
+	expect(clean.owned.skin_trickster == true and clean.equipped.skins == "skin_trickster", "Midnight Magician owners keep a purple-and-gold look as Royal Trickster")
+	expect(clean.owned.skin_midnight == nil and clean.owned.skin_removed_long_ago == nil, "Retired ids do not linger in the inventory")
+end
+
+-- The server never sells a cosmetic that has no implementation behind it.
+do
+	local f = fixture(true)
+	f.data:_Load(f.player)
+	local profile = f.data:Get(f.player)
+	profile.coins = 5000
+	f.ctx.CosmeticDefs = {HasSkin = function(id) return id ~= "skin_bunny" end, HasMask = function() return true end, HasTrail = function() return true end, HasEmote = function() return true end}
+	expect(not f.shop:Purchase(f.player, "skin_bunny") and not profile.owned.skin_bunny and profile.coins == 5000, "An unimplemented skin cannot be bought, and no coins are taken")
+	expect(f.notices[#f.notices].text:find("not available yet"), "The player is told it is not available yet")
+	expect(f.shop:Purchase(f.player, "skin_panda") and profile.owned.skin_panda and profile.coins == 5000 - Catalog.Get("skin_panda").price, "Implemented items buy normally")
+	f.ctx.CosmeticDefs = nil
 end
 
 do

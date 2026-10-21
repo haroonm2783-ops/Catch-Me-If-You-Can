@@ -78,12 +78,16 @@ function Rules.NormalizeProfile(raw, now)
 	end
 	if type(raw.owned) == "table" then
 		for id, owned in pairs(raw.owned) do
-			if type(id) == "string" and Catalog.Get(id) and owned == true then result.owned[id] = true end
+			if type(id) == "string" and owned == true then
+				if Catalog.Get(id) then result.owned[id] = true
+				elseif Catalog.Renamed and Catalog.Renamed[id] and Catalog.Get(Catalog.Renamed[id]) then result.owned[Catalog.Renamed[id]] = true end
+			end
 		end
 	end
 	if type(raw.equipped) == "table" then
 		for category in pairs(result.equipped) do
 			local id = raw.equipped[category]
+			if type(id) == "string" and Catalog.Renamed and Catalog.Renamed[id] then id = Catalog.Renamed[id] end
 			local item = type(id) == "string" and Catalog.Get(id)
 			if id == "" then result.equipped[category] = ""
 			elseif item and item.category == category and result.owned[id] then result.equipped[category] = id end
