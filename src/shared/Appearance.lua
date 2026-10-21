@@ -360,7 +360,7 @@ skins.skin_ninja = { -- Shadow Runner
 	hides = "outfit", headwear = true,
 	aura = {kind = "smoke", color = {C(46, 34, 74), C(120, 84, 190)}, mount = "LowerTorso", at = offset(0, -0.4, 0.5)},
 	build = function(k)
-		local charcoal, ink, violet, wrap, steel, deep = C(38, 38, 54), C(24, 24, 34), C(150, 90, 235), C(86, 88, 110), C(190, 204, 220), C(66, 46, 120)
+		local charcoal, ink, violet, wrap, steel, deep = C(38, 38, 54), C(24, 24, 34), C(150, 90, 235), C(86, 88, 110), C(200, 212, 228), C(66, 46, 120)
 		-- Stealth parkour kit: charcoal hooded jacket, wrapped forearms and shins, split-sole boots.
 		suit(k, {torso = charcoal, hips = ink, sleeve = charcoal, forearm = wrap, glove = ink, thigh = ink, shin = wrap, shoe = ink, sole = violet})
 		for _, s in ipairs(SIDES) do
@@ -368,23 +368,50 @@ skins.skin_ninja = { -- Shadow Runner
 			ring(k, s[1] .. "LowerArm", "WrapBand_" .. s[1], violet, 0.1, 0.08, 0.2, M.Fabric)
 			k.p(s[1] .. "UpperLeg", "SideStripe_" .. s[1], V(0.07, 1.0, 0.5), offset(s[2] * 0.54, 0, 0), violet)
 			k.p(s[1] .. "LowerLeg", "KneeGuard_" .. s[1], V(1.2, 0.4, 1.2), offset(0, 0.44, -0.02), deep, M.SmoothPlastic)
+			-- Layered shoulder armor with a blade-like spike: a hard, angular silhouette from every side.
 			k.p("UpperTorso", "ShoulderPlate_" .. s[1], V(1.0, 0.3, 1.2), offset(s[2] * 1.0, 0.8, 0, 0, 0, s[2] * 14), deep, M.SmoothPlastic)
+			k.p("UpperTorso", "ShoulderBlade_" .. s[1], V(0.2, 0.9, 0.34), offset(s[2] * 1.32, 1.12, 0.02, 0, 0, -s[2] * 28), steel, M.Metal)
 		end
-		-- Chest straps, belt and a kunai pouch.
+		-- Chest straps, a violet shuriken emblem, belt and a kunai pouch.
 		k.p("UpperTorso", "ChestStrap", V(0.18, 2.1, 0.08), offset(0, 0, -0.62, 0, 0, 38), ink)
 		k.p("UpperTorso", "StrapBuckle", V(0.28, 0.28, 0.1), offset(0, 0, -0.66, 0, 0, 38), steel, M.Metal)
+		k.p("UpperTorso", "EmblemA", V(0.7, 0.13, 0.06), offset(-0.45, 0.4, -0.64, 0, 0, 45), violet)
+		k.p("UpperTorso", "EmblemB", V(0.7, 0.13, 0.06), offset(-0.45, 0.4, -0.65, 0, 0, -45), violet)
 		ring(k, "LowerTorso", "Belt", ink, 0.04, 0.26, 0.2, M.Leather)
 		k.p("LowerTorso", "BeltBuckle", V(0.34, 0.26, 0.08), offset(0, 0.04, -0.62), violet)
 		k.p("RightUpperLeg", "KunaiPouch", V(0.4, 0.7, 0.32), offset(0.5, 0.1, -0.1), charcoal, M.Leather)
-		-- Hood (face stays open for the mask) and a long streaming scarf.
+		-- Tattered hip cloth.
+		k.p("LowerTorso", "TatterBack", V(0.9, 1.0, 0.07), offset(0, -0.6, 0.62, 8, 0, 0), charcoal, M.Fabric)
+		for _, s in ipairs(SIDES) do
+			k.p("LowerTorso", "TatterSide_" .. s[1], V(0.5, 0.9, 0.07), offset(s[2] * 0.7, -0.55, 0.44, 6, 0, s[2] * 8), deep, M.Fabric)
+		end
+		-- Crossed kunai on the back: bold X, readable when you are being chased.
+		for _, s in ipairs(SIDES) do
+			local lean = s[2] * 34
+			local d = V(-math.sin(math.rad(lean)), math.cos(math.rad(lean)), 0)
+			local center = V(0, 0.15, 0.74)
+			k.p("UpperTorso", "KunaiBlade_" .. s[1], V(0.18, 1.7, 0.06), offset(center.X, center.Y, center.Z, 0, 0, lean), steel, M.Metal)
+			local handle = center - d * 1.0
+			k.p("UpperTorso", "KunaiHandle_" .. s[1], V(0.14, 0.6, 0.12), offset(handle.X, handle.Y, handle.Z, 0, 0, lean), violet)
+		end
+		-- Hood (face stays open for the mask) with a swept point, and a long streaming scarf.
 		k.p("Head", "HoodShell", V(1.64, 1.48, 1.56), offset(0, 0.14, 0.2), charcoal, M.Fabric, "Ball")
 		k.p("Head", "HoodPoint", V(0.5, 0.8, 0.6), offset(0, 0.72, 0.48, 18), charcoal, M.Fabric, "Wedge")
 		k.p("Head", "HoodBrow", V(1.34, 0.3, 0.8), offset(0, 0.62, -0.3, -12), charcoal, M.Fabric)
 		ring(k, "UpperTorso", "ScarfRing", violet, 0.76, 0.3, 0.3, M.Fabric)
-		for i = 1, 3 do
-			k.p("UpperTorso", "ScarfTail" .. i, V(0.5, 0.34, 0.9), offset(-0.35 + (i % 2) * 0.1, 0.66 - i * 0.22, 0.76 + (i - 1) * 0.78, 10 + i * 8), i % 2 == 1 and violet or deep, M.Fabric)
-			k.p("UpperTorso", "ScarfFlap" .. i, V(0.4, 0.3, 0.8), offset(0.4 - (i % 2) * 0.1, 0.5 - i * 0.2, 0.9 + (i - 1) * 0.74, 8 + i * 7), i % 2 == 1 and deep or violet, M.Fabric)
+		-- Each scarf tail is two plates: it sweeps back and then flicks up as if caught by the wind.
+		local function plate(name, from, pitch, length, width, color)
+			local direction = V(0, -math.sin(math.rad(pitch)), math.cos(math.rad(pitch)))
+			local center = from + direction * (length / 2)
+			k.p("UpperTorso", name, V(width, 0.08, length), offset(center.X, center.Y, center.Z, pitch, 0, 0), color, M.Fabric)
+			return from + direction * length
 		end
+		local tipA = plate("ScarfTail1", V(0.34, 0.68, 0.5), 14, 1.2, 0.56, violet)
+		plate("ScarfFlap1", tipA, -16, 1.3, 0.44, deep)
+		local tipB = plate("ScarfTail2", V(-0.34, 0.62, 0.5), 28, 1.1, 0.52, deep)
+		plate("ScarfFlap2", tipB, -8, 1.4, 0.4, violet)
+		local tipC = plate("ScarfTail3", V(0.0, 0.7, 0.55), 40, 1.0, 0.4, violet)
+		plate("ScarfFlap3", tipC, 6, 1.0, 0.3, deep)
 	end,
 }
 
@@ -392,7 +419,7 @@ skins.skin_neonphantom = { -- Mall Phantom
 	hides = "outfit", headwear = true,
 	aura = {kind = "wisps", color = {C(235, 225, 255), C(150, 120, 230)}, mount = "UpperTorso", at = offset(0, -0.6, 0.7)},
 	build = function(k)
-		local black, white, red, gold, ink = C(24, 24, 34), C(250, 248, 244), C(196, 36, 60), C(255, 205, 70), C(14, 14, 22)
+		local black, white, red, gold, ink, silver = C(24, 24, 34), C(250, 248, 244), C(196, 36, 60), C(255, 205, 70), C(14, 14, 22), C(226, 228, 240)
 		-- Black tailcoat with a white shirt front, red cravat, white gloves, spats.
 		suit(k, {torso = black, hips = black, sleeve = black, forearm = black, glove = white, thigh = ink, shin = ink, shoe = ink, shoeMat = M.SmoothPlastic, sole = white})
 		k.p("UpperTorso", "ShirtFront", V(0.82, 1.34, 0.06), offset(0, -0.1, -0.62), white)
@@ -409,17 +436,26 @@ skins.skin_neonphantom = { -- Mall Phantom
 			k.p("LowerTorso", "TailLining_" .. s[1], V(0.7, 1.5, 0.06), offset(s[2] * 0.5, -0.9, 0.5, 10, 0, s[2] * 6), red, M.Fabric)
 		end
 		k.p("UpperTorso", "CravatKnot", V(0.24, 0.24, 0.2), offset(0, 0.62, -0.66), red, nil, "Ball")
-		-- Opera cape: black outside, red lining, high collar and a gold clasp.
+		-- A red rose in the lapel.
+		k.p("UpperTorso", "RoseStem", V(0.05, 0.4, 0.05), offset(-0.62, 0.15, -0.7, 0, 0, 20), C(60, 150, 70), nil, "Can")
+		k.p("UpperTorso", "Rose", V(0.28, 0.28, 0.24), offset(-0.7, 0.4, -0.72), red, nil, "Ball")
+		-- Opera cape: black outside, red lining, a very tall pointed collar, a gold clasp and a scalloped hem.
 		k.p("UpperTorso", "Cape", V(2.1, 2.7, 0.12), offset(0, -0.5, 0.64, 8, 0, 0), black, M.Fabric)
 		k.p("UpperTorso", "CapeLining", V(1.9, 2.5, 0.06), offset(0, -0.5, 0.57, 8, 0, 0), red, M.Fabric)
+		for i = 1, 5 do
+			k.p("UpperTorso", "CapeHem" .. i, V(0.5, 0.5, 0.14), offset(-0.82 + (i - 1) * 0.41, -1.9, 0.88, 8), black, M.Fabric, "Ball")
+		end
 		for _, s in ipairs(SIDES) do
-			k.p("UpperTorso", "CapeCollar_" .. s[1], V(0.5, 0.9, 0.16), offset(s[2] * 0.66, 0.9, 0.5, 0, 0, s[2] * -12), black, M.Fabric)
+			k.p("UpperTorso", "CapeCollar_" .. s[1], V(0.55, 1.5, 0.18), offset(s[2] * 0.72, 1.15, 0.5, 0, 0, s[2] * -16), black, M.Fabric)
 			k.p("UpperTorso", "CapeClasp_" .. s[1], V(0.26, 0.26, 0.12), offset(s[2] * 0.7, 0.66, -0.2), gold, M.Metal, "Ball")
 		end
-		-- Short top hat.
+		-- A silver-topped cane in the right hand.
+		k.p("RightHand", "CaneShaft", V(0.14, 2.4, 0.14), offset(0, -1.15, -0.1), black, M.SmoothPlastic, "Can")
+		k.p("RightHand", "CaneKnob", V(0.4, 0.4, 0.4), offset(0, 0.1, -0.1), silver, M.Metal, "Ball")
+		-- Tall top hat.
 		k.p("Head", "HatBrim", V(1.7, 0.1, 1.7), offset(0, 0.56, 0.02), black, nil, "Can")
-		k.p("Head", "HatCrown", V(1.2, 0.9, 1.2), offset(0, 1.02, 0.02), black, nil, "Can")
-		k.p("Head", "HatBand", V(1.24, 0.2, 1.24), offset(0, 0.72, 0.02), red, nil, "Can")
+		k.p("Head", "HatCrown", V(1.2, 1.3, 1.2), offset(0, 1.18, 0.02), black, nil, "Can")
+		k.p("Head", "HatBand", V(1.24, 0.22, 1.24), offset(0, 0.72, 0.02), red, nil, "Can")
 	end,
 }
 
@@ -572,6 +608,23 @@ skins.skin_golden = { -- Golden Champion
 		k.p("LowerTorso", "ChampionBelt", V(2.16, 0.38, 1.16), offset(0, 0.04, 0), gold, M.Metal)
 		k.p("LowerTorso", "BeltPlaque", V(0.96, 0.6, 0.1), offset(0, 0.04, -0.6), purple)
 		k.p("LowerTorso", "BeltJewel", V(0.4, 0.4, 0.08), offset(0, 0.04, -0.67), ruby, nil, "Disc")
+		-- Trophy sunburst: a big halo disc behind the shoulders with a fan of rays, so the silhouette reads from far away.
+		k.p("UpperTorso", "SunDisc", V(2.2, 2.2, 0.12), offset(0, 1.5, 0.95), gold, M.Metal, "Disc")
+		k.p("UpperTorso", "SunCore", V(1.5, 1.5, 0.14), offset(0, 1.5, 0.89), C(255, 238, 160), M.Metal, "Disc")
+		for i = 0, 8 do
+			local roll = -80 + i * 20
+			local rad = math.rad(roll)
+			k.p("UpperTorso", "SunRay" .. (i + 1), V(0.26, 1.0, 0.1), offset(math.sin(-rad) * 1.75, 1.5 + math.cos(rad) * 1.75, 0.96, 0, 0, roll), gold, M.Metal, "Wedge")
+		end
+		-- Layered shoulder plates, laurel chest sash and winged boots.
+		for _, s in ipairs(SIDES) do
+			k.p("UpperTorso", "PauldronMid_" .. s[1], V(1.18, 0.2, 1.36), offset(s[2] * 1.06, 1.1, 0, 0, 0, s[2] * 20), gold, M.Metal)
+			k.p("UpperTorso", "PauldronGem_" .. s[1], V(0.26, 0.26, 0.08), offset(s[2] * 1.2, 0.98, -0.7, 0, 0, 0), ruby, nil, "Disc")
+			k.p(s[1] .. "Foot", "BootWing_" .. s[1], V(0.1, 0.7, 0.9), offset(s[2] * 0.62, 0.44, 0.34, 0, 0, s[2] * 24), white, M.Metal, "Wedge")
+			k.p(s[1] .. "Foot", "BootWingTip_" .. s[1], V(0.1, 0.4, 0.6), offset(s[2] * 0.7, 0.18, 0.6, 0, 0, s[2] * 30), gold, M.Metal, "Wedge")
+		end
+		k.p("UpperTorso", "ChampionSash", V(0.34, 2.4, 0.1), offset(0, 0, -0.64, 0, 0, 36), purple, M.Fabric)
+		k.p("UpperTorso", "SashTrim", V(0.1, 2.4, 0.12), offset(0.14, 0, -0.66, 0, 0, 36), gold, M.Metal)
 	end,
 }
 
