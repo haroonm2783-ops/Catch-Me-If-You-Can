@@ -1,7 +1,9 @@
 # Catch Me If You Can — preserved development state
 
 > **Superseded:** version 0.4.0 (Catch Mall overhaul) replaced the Neon Heights map, and 0.5.0 (art-direction change:
-> avatar-first characters, Sunburst palette, compact hub and UI) replaced most of the 0.4.0 presentation. Read
+> avatar-first characters, Sunburst palette, compact hub and UI) replaced most of the 0.4.0 presentation, and 0.6.0
+> (cosmetics and Shop overhaul: full-outfit skins, 12 masks, 10 trails, 7 emotes, an animated showroom) replaced the
+> 0.5.0 cosmetics. Read
 > `DEVELOPMENT_PROGRESS.md` and `docs/LAUNCH_READINESS.md` first; the sections below are historical 0.2.x notes.
 
 

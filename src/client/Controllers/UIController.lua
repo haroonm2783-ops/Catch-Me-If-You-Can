@@ -850,24 +850,24 @@ end
 
 -- Rotate / front / back / replay / full-screen controls for a stage. Returns the control bar height.
 function UIController:_previewControls(parent, getStage, animated, onFull, width)
-	local single = width >= 470
-	local height = single and 34 or 70
+	local single = width >= 340
+	local height = single and 32 or 66
 	local controls = frame(parent, {Name = "PreviewControls", AnchorPoint = Vector2.new(0.5, 1), Position = UDim2.new(0.5, 0, 1, 0), Size = UDim2.new(1, -4, 0, height), BackgroundTransparency = 1})
 	local specs = {
-		{"PreviewLeft", "<", 40, function(stage) stage:Rotate(-math.pi / 4) end},
-		{"PreviewFront", "FRONT", 66, function(stage) stage:Front() end},
-		{"PreviewBack", "BACK", 60, function(stage) stage:Back() end},
-		{"PreviewRight", ">", 40, function(stage) stage:Rotate(math.pi / 4) end},
+		{"PreviewLeft", "<", 36, function(stage) stage:Rotate(-math.pi / 4) end},
+		{"PreviewFront", "FRONT", 58, function(stage) stage:Front() end},
+		{"PreviewBack", "BACK", 52, function(stage) stage:Back() end},
+		{"PreviewRight", ">", 36, function(stage) stage:Rotate(math.pi / 4) end},
 	}
-	if animated then table.insert(specs, {"PreviewReplay", "REPLAY", 82, function(stage) stage:Replay() end}) end
-	if onFull then table.insert(specs, {"PreviewFullscreen", "FULL", 60, false}) end
+	if animated then table.insert(specs, {"PreviewReplay", "REPLAY", 72, function(stage) stage:Replay() end}) end
+	if onFull then table.insert(specs, {"PreviewFullscreen", "FULL", 50, false}) end
 	local rows = {{}, {}}
 	if single then rows[1] = specs else
 		for index, spec in ipairs(specs) do table.insert(rows[index <= 4 and 1 or 2], spec) end
 	end
 	for rowIndex, row in ipairs(rows) do
 		if #row > 0 then
-			local holder = frame(controls, {Name = "Row" .. rowIndex, Position = UDim2.fromOffset(0, (rowIndex - 1) * 36), Size = UDim2.new(1, 0, 0, 32), BackgroundTransparency = 1})
+			local holder = frame(controls, {Name = "Row" .. rowIndex, Position = UDim2.fromOffset(0, (rowIndex - 1) * 34), Size = UDim2.new(1, 0, 0, 32), BackgroundTransparency = 1})
 			local layout = list(holder, true, 6)
 			layout.HorizontalAlignment = Enum.HorizontalAlignment.Center
 			for order, spec in ipairs(row) do
@@ -1039,20 +1039,20 @@ function UIController:_renderShop()
 	end
 	local columns = compact and (portrait and 2 or 3) or 3
 	local surface = compact and scroll(self.panelContent, {Name = "CompactCollection"}) or self.panelContent
-	local detailHeight = portrait and 502 or 286
+	local detailHeight = portrait and 620 or 286
 	local cellHeight = portrait and 164 or 178
 	local gridHeight = math.max(cellHeight, math.ceil(#visible / columns) * (cellHeight + 10))
 	local detail = frame(surface, {
 		Name = "FittingStage",
 		Position = UDim2.new(),
-		Size = compact and UDim2.new(1, -5, 0, detailHeight) or UDim2.new(0.4, -8, 1, 0),
+		Size = compact and UDim2.new(1, -5, 0, detailHeight) or UDim2.new(0.44, -8, 1, 0),
 		BackgroundColor3 = C.panel,
 	}, 18)
 	stroke(detail, C.ink, 0, 3)
 	gradient(detail, Color3.fromRGB(96, 76, 200), Color3.fromRGB(46, 34, 112), 115)
 	local collection = frame(surface, {
-		Position = compact and UDim2.fromOffset(0, detailHeight + 18) or UDim2.new(0.4, 10, 0, 0),
-		Size = compact and UDim2.new(1, -5, 0, gridHeight + 78) or UDim2.new(0.6, -10, 1, 0), BackgroundTransparency = 1,
+		Position = compact and UDim2.fromOffset(0, detailHeight + 18) or UDim2.new(0.44, 10, 0, 0),
+		Size = compact and UDim2.new(1, -5, 0, gridHeight + 78) or UDim2.new(0.56, -10, 1, 0), BackgroundTransparency = 1,
 	})
 	local categories = scroll(collection, {Name = "Categories", Position = UDim2.fromOffset(0, 0), Size = UDim2.new(1, 0, 0, 44), ScrollBarThickness = 0}, true)
 	list(categories, true, 6)
@@ -1161,7 +1161,11 @@ function UIController:_renderItemDetail(parent, item, horizontal)
 	local ready = self:_isReady(item)
 	local kind, previewId, extra = self:_previewSpec(item)
 	label(parent, (KIND_TITLE[kind] or "TRY IT ON") .. " / " .. string.upper(item.category), {Name = "StageTitle", Position = UDim2.fromOffset(16, 13), Size = UDim2.new(1, -32, 0, 17), Font = F.black, TextSize = 10, TextColor3 = C.cyan})
-	local infoHeight = horizontal and 0 or 238
+	-- The info block is only as tall as its rows, so the model gets everything else.
+	local infoHeight = 0
+	if not horizontal then
+		infoHeight = 204 + (item.grants and 46 or 0) + (owned and item.category == "emotes" and 38 or 0) + (self:_inRound() and 18 or 0)
+	end
 	local stage = frame(parent, {Name = "PreviewStage", Position = UDim2.fromOffset(8, 35), Size = horizontal and UDim2.new(0.46, -8, 1, -43) or UDim2.new(1, -16, 1, -(infoHeight + 52)), BackgroundTransparency = 1})
 	local animated = kind == "emote" or kind == "trail" or kind == "tag"
 	local controlsHeight = self:_previewControls(stage, function() return self.stage end, animated, function() self:_openInspect(item) end, math.floor(stage.AbsoluteSize.X))
@@ -1368,7 +1372,7 @@ end
 
 function UIController:_renderSettings()
 	self.panelTitle.Text = "SETTINGS"
-	self.panelSubtitle.Text = "CATCH ME IF YOU CAN / " .. tostring(self.ctx.Config.Version or "v0.5.0") .. " / Preferences save with your profile."
+	self.panelSubtitle.Text = "CATCH ME IF YOU CAN / " .. tostring(self.ctx.Config.Version or "v0.6.0") .. " / Preferences save with your profile."
 	local container = scroll(self.panelContent)
 	list(container, false, 10)
 	local settings = self.ctx.Profile.settings or {}

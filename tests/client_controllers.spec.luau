@@ -575,6 +575,7 @@ for _, size in ipairs({Vector2.new(1280, 720), Vector2.new(390, 760), Vector2.ne
 	find(ui, "PreviewFront").Activated:Fire()
 	expect(ui.stage.targetAngle == 0, "Front returns to the face at " .. where)
 	local view = find(ui, "CharacterPreview")
+	expect(view.AbsoluteSize.X >= 260 and view.AbsoluteSize.Y >= 200, "The model view is large enough to judge an outfit at " .. where .. " (" .. tostring(view.AbsoluteSize) .. ")")
 	local dragStart = ui.stage.angle
 	view.InputBegan:Fire({UserInputType = Enum.UserInputType.Touch})
 	view.InputChanged:Fire({UserInputType = Enum.UserInputType.Touch, Delta = Vector3.new(40, 0, 0)})

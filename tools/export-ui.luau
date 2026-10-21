@@ -1,7 +1,7 @@
 -- Optional layout inspection (not a Roblox render): builds the production UIController against the same
 -- deterministic GUI mock the tests use and writes the resulting tree as JSON for tools/render-ui.py.
 -- Usage: .tooling/bin/lune run tools/export-ui.luau WIDTH HEIGHT STATE [touch] [output.json]
--- STATE: lobby | runner | hunter | results | shop | locker | more | tutorial
+-- STATE: lobby | runner | hunter | results | shop | shop-skin | shop-mask | shop-trail | shop-emote | shop-collection | shop-inspect | locker | more | tutorial
 local fs = require("@lune/fs")
 local luau = require("@lune/luau")
 local roblox = require("@lune/roblox")
@@ -89,6 +89,7 @@ local function fixture(viewport, inputType)
 			CameraOffset = Vector3.zero, FieldOfView = 70, Health = 100, MoveDirection = Vector3.zero,
 			FloorMaterial = Enum.Material.Concrete, Activated = signal(), Destroying = signal(),
 			Died = signal(), StateChanged = signal(), Ended = signal(), IsPlaying = false, TimePosition = 0,
+			InputBegan = signal(), InputChanged = signal(), InputEnded = signal(),
 		}}, {
 			__index = function(self, key)
 				if methods[key] then return methods[key] end
@@ -175,24 +176,66 @@ local function fixture(viewport, inputType)
 	function workspace:GetServerTimeNow() return 100 end
 	workspace.CurrentCamera = instance.new("Camera"); workspace.CurrentCamera.CameraSubject = humanoid; workspace.CurrentCamera.Parent = workspace
 	local shared = instance.new("Folder"); shared.Name = "CatchShared"
-	local appearanceModule = instance.new("ModuleScript"); appearanceModule.Name = "Appearance"; appearanceModule.Parent = shared
+	local moduleScripts = {}
+	for _, name in ipairs({"Appearance", "Emotes", "Poses", "Trails", "PreviewStage"}) do
+		local moduleScript = instance.new("ModuleScript"); moduleScript.Name = name; moduleScript.Parent = shared
+		moduleScripts[name] = moduleScript
+	end
 	local replicated = instance.new("ReplicatedStorage"); shared.Parent = replicated
 	local previewCalls = {}
-	local appearance = {BuildPreview = function(skin, mask, extra)
-		table.insert(previewCalls, {skin = skin, mask = mask, extra = extra})
-		return instance.new("Model")
-	end}
+	-- A small mannequin built from the fixture's own instances: real CFrames and joints, so previews can be posed.
+	local function fakeRig()
+		local rig = instance.new("Model")
+		local layout = {
+			{"HumanoidRootPart", Vector3.new(2, 2, 1), Vector3.new(0, 0, 0)}, {"LowerTorso", Vector3.new(2, 0.4, 1), Vector3.new(0, -0.1, 0)},
+			{"UpperTorso", Vector3.new(2, 1.6, 1), Vector3.new(0, 0.9, 0)}, {"Head", Vector3.new(1.2, 1.2, 1.2), Vector3.new(0, 2.35, 0)},
+			{"LeftUpperArm", Vector3.new(1, 1.2, 1), Vector3.new(-1.5, 1.1, 0)}, {"RightUpperArm", Vector3.new(1, 1.2, 1), Vector3.new(1.5, 1.1, 0)},
+			{"LeftLowerArm", Vector3.new(1, 1.05, 1), Vector3.new(-1.5, 0, 0)}, {"RightLowerArm", Vector3.new(1, 1.05, 1), Vector3.new(1.5, 0, 0)},
+			{"LeftUpperLeg", Vector3.new(1, 1.2, 1), Vector3.new(-0.5, -0.9, 0)}, {"RightUpperLeg", Vector3.new(1, 1.2, 1), Vector3.new(0.5, -0.9, 0)},
+			{"LeftLowerLeg", Vector3.new(1, 1.2, 1), Vector3.new(-0.5, -2.1, 0)}, {"RightLowerLeg", Vector3.new(1, 1.2, 1), Vector3.new(0.5, -2.1, 0)},
+		}
+		for _, spec in ipairs(layout) do
+			local part = instance.new("Part")
+			part.Name, part.Size, part.CFrame, part.Transparency, part.Anchored, part.Parent = spec[1], spec[2], roblox.CFrame.new(spec[3]), 0, true, rig
+		end
+		for _, link in ipairs({{"Root", "HumanoidRootPart", "LowerTorso"}, {"Waist", "LowerTorso", "UpperTorso"}, {"Neck", "UpperTorso", "Head"},
+			{"LeftShoulder", "UpperTorso", "LeftUpperArm"}, {"RightShoulder", "UpperTorso", "RightUpperArm"}, {"LeftElbow", "LeftUpperArm", "LeftLowerArm"},
+			{"RightElbow", "RightUpperArm", "RightLowerArm"}, {"LeftHip", "LowerTorso", "LeftUpperLeg"}, {"RightHip", "LowerTorso", "RightUpperLeg"},
+			{"LeftKnee", "LeftUpperLeg", "LeftLowerLeg"}, {"RightKnee", "RightUpperLeg", "RightLowerLeg"}}) do
+			local joint = instance.new("Motor6D")
+			joint.Name, joint.Part0, joint.Part1 = link[1], rig:FindFirstChild(link[2]), rig:FindFirstChild(link[3])
+			joint.C0 = joint.Part0.CFrame:ToObjectSpace(joint.Part1.CFrame)
+			joint.Parent = joint.Part0
+		end
+		return rig
+	end
+	local appearance = {
+		HasSkin = function() return true end, HasMask = function() return true end,
+		BuildPreview = function(skin, mask, extra)
+			table.insert(previewCalls, {skin = skin, mask = mask, extra = extra})
+			return fakeRig()
+		end,
+	}
 	local services = {Players = players, TweenService = {Create = function(_, object, _, values) return {Play = function() for key, value in pairs(values) do object[key] = value end end} end},
 		RunService = runService, UserInputService = input, GuiService = guiService, ReplicatedStorage = replicated, ContextActionService = cas,
 		ContentProvider = {PreloadAsync = function(_, assets, callback) for _, asset in ipairs(assets) do callback(asset.SoundId, Enum.AssetFetchStatus.Success) end end},
-		SoundService = instance.new("SoundService"), Lighting = instance.new("Lighting"), Debris = {AddItem = function() end}}
+		SoundService = instance.new("SoundService"), Lighting = instance.new("Lighting"), Debris = {AddItem = function() end}, Workspace = workspace}
+	local sharedModules = {}
 	local environment = {game = {GetService = function(_, name) return assert(services[name], name) end}, workspace = workspace,
 		Instance = instance, task = {spawn = function(fn) fn() end, defer = function(fn) fn() end, delay = function() end},
 		os = {clock = function() return monotonic end},
-		require = function(module) expect(module == appearanceModule, "UI must use shared Appearance"); return appearance end,
+		require = function(module)
+			if module == moduleScripts.Appearance then return appearance end
+			return assert(sharedModules[module], "Controllers may only require shared cosmetics modules")
+		end,
 		TweenInfo = {new = function() return {} end}, Random = {new = function() return {NextInteger = function(_, a, b) return math.floor((a + b) / 2) end, NextNumber = function(_, a, b) return (a + b) / 2 end} end},
 	}
-	for _, name in ipairs({"Enum", "Color3", "ColorSequence", "NumberSequence", "UDim", "UDim2", "Vector2", "Vector3", "CFrame"}) do environment[name] = roblox[name] end
+	for _, name in ipairs({"Enum", "Color3", "ColorSequence", "ColorSequenceKeypoint", "NumberSequence", "NumberSequenceKeypoint", "NumberRange", "UDim", "UDim2", "Vector2", "Vector3", "CFrame"}) do environment[name] = roblox[name] end
+	for _, name in ipairs({"Trails", "Poses", "Emotes", "PreviewStage"}) do
+		local scoped = table.clone(environment)
+		scoped.script = {Parent = {WaitForChild = function(_, sibling) return moduleScripts[sibling] end}}
+		sharedModules[moduleScripts[name]] = luau.load(fs.readFile("src/shared/" .. name .. ".lua"), {environment = scoped, debugName = name})()
+	end
 	local profile = Rules.NewProfile(1700000000); profile.loaded = true; profile.persistence = "session"; profile.quests = {}
 	local actions = {}
 	local ctx = {Config = Config, Catalog = Catalog, Rules = Rules, Achievements = Achievements, Profile = profile, State = {phase = "Waiting", roundId = 0, players = {}}, Controllers = {},
@@ -229,6 +272,12 @@ elseif state == "results" then
 	ui:OnState(f.ctx.State)
 	ui:OnNotice({kind = "reward", xp = 120, coins = 80, rating = 24, pickups = 12, closeCalls = 3, tags = 0, finds = 0, survived = 150})
 elseif state == "shop" then ui:OpenMenu("Shop")
+elseif state == "shop-skin" then ui.category, ui.selectedItem = "skins", "skin_galaxy"; ui:OpenMenu("Shop")
+elseif state == "shop-mask" then ui.category, ui.selectedItem = "masks", "mask_astral"; ui:OpenMenu("Shop")
+elseif state == "shop-trail" then ui.category, ui.selectedItem = "trails", "trail_stardust"; ui:OpenMenu("Shop")
+elseif state == "shop-emote" then ui.category, ui.selectedItem = "emotes", "emote_flip"; ui:OpenMenu("Shop")
+elseif state == "shop-collection" then ui.category, ui.selectedItem = "bundles", "bundle_galaxy"; ui:OpenMenu("Shop")
+elseif state == "shop-inspect" then ui.category, ui.selectedItem = "skins", "skin_galaxy"; ui:OpenMenu("Shop"); ui:_openInspect(Catalog.Get("skin_galaxy"))
 elseif state == "locker" then ui:OpenMenu("Inventory")
 elseif state == "more" then ui:ToggleMore()
 elseif state == "lobby" then ui:OnState({phase = "Intermission", roundId = 2, endsAt = 114, players = {}})
@@ -251,6 +300,7 @@ local function dump(object)
 		entry.textAlign = p.TextXAlignment and p.TextXAlignment.Name or "Left"
 		entry.textTransparency = p.TextTransparency or 0
 	end
+	if object.ClassName == "ViewportFrame" then return entry end -- 3D content is not layout
 	for _, child in ipairs(object._children) do
 		if child.ClassName == "UICorner" then entry.corner = child._props.CornerRadius and child._props.CornerRadius.Offset or 8
 		elseif child.ClassName == "UIListLayout" then

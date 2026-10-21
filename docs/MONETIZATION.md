@@ -33,24 +33,40 @@ fixed charge. Coin prices are enforced from the server's catalog.
 
 | Catalog ID | Cosmetic entitlement | Design price (Robux) |
 | --- | --- | ---: |
-| `skin_neonphantom` | Phantom Prankster (Epic) | 399 |
-| `skin_ninja` | Shadow Ninja (Epic) | 349 |
-| `skin_midnight` | Midnight Magician (Epic) | 449 |
-| `skin_golden` | Golden Champion (Legendary) | 599 |
-| `mask_phantom` | Phantom Mask | 149 |
-| `mask_kitsune` | Kitsune Mask | 199 |
+| `skin_ninja` | Shadow Runner (Epic outfit) | 349 |
+| `skin_neonphantom` | Mall Phantom (Epic outfit) | 399 |
+| `skin_trickster` | Royal Trickster (Epic outfit) | 449 |
+| `skin_galaxy` | Galaxy Escape Artist (Legendary outfit) | 699 |
+| `skin_golden` | Golden Champion (Legendary outfit) | 599 |
+| `mask_phantom` | Phantom Half-Mask (Epic) | 149 |
+| `mask_kitsune` | Kitsune Mask (Epic) | 199 |
 | `mask_skull` | Gold Skull Mask (Legendary) | 349 |
-| `bundle_night` | Midnight Magician, Phantom Mask, Afterglow trail | 649 |
-| `bundle_ninja` | Shadow Ninja, Shinobi Wrap, Sunset Circuit trail | 549 |
-| `vip_founder` | Streetwear Star, Jester Grin, Food Court Shuffle | 799 |
+| `mask_astral` | Astral Visor (Legendary) | 399 |
+| `trail_shadow` | Shadow Smoke trail (Epic) | 249 |
+| `trail_gold` | Golden Footsteps trail (Legendary) | 299 |
+| `trail_stardust` | Cosmic Stardust trail (Legendary) | 349 |
+| `emote_royal` | Royal Twirl emote (Legendary) | 299 |
+| `bundle_shadow` | Shadow Runner, Shadow Wrap, Shadow Smoke, Sneaky Tiptoe | 499 |
+| `bundle_phantom` | Mall Phantom, Phantom Half-Mask, Electric Sparks, Dramatic Faint | 499 |
+| `bundle_trickster` | Royal Trickster, Jester Grin, Prism Streak, Showoff Flip | 549 |
+| `bundle_galaxy` | Galaxy Escape Artist, Astral Visor, Cosmic Stardust, Royal Twirl | 1,099 |
+| `vip_founder` | Street Legend, Cool Shades, Speed Streaks, Food Court Shuffle (Superstar Club) | 349 |
 
-Free and earnable skins (no Robux needed): **Original You** (free, your own avatar), **Skate Kid** (level 5),
-**Pizza Courier** (600 coins), **Bunny Hop** (900), **Bamboo Panda** (1,200), **Streetwear Star** (1,800),
-**Candy Pop** (2,600), **Jet Runner** (25 wins) and the Legendary **Dragon Racer** (60 wins). Masks: Street
-Bandana (free), Cool Shades, Shinobi Wrap and Jester Grin (coins), Pixel Visage (75 tags). Extra trails (Hot Foot,
-Candy Swirl) and tag effects (Star Pop, Party Pop at 40 wins) are earned or bought with coins.
-Skins are *overlays on the player's own Roblox avatar*; there are no skin-tone or hair-color items any more.
-Rarity tiers: Common (free), Rare (coins or a small milestone), Epic (a real goal or a premium purchase, adds an
+Each Robux row is its own game pass (18 passes); collections are separate passes that grant their four pieces (owning
+a piece already is fine: only the missing ownership flags are added, with no automatic refund, so say so in the pass
+description). The sale gate (`Catalog.IsReady`) means an item is never offered if its skin, mask, trail or emote is not
+implemented, and tests enforce that every collection costs less than its pieces and uses no fake-scarcity wording.
+Until a pass ID is entered, the Shop shows the item as **COMING SOON** with the planned price and sends nothing.
+
+Free and earnable (no Robux needed): **Original You** (free), **Pizza Courier** (500 coins), **Skate Kid** (level 5),
+**Bunny Hop** (900), **Bamboo Panda** (1,200), **Street Legend** (1,800), **Candy Pop** (2,600), **Jet Runner**
+(25 wins) and the Legendary **Dragon Racer** (60 wins). Masks: Street Bandana (free), Cool Shades, Big Smile, Shadow
+Wrap, Kitty Cat, Jester Grin, Jack-o'-Lantern (coins), Retro Bot (75 tags). Trails: Aqua Dash, Speed Streaks, Hot
+Foot, Prism Streak, Candy Swirl, Electric Sparks (coins) and Sunset Glide (20 wins). Emotes: Hey, Shopper (free),
+Food Court Shuffle, Sneaky Tiptoe, Mall Chicken, Dramatic Faint, Showoff Flip (coins). Tag effects: Star Pop (coins),
+Party Pop (40 wins), Cherry Bloom (50 tags).
+Skins are *costumes fitted to the player's own Roblox avatar*; there are no skin-tone or hair-color items.
+Rarity tiers: Common (free or cheap), Rare (coins or a small milestone), Epic (a real goal or a premium purchase, adds an
 ambient aura), Legendary (showpieces). **Nothing here changes speed, tagging, hiding, XP or coins.**
 
 Skins and masks occupy independent equipment slots and can be combined. Bundles

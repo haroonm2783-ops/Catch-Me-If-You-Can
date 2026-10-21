@@ -21,16 +21,30 @@ Live status and next steps are in [DEVELOPMENT_PROGRESS.md](DEVELOPMENT_PROGRESS
 in [docs/ART_DIRECTION.md](docs/ART_DIRECTION.md) and the honest launch assessment is
 [docs/LAUNCH_READINESS.md](docs/LAUNCH_READINESS.md).
 
+**Version 0.6.0 is a cosmetics and Shop overhaul** (details in [docs/COSMETICS.md](docs/COSMETICS.md)):
+
+- **Skins are full costumes** fitted to your own avatar (Shadow Runner, Mall Phantom, Street Legend, Royal Trickster,
+  Galaxy Escape Artist, Dragon Racer and more), in four rarity tiers; **12 masks**; **10 trails** built from real
+  `Trail` and `ParticleEmitter` objects (speed streaks, electric sparks, cosmic stardust, shadow smoke, golden
+  footprints); **7 emotes** that actually perform (procedural poses, no uploaded animations).
+- **The Shop is a showroom**: a large auto-framed 3D preview of *your* avatar for every category, a trail test run on a
+  looping track, emotes that play the moment you click them, drag/arrow/front/back rotation, replay, full-screen
+  inspect, and clear owned / equipped / locked / affordable / coming-soon states.
+- **Matching collections** (outfit + mask + trail + emote), all cosmetic only, all unconfigured Robux items until you
+  enter real pass IDs.
+
 **Nothing in this version has been run in Roblox Studio.** Every check below uses deterministic mocks of the
 Roblox boundary. Lighting, feel, rendering, audio, phones, real DataStores and real Robux remain unverified; the
 images below are **software geometry previews**, not screenshots. See the launch report and
-[the Studio acceptance script](docs/TESTING.md#050-acceptance-script-start-here), including the list of checks that
+[the Studio acceptance scripts](docs/TESTING.md#060-cosmetics-acceptance-script-start-here), including the list of checks that
 need two or more real players.
 
 ![Spawn hub and sunburst entrance. Software preview, not a Studio screenshot](docs/previews/hub-spawn.png)
 ![Atrium. Software preview, not a Studio screenshot](docs/previews/atrium-ground.png)
 ![Toy Kingdom interior. Software preview, not a Studio screenshot](docs/previews/store-toys.png)
 ![Skins. Software preview on a stand-in avatar, not a Studio screenshot](docs/previews/Character-lineup.png)
+![Trails drawn behind a running stand-in avatar. Software preview, not a Studio screenshot](docs/previews/Trail-previews.png)
+![Emote key frames. Software preview, not a Studio screenshot](docs/previews/Emote-frames.png)
 
 ## Open the game directly — no plugins required
 
@@ -41,7 +55,7 @@ need two or more real players.
 2. In Roblox Studio, choose **File → Open from File** and select the downloaded
    place. Catch Mall is already present in the editor; it is not an empty place
    that requires pasting scripts. The map is reused at runtime.
-3. Press **Play**. Output should say `CATCH MALL initialized. 0.5.0`; if it
+3. Press **Play**. Output should say `CATCH MALL initialized. 0.6.0`; if it
    shows an older version, download and open the updated file. A solo Studio
    session enters a clearly labeled practice round
    after the 16-second intermission and 5-second head start. Practice awards no

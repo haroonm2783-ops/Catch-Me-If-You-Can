@@ -580,14 +580,23 @@ skins.skin_trickster = { -- Royal Trickster
 			k.p(s[1] .. "Foot", "ShoeCurl_" .. s[1], V(0.4, 0.5, 0.5), offset(0, 0.26, -0.82, -30), pink, nil, "Wedge")
 			k.p(s[1] .. "Foot", "ShoeBell_" .. s[1], V(0.26, 0.26, 0.26), offset(0, 0.54, -0.96), gold, M.Metal, "Ball")
 		end
-		-- Three-horned jester crown with bells.
+		-- Three-horned jester crown with bells: each horn is two chained segments that curve outward.
 		k.p("Head", "CrownBand", V(1.36, 0.28, 1.36), offset(0, 0.58, 0.02), gold, M.Metal, "Can")
-		local horns = {{-0.5, purple, -34}, {0, pink, 0}, {0.5, gold, 34}}
+		local horns = {{-1, purple, 18, 48}, {0, pink, 0, 0}, {1, gold, 18, 48}}
 		for i, h in ipairs(horns) do
-			local x, color, tilt = h[1], h[2], h[3]
-			k.p("Head", "HornLow" .. i, V(0.46, 0.7, 0.46), offset(x * 0.8, 0.98, 0.04, 0, 0, tilt * 0.6), color, M.Fabric, "Can")
-			k.p("Head", "HornHigh" .. i, V(0.34, 0.7, 0.34), offset(x * 1.4, 1.54 - (i == 2 and 0 or 0.1), 0.04, 0, 0, tilt), color, M.Fabric, "Can")
-			k.p("Head", "HornBell" .. i, V(0.28, 0.28, 0.28), offset(x * 1.7, 1.96 - (i == 2 and 0 or 0.16), 0.04), white, M.Metal, "Ball")
+			local side, color = h[1], h[2]
+			local a1, a2 = math.rad(h[3]), math.rad(h[4])
+			local base = V(side * 0.42, 0.72, 0.04)
+			local d1 = V(side * math.sin(a1), math.cos(a1), 0)
+			local d2 = V(side * math.sin(a2), math.cos(a2), 0)
+			local lowCenter = base + d1 * 0.31
+			local tip1 = base + d1 * 0.62
+			local highCenter = tip1 + d2 * 0.3
+			local tip2 = tip1 + d2 * 0.6
+			local bell = tip2 + d2 * 0.1
+			k.p("Head", "HornLow" .. i, V(0.42, 0.62, 0.42), offset(lowCenter.X, lowCenter.Y, lowCenter.Z, 0, 0, -side * h[3]), color, M.Fabric, "Can")
+			k.p("Head", "HornHigh" .. i, V(0.3, 0.6, 0.3), offset(highCenter.X, highCenter.Y, highCenter.Z, 0, 0, -side * h[4]), color, M.Fabric, "Can")
+			k.p("Head", "HornBell" .. i, V(0.28, 0.28, 0.28), offset(bell.X, bell.Y, bell.Z), white, M.Metal, "Ball")
 		end
 	end,
 }
@@ -607,8 +616,8 @@ skins.skin_candy = { -- Candy Pop
 			k.p("LeftUpperLeg", "PolkaDot_L" .. i, V(0.3, 0.3, 0.06), offset(p[1] * 0.4, p[2], -0.58), white, nil, "Disc")
 		end
 		-- Cotton-candy shoulder puffs.
-		k.p("UpperTorso", "PuffPink", V(0.9, 0.9, 0.9), offset(-1.05, 0.9, 0), pink, nil, "Ball")
-		k.p("UpperTorso", "PuffBlue", V(0.9, 0.9, 0.9), offset(1.05, 0.9, 0), blue, nil, "Ball")
+		k.p("UpperTorso", "PuffPink", V(0.72, 0.72, 0.72), offset(-1.12, 0.78, 0), pink, nil, "Ball")
+		k.p("UpperTorso", "PuffBlue", V(0.72, 0.72, 0.72), offset(1.12, 0.78, 0), blue, nil, "Ball")
 		-- Ice-cream hat: waffle band, two scoops, a cherry and sprinkles.
 		k.p("Head", "WaffleBand", V(1.4, 0.34, 1.4), offset(0, 0.56, 0.02), cone, nil, "Can")
 		k.p("Head", "ScoopPink", V(1.55, 1.1, 1.55), offset(0, 1.06, 0.02), pink, nil, "Ball")
@@ -815,8 +824,8 @@ local function buildMask(k, maskId)
 			for i = 1, 2 do
 				m("CatWhisker" .. i .. "_" .. s[1], V(0.5, 0.03, 0.03), offset(s[2] * 0.62, -0.2 - (i - 1.5) * 0.12, -0.74, 0, 0, s[2] * (i - 1.5) * 14), ink)
 			end
-			m("TopCatEar_" .. s[1], V(0.4, 0.5, 0.18), offset(s[2] * 0.42, 0.78, -0.3, 0, 0, s[2] * -12), orange, nil, "Wedge")
-			m("TopCatEarInner_" .. s[1], V(0.2, 0.28, 0.08), offset(s[2] * 0.42, 0.74, -0.4, 0, 0, s[2] * -12), pink, nil, "Wedge")
+			m("TopCatEar_" .. s[1], V(0.44, 0.4, 0.18), offset(s[2] * 0.4, 0.74, -0.3, 0, 0, s[2] * -8), orange, nil, "Wedge")
+			m("TopCatEarInner_" .. s[1], V(0.22, 0.24, 0.08), offset(s[2] * 0.4, 0.7, -0.4, 0, 0, s[2] * -8), pink, nil, "Wedge")
 		end
 	elseif maskId == "mask_ninja" then
 		local cloth, wrap = C(40, 44, 70), C(230, 40, 50)
@@ -915,8 +924,9 @@ local function buildMask(k, maskId)
 		m("VisorFrameBottom", V(1.0, 0.08, 0.08), offset(0, -0.14, -0.74), gold, M.Metal)
 		m("VisorBridge", V(0.14, 0.34, 0.14), offset(0, 0.1, -0.76), gold, M.Metal)
 		for i, p in ipairs({{-0.3, 0.2}, {0.2, 0.0}, {0.34, 0.26}}) do m("VisorStar" .. i, V(0.07, 0.07, 0.04), offset(p[1], p[2], -0.78), C(255, 244, 190), nil, "Disc") end
-		m("TopPlanet", V(0.34, 0.34, 0.34), offset(0, 0.98, -0.1), teal, nil, "Ball")
-		m("TopPlanetRing", V(0.72, 0.05, 0.72), offset(0, 0.98, -0.1, 0, 0, 16), gold, M.Metal, "Can")
+		m("TopPlanetStem", V(0.05, 0.34, 0.05), offset(0, 0.76, -0.1), gold, M.Metal, "Can")
+		m("TopPlanet", V(0.34, 0.34, 0.34), offset(0, 1.0, -0.1), teal, nil, "Ball")
+		m("TopPlanetRing", V(0.72, 0.05, 0.72), offset(0, 1.0, -0.1, 0, 0, 16), gold, M.Metal, "Can")
 	end
 end
 
@@ -1431,7 +1441,7 @@ return Catalog
           <string name="Source"><![CDATA[-- Shared tunables. Prices and pass IDs live in Catalog.lua.
 local Config = {
 	GameName = "CATCH ME IF YOU CAN",
-	Version = "0.5.0",
+	Version = "0.6.0",
 	-- "Mall" (default) or "NeonHeights" (the earlier rooftop map, kept as an alternate).
 	Map = "Mall",
 	Round = {
@@ -12633,24 +12643,24 @@ end
 
 -- Rotate / front / back / replay / full-screen controls for a stage. Returns the control bar height.
 function UIController:_previewControls(parent, getStage, animated, onFull, width)
-	local single = width >= 470
-	local height = single and 34 or 70
+	local single = width >= 340
+	local height = single and 32 or 66
 	local controls = frame(parent, {Name = "PreviewControls", AnchorPoint = Vector2.new(0.5, 1), Position = UDim2.new(0.5, 0, 1, 0), Size = UDim2.new(1, -4, 0, height), BackgroundTransparency = 1})
 	local specs = {
-		{"PreviewLeft", "<", 40, function(stage) stage:Rotate(-math.pi / 4) end},
-		{"PreviewFront", "FRONT", 66, function(stage) stage:Front() end},
-		{"PreviewBack", "BACK", 60, function(stage) stage:Back() end},
-		{"PreviewRight", ">", 40, function(stage) stage:Rotate(math.pi / 4) end},
+		{"PreviewLeft", "<", 36, function(stage) stage:Rotate(-math.pi / 4) end},
+		{"PreviewFront", "FRONT", 58, function(stage) stage:Front() end},
+		{"PreviewBack", "BACK", 52, function(stage) stage:Back() end},
+		{"PreviewRight", ">", 36, function(stage) stage:Rotate(math.pi / 4) end},
 	}
-	if animated then table.insert(specs, {"PreviewReplay", "REPLAY", 82, function(stage) stage:Replay() end}) end
-	if onFull then table.insert(specs, {"PreviewFullscreen", "FULL", 60, false}) end
+	if animated then table.insert(specs, {"PreviewReplay", "REPLAY", 72, function(stage) stage:Replay() end}) end
+	if onFull then table.insert(specs, {"PreviewFullscreen", "FULL", 50, false}) end
 	local rows = {{}, {}}
 	if single then rows[1] = specs else
 		for index, spec in ipairs(specs) do table.insert(rows[index <= 4 and 1 or 2], spec) end
 	end
 	for rowIndex, row in ipairs(rows) do
 		if #row > 0 then
-			local holder = frame(controls, {Name = "Row" .. rowIndex, Position = UDim2.fromOffset(0, (rowIndex - 1) * 36), Size = UDim2.new(1, 0, 0, 32), BackgroundTransparency = 1})
+			local holder = frame(controls, {Name = "Row" .. rowIndex, Position = UDim2.fromOffset(0, (rowIndex - 1) * 34), Size = UDim2.new(1, 0, 0, 32), BackgroundTransparency = 1})
 			local layout = list(holder, true, 6)
 			layout.HorizontalAlignment = Enum.HorizontalAlignment.Center
 			for order, spec in ipairs(row) do
@@ -12822,20 +12832,20 @@ function UIController:_renderShop()
 	end
 	local columns = compact and (portrait and 2 or 3) or 3
 	local surface = compact and scroll(self.panelContent, {Name = "CompactCollection"}) or self.panelContent
-	local detailHeight = portrait and 502 or 286
+	local detailHeight = portrait and 620 or 286
 	local cellHeight = portrait and 164 or 178
 	local gridHeight = math.max(cellHeight, math.ceil(#visible / columns) * (cellHeight + 10))
 	local detail = frame(surface, {
 		Name = "FittingStage",
 		Position = UDim2.new(),
-		Size = compact and UDim2.new(1, -5, 0, detailHeight) or UDim2.new(0.4, -8, 1, 0),
+		Size = compact and UDim2.new(1, -5, 0, detailHeight) or UDim2.new(0.44, -8, 1, 0),
 		BackgroundColor3 = C.panel,
 	}, 18)
 	stroke(detail, C.ink, 0, 3)
 	gradient(detail, Color3.fromRGB(96, 76, 200), Color3.fromRGB(46, 34, 112), 115)
 	local collection = frame(surface, {
-		Position = compact and UDim2.fromOffset(0, detailHeight + 18) or UDim2.new(0.4, 10, 0, 0),
-		Size = compact and UDim2.new(1, -5, 0, gridHeight + 78) or UDim2.new(0.6, -10, 1, 0), BackgroundTransparency = 1,
+		Position = compact and UDim2.fromOffset(0, detailHeight + 18) or UDim2.new(0.44, 10, 0, 0),
+		Size = compact and UDim2.new(1, -5, 0, gridHeight + 78) or UDim2.new(0.56, -10, 1, 0), BackgroundTransparency = 1,
 	})
 	local categories = scroll(collection, {Name = "Categories", Position = UDim2.fromOffset(0, 0), Size = UDim2.new(1, 0, 0, 44), ScrollBarThickness = 0}, true)
 	list(categories, true, 6)
@@ -12944,7 +12954,11 @@ function UIController:_renderItemDetail(parent, item, horizontal)
 	local ready = self:_isReady(item)
 	local kind, previewId, extra = self:_previewSpec(item)
 	label(parent, (KIND_TITLE[kind] or "TRY IT ON") .. " / " .. string.upper(item.category), {Name = "StageTitle", Position = UDim2.fromOffset(16, 13), Size = UDim2.new(1, -32, 0, 17), Font = F.black, TextSize = 10, TextColor3 = C.cyan})
-	local infoHeight = horizontal and 0 or 238
+	-- The info block is only as tall as its rows, so the model gets everything else.
+	local infoHeight = 0
+	if not horizontal then
+		infoHeight = 204 + (item.grants and 46 or 0) + (owned and item.category == "emotes" and 38 or 0) + (self:_inRound() and 18 or 0)
+	end
 	local stage = frame(parent, {Name = "PreviewStage", Position = UDim2.fromOffset(8, 35), Size = horizontal and UDim2.new(0.46, -8, 1, -43) or UDim2.new(1, -16, 1, -(infoHeight + 52)), BackgroundTransparency = 1})
 	local animated = kind == "emote" or kind == "trail" or kind == "tag"
 	local controlsHeight = self:_previewControls(stage, function() return self.stage end, animated, function() self:_openInspect(item) end, math.floor(stage.AbsoluteSize.X))
@@ -13151,7 +13165,7 @@ end
 
 function UIController:_renderSettings()
 	self.panelTitle.Text = "SETTINGS"
-	self.panelSubtitle.Text = "CATCH ME IF YOU CAN / " .. tostring(self.ctx.Config.Version or "v0.5.0") .. " / Preferences save with your profile."
+	self.panelSubtitle.Text = "CATCH ME IF YOU CAN / " .. tostring(self.ctx.Config.Version or "v0.6.0") .. " / Preferences save with your profile."
 	local container = scroll(self.panelContent)
 	list(container, false, 10)
 	local settings = self.ctx.Profile.settings or {}
@@ -13629,7 +13643,7 @@ end)
   <Item class="Workspace" referent="57">
     <Properties>
       <string name="Name">Workspace</string>
-      <BinaryString name="AttributesSerialize">AQAAABAAAABDYXRjaEdhbWVWZXJzaW9uAgUAAAAwLjUuMA==</BinaryString>
+      <BinaryString name="AttributesSerialize">AQAAABAAAABDYXRjaEdhbWVWZXJzaW9uAgUAAAAwLjYuMA==</BinaryString>
       <Ref name="CurrentCamera">58</Ref>
       <bool name="FilteringEnabled">true</bool>
       <float name="Gravity">196.2</float>

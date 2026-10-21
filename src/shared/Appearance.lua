@@ -453,14 +453,23 @@ skins.skin_trickster = { -- Royal Trickster
 			k.p(s[1] .. "Foot", "ShoeCurl_" .. s[1], V(0.4, 0.5, 0.5), offset(0, 0.26, -0.82, -30), pink, nil, "Wedge")
 			k.p(s[1] .. "Foot", "ShoeBell_" .. s[1], V(0.26, 0.26, 0.26), offset(0, 0.54, -0.96), gold, M.Metal, "Ball")
 		end
-		-- Three-horned jester crown with bells.
+		-- Three-horned jester crown with bells: each horn is two chained segments that curve outward.
 		k.p("Head", "CrownBand", V(1.36, 0.28, 1.36), offset(0, 0.58, 0.02), gold, M.Metal, "Can")
-		local horns = {{-0.5, purple, -34}, {0, pink, 0}, {0.5, gold, 34}}
+		local horns = {{-1, purple, 18, 48}, {0, pink, 0, 0}, {1, gold, 18, 48}}
 		for i, h in ipairs(horns) do
-			local x, color, tilt = h[1], h[2], h[3]
-			k.p("Head", "HornLow" .. i, V(0.46, 0.7, 0.46), offset(x * 0.8, 0.98, 0.04, 0, 0, tilt * 0.6), color, M.Fabric, "Can")
-			k.p("Head", "HornHigh" .. i, V(0.34, 0.7, 0.34), offset(x * 1.4, 1.54 - (i == 2 and 0 or 0.1), 0.04, 0, 0, tilt), color, M.Fabric, "Can")
-			k.p("Head", "HornBell" .. i, V(0.28, 0.28, 0.28), offset(x * 1.7, 1.96 - (i == 2 and 0 or 0.16), 0.04), white, M.Metal, "Ball")
+			local side, color = h[1], h[2]
+			local a1, a2 = math.rad(h[3]), math.rad(h[4])
+			local base = V(side * 0.42, 0.72, 0.04)
+			local d1 = V(side * math.sin(a1), math.cos(a1), 0)
+			local d2 = V(side * math.sin(a2), math.cos(a2), 0)
+			local lowCenter = base + d1 * 0.31
+			local tip1 = base + d1 * 0.62
+			local highCenter = tip1 + d2 * 0.3
+			local tip2 = tip1 + d2 * 0.6
+			local bell = tip2 + d2 * 0.1
+			k.p("Head", "HornLow" .. i, V(0.42, 0.62, 0.42), offset(lowCenter.X, lowCenter.Y, lowCenter.Z, 0, 0, -side * h[3]), color, M.Fabric, "Can")
+			k.p("Head", "HornHigh" .. i, V(0.3, 0.6, 0.3), offset(highCenter.X, highCenter.Y, highCenter.Z, 0, 0, -side * h[4]), color, M.Fabric, "Can")
+			k.p("Head", "HornBell" .. i, V(0.28, 0.28, 0.28), offset(bell.X, bell.Y, bell.Z), white, M.Metal, "Ball")
 		end
 	end,
 }
@@ -480,8 +489,8 @@ skins.skin_candy = { -- Candy Pop
 			k.p("LeftUpperLeg", "PolkaDot_L" .. i, V(0.3, 0.3, 0.06), offset(p[1] * 0.4, p[2], -0.58), white, nil, "Disc")
 		end
 		-- Cotton-candy shoulder puffs.
-		k.p("UpperTorso", "PuffPink", V(0.9, 0.9, 0.9), offset(-1.05, 0.9, 0), pink, nil, "Ball")
-		k.p("UpperTorso", "PuffBlue", V(0.9, 0.9, 0.9), offset(1.05, 0.9, 0), blue, nil, "Ball")
+		k.p("UpperTorso", "PuffPink", V(0.72, 0.72, 0.72), offset(-1.12, 0.78, 0), pink, nil, "Ball")
+		k.p("UpperTorso", "PuffBlue", V(0.72, 0.72, 0.72), offset(1.12, 0.78, 0), blue, nil, "Ball")
 		-- Ice-cream hat: waffle band, two scoops, a cherry and sprinkles.
 		k.p("Head", "WaffleBand", V(1.4, 0.34, 1.4), offset(0, 0.56, 0.02), cone, nil, "Can")
 		k.p("Head", "ScoopPink", V(1.55, 1.1, 1.55), offset(0, 1.06, 0.02), pink, nil, "Ball")
@@ -688,8 +697,8 @@ local function buildMask(k, maskId)
 			for i = 1, 2 do
 				m("CatWhisker" .. i .. "_" .. s[1], V(0.5, 0.03, 0.03), offset(s[2] * 0.62, -0.2 - (i - 1.5) * 0.12, -0.74, 0, 0, s[2] * (i - 1.5) * 14), ink)
 			end
-			m("TopCatEar_" .. s[1], V(0.4, 0.5, 0.18), offset(s[2] * 0.42, 0.78, -0.3, 0, 0, s[2] * -12), orange, nil, "Wedge")
-			m("TopCatEarInner_" .. s[1], V(0.2, 0.28, 0.08), offset(s[2] * 0.42, 0.74, -0.4, 0, 0, s[2] * -12), pink, nil, "Wedge")
+			m("TopCatEar_" .. s[1], V(0.44, 0.4, 0.18), offset(s[2] * 0.4, 0.74, -0.3, 0, 0, s[2] * -8), orange, nil, "Wedge")
+			m("TopCatEarInner_" .. s[1], V(0.22, 0.24, 0.08), offset(s[2] * 0.4, 0.7, -0.4, 0, 0, s[2] * -8), pink, nil, "Wedge")
 		end
 	elseif maskId == "mask_ninja" then
 		local cloth, wrap = C(40, 44, 70), C(230, 40, 50)
@@ -788,8 +797,9 @@ local function buildMask(k, maskId)
 		m("VisorFrameBottom", V(1.0, 0.08, 0.08), offset(0, -0.14, -0.74), gold, M.Metal)
 		m("VisorBridge", V(0.14, 0.34, 0.14), offset(0, 0.1, -0.76), gold, M.Metal)
 		for i, p in ipairs({{-0.3, 0.2}, {0.2, 0.0}, {0.34, 0.26}}) do m("VisorStar" .. i, V(0.07, 0.07, 0.04), offset(p[1], p[2], -0.78), C(255, 244, 190), nil, "Disc") end
-		m("TopPlanet", V(0.34, 0.34, 0.34), offset(0, 0.98, -0.1), teal, nil, "Ball")
-		m("TopPlanetRing", V(0.72, 0.05, 0.72), offset(0, 0.98, -0.1, 0, 0, 16), gold, M.Metal, "Can")
+		m("TopPlanetStem", V(0.05, 0.34, 0.05), offset(0, 0.76, -0.1), gold, M.Metal, "Can")
+		m("TopPlanet", V(0.34, 0.34, 0.34), offset(0, 1.0, -0.1), teal, nil, "Ball")
+		m("TopPlanetRing", V(0.72, 0.05, 0.72), offset(0, 1.0, -0.1, 0, 0, 16), gold, M.Metal, "Can")
 	end
 end
 

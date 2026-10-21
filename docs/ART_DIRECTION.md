@@ -30,15 +30,18 @@ from along the corridor), pendant lamps, baseboard, cornice and a painted band. 
 hiding spots and navigation).
 
 ## Characters
-- **Players keep their own Roblox avatar** (face, hair, clothes, animations). `LoadCharacterAppearance` is on.
-- A **skin** is an optional overlay of chunky welded parts built in `Appearance.lua`. Silhouette comes from hats,
-  back items, capes, wings and tails. Rarity: Common (the untouched avatar), Rare, Epic (adds an aura), Legendary
-  (showpieces: gold body treatment or wings and embers).
-- Hat-like skins hide the player's hair/hat accessories (restored exactly when switching). Golden Champion tints
-  limbs and stashes clothing in a `CatchStash` folder (restored). Nothing is ever destroyed.
-- **Masks** sit in front of the real face. **Hunters** get a bold red sash, cuffs and an outline.
+- **Players keep their own Roblox avatar** (face, head, proportions, animations). `LoadCharacterAppearance` is on.
+- A **skin** is an optional *costume* of chunky welded parts built in `Appearance.lua`: body-conforming shells for the
+  torso, arms, legs and shoes (slightly larger than the avatar's own parts, so every body shape still fits) plus
+  hats, hoods, capes, wings, scarves and tails. Silhouette and story come from the props; color blocking and trim
+  come from the shells. Rarity: Common (cheap, simple), Rare, Epic (more pieces, an aura), Legendary (showpieces).
+- While a costume is worn the player's own hair, hats and layered clothing are tucked away (restored exactly), so
+  nothing clips. Golden Champion also tints the limbs and stashes classic clothing (restored).
+- **Masks** sit in front of the real face; pieces that sit on top of the head are left off under headwear.
+- **Trails, emotes and previews:** see [COSMETICS.md](COSMETICS.md).
+- **Hunters** get a bold red sash, cuffs and an outline.
 - **Previews** are the player's own avatar (from `HumanoidDescription`) wearing the same overlay code path as the live
-  character, so what you preview is what you get. A neutral mannequin is only a fallback.
+  character; a neutral mannequin is only a fallback.
 - Cosmetics are fair: no speed, hitbox, tag, hide, XP or coin effect, enforced by tests.
 
 ## Interface

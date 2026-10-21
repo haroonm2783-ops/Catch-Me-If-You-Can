@@ -1,22 +1,31 @@
-# Launch readiness — version 0.5.0 (Sunburst art direction)
+# Launch readiness — version 0.6.0 (cosmetics and Shop overhaul, on the Sunburst art direction)
 
 **Verdict: NOT ready to publish.** Every automated check passes, but **nothing has been run in Roblox Studio**, on a
-phone, with real players, with a real DataStore or with real Robux. The green checks prove logic and layout contracts
-with mocked Roblox boundaries; they do not prove the game *looks* or *feels* good. This report deliberately does not
-claim 9/10 or "launch ready". Run [the acceptance script](TESTING.md#050-acceptance-script-start-here) first.
+phone, with real players, with a real DataStore or with real Robux. The green checks prove logic, geometry, pose math
+and layout contracts with mocked Roblox boundaries; they do not prove the cosmetics *look* good, that the previews
+match the engine, or that the Shop feels right. This report deliberately does not claim 9/10 or "launch ready". Run
+[the cosmetics acceptance script](TESTING.md#060-cosmetics-acceptance-script-start-here) first, then the
+[0.5.0 script](TESTING.md#050-acceptance-script-art-direction-hub-ui).
 
-## What changed in 0.5.0 (a deliberate art-direction change)
-| Area | Before | Now |
+## What changed in 0.6.0 (cosmetics and the Shop; the rest of the game is unchanged)
+| Area | Before (0.5.0) | Now |
 | --- | --- | --- |
-| Characters | Custom blocky bodies repainted over every player, custom faces, procedural mood poses | Players keep **their own Roblox avatar and animations**. Skins are optional overlays (hats, back items, capes, wings, tails). Epic and Legendary add an aura; Golden Champion tints your limbs (reversible). Masks sit on your real face. |
-| Cosmetics | 8 skins, tone and hair pickers | **13 skins in four rarity tiers**, 8 masks, 5 trails, 4 tag effects, collection counters (`4/13`), rarity outlines, rarity-colored equip bursts and unlock banners. Previews are *your* avatar wearing the item. |
-| Art | Near-white marble, cream and pale pastels, ~700 neon parts, haze, positive exposure | Warm saturated "Sunburst" palette, mid-tone floors with a bold tile checker, per-store wall/floor/awning identity, neon only for screens, bulbs and coins, ShadowMap lighting, light haze. |
-| Stores | Same box storefront everywhere | Every store has a theme (colors, material, striped awning, icon blade sign visible from the corridor), pendant lamps, trim and a painted band. Existing interiors (runway, teddy bear, giant sneaker, TV wall, aquarium, ring…) kept. |
-| Hiding spots | 111 | **130**: added air vents in the back corridors, a toy chest, a giant shoe box and a dog house. |
-| Hub | 130 x 90 empty deck far from the mall | Compact 100 x 78 plaza facing a sunburst entrance: chevron path, winners' podium with backdrop, **two live leaderboards**, **Shop and Locker kiosks**, live status board over the doors, palms, benches, bunting. |
-| UI | Large left dock (7 buttons), big panels, hero card, full-size results and tutorial | Compact timer chip and wallet pill; **Shop and Locker always visible** on the right with one **More** button; mid-size Shop/Locker panel (narrow drawer in rounds); small cards for everything else; compact results card; small tip-card tutorial. Chat stays in its default corner. |
-| Feel | — | Dust puffs on slides, vaults and hard landings; hunter proximity vignette; Epic/Legendary unlock banners. |
-| Performance | 6,731 parts | **6,479 parts** (fewer, bigger shelf/book blocks; no hidden-cell clutter) while adding more detail. |
+| Skins | 13 overlays that were mostly a hat or a back item on your own clothes | **14 full costumes**: body-conforming shells for torso, arms, legs and shoes plus props, your hair/hats/layered clothing tucked away and restored exactly. Shadow Runner, Mall Phantom, Street Legend, Royal Trickster, Galaxy Escape Artist, Dragon Racer, Jet Runner, Candy Pop and more; Epic/Legendary measurably more elaborate and with an aura |
+| Masks | 8, several full-face boxes | **12**: smiley, kitty, jack-o'-lantern, phantom half-mask, astral visor and more; ears/stems/rings left off under headwear; hide face accessories; no clipping with any costume (tested for every pair) |
+| Trails | 5 ribbons, **no working preview** | **10**, each drawn by real `Trail` and `ParticleEmitter` objects: speed streaks, electric sparks, cosmic stardust, shadow smoke, golden footprints, candy, flame, rainbow... One definition table drives the live objects and the Shop's emulation (viewports do not draw trails) |
+| Emotes | 2 hand-written server loops, **no preview** | **7** procedural emotes + 3 podium victories from one pose system; played locally from announced attributes; same pose in Shop, game and podium; no uploaded animations or permissions |
+| Previews | Static avatar; trails and emotes not shown | Auto-framed 3D preview of **your** avatar for every category: trail test run on a looping track, emotes that play at once, front/back/rotate/drag, replay, full-screen inspect, collection chips, still frames under reduced motion |
+| Shop | Basic cards | Real thumbnails per category, rarity, owned/equipped/locked (with progress)/short-of-coins (exact shortfall)/coming-soon/not-ready states, honest coin and Robux wording, sale gate that refuses unimplemented items on the client and the server |
+| Paid cosmetics | 3 bundles of recolors | **5 matching collections** (outfit + mask + trail + emote), priced under their pieces, no fake scarcity, all unconfigured until real pass IDs exist |
+
+## What 0.5.0 changed (unchanged and still relevant)
+| Area | Now |
+| --- | --- |
+| Characters | Players keep **their own Roblox avatar and animations**; costumes are optional overlays |
+| Art | Warm saturated "Sunburst" palette, themed storefronts, ShadowMap lighting |
+| Hub | Compact plaza, podium, live boards, kiosks |
+| UI | Compact HUD, Shop and Locker always visible on the right |
+| Performance | 6,479 parts |
 
 ## Practice-mode rewards inconsistency — findings and fix
 **Symptom:** the practice results screen said no XP or coins were awarded while other screens showed coins and XP.
@@ -32,18 +41,29 @@ coins are labelled *Practice coins*, and the results card says "Practice rounds 
 not saved. To verify real rewards and saving you need a real round with two clients (TESTING.md section B6).
 
 ## Verified (automated, mocked Roblox boundaries) — `./tools/check.sh`
-Compile of 35 production scripts, deterministic rebuild, both place formats deserialize (ShadowMap and
-`LoadCharacterAppearance = true` are asserted in the saved file), and nine suites:
-rules 379 · data/shop/receipts 181 (reveal payloads, legacy-save migration) · gameplay + end-to-end 287 ·
-appearance 276,756 (13 skins x 9 mask options on R15 and R6, reversible hair-hiding and gold tint, previews match live
-avatars, no neon cosmetics) · client UI 1,902 (dock, menus, banners and More popover fit and stay clear of each other at
-6 screen sizes; danger vignette; reveal banners) · legacy map 28,291 · **mall 106,320** (navigation of both floors,
-130 hiding spots reachable and sized for an avatar, doors, part/light/emitter budgets, hub footprint) · hub 35 ·
-enum validity 900 references.
+Compile of 40 production scripts, deterministic rebuild, both place formats deserialize (ShadowMap and
+`LoadCharacterAppearance = true` are asserted in the saved file), and ten suites:
+rules 423 · data/shop/receipts 208 (equipment of all four kinds persists across a reconnect, legacy-id migration, the
+sale gate) · gameplay + end-to-end 287 · appearance 622,677 (every skin x every mask on R15 and R6, hair/hat/layered
+clothing/face-accessory hiding and exact restoration, trail objects, server emote lifecycle, podium) · **cosmetics
+406,346** (see below) · client UI 2,087 (dock, menus, banners at 6 sizes; showroom previews; trail runs and replay;
+emotes playing; drag/rotate/front/back; full-screen inspect clear of the dock; every item state; every card
+thumbnail; client emote playback on every character; footprints; particle LOD) · legacy map 28,291 · mall 106,320 ·
+hub 35 · enum validity 922 references.
+
+**The cosmetics audit (`tests/cosmetics.spec.luau`) checks, for every item:** it is in the catalog and implemented
+(and vice versa); each emote is finite, moves the body, keeps the feet near the floor, starts and ends at rest, loops
+seamlessly or ends, and the costume stays glued to the limb through the whole pose; each trail builds real engine
+objects whose colors, fades, taper, lifetime and particle settings equal the definition the preview emulates, stays
+inside the mobile budget and shows a visible trail while running and none when standing; every skin is a 20-62 piece
+costume covering the body with no floating, invisible or neon piece, and a higher tier means more pieces; no mask
+piece overlaps a costume piece for any skin/mask pair; the preview camera frames the whole model at three aspect
+ratios; collections are complete, priced under their pieces and free of fake scarcity; every Robux item has
+`gamePassId = 0`.
 
 ### What the preview images are
 `docs/previews/*.png` are **software geometry previews** produced by `tools/render-view.py`, `tools/render-characters.py`
-and `tools/render-ui.py`: flat colors, no real materials, shadows, bloom, fonts, emoji or player avatars. They exist to
+(skins, masks, trail frames, emote key frames) and `tools/render-ui.py`: flat colors, no real materials, shadows, bloom, fonts, emoji or player avatars. They exist to
 check composition, palette balance, sight lines and UI overlap without Studio. They are not screenshots of the game.
 
 ## NOT verified (needs a human in Studio, on a phone, or a published place)
@@ -51,7 +71,11 @@ check composition, palette balance, sight lines and UI overlap without Studio. T
 | --- | --- | --- |
 | **Lighting and exposure** | The biggest unknown. Ambient `(138,134,152)`, Brightness 2.1, ShadowMap and a light haze are reasoned values; interiors may read too dark or too bright | TESTING A1; tune `applyLighting()` |
 | Real material look | Slate/Granite/WoodPlanks/Fabric textures tint differently from flat colors | Walk the mall in Studio |
-| Avatar overlays on real avatars | Hat/hair clipping, tall/skinny bundles, R6, Rthro; gold tint on real limbs; restored clothes | TESTING A2–A3 |
+| **Costumes on real avatars** | Shells are sized from the avatar's real part sizes, but tall/slim/wide/Rthro/R6 bodies, big layered-clothing hair and jackets, and the gold tint were never seen | cosmetics script A1-A3 |
+| **Trail preview vs live trail** | The Shop shows a parts emulation of the same definition (viewports cannot draw trails); engine textures and blending will differ | cosmetics script A4-A6 |
+| **Emote look and timing** | Poses are checked for finite, grounded, glued-to-body motion, not for charm or for limbs clipping a given costume | cosmetics script A7-A9 |
+| **Showroom in a real ViewportFrame** | Auto-framing, drag-rotate, replay, full-screen and thumbnails run on mocks; real `ViewportFrame` lighting, `WorldModel` behavior and the avatar clone path are unproven | cosmetics script A10-A12 |
+| Avatar overlays on real avatars (0.5.0) | Hat/hair clipping, tall/skinny bundles, R6, Rthro; gold tint on real limbs; restored clothes | TESTING A2–A3 |
 | `HumanoidDescription` previews | `CreateHumanoidModelFromDescription` is async and unproven here; a mannequin shows if it fails | TESTING A4 |
 | Slide and vault feel | Only the slide pose is authored; mood poses were removed so Roblox animations drive everything else | Two clients, TESTING B12 |
 | Signs with emoji | Icons on blade signs and dock buttons depend on the client font | Look at storefronts and the dock |
@@ -62,7 +86,10 @@ check composition, palette balance, sight lines and UI overlap without Studio. T
 ## Honest ratings (out of 10, estimated from source and software previews — not measured)
 | Area | Score | Why it is not higher |
 | --- | ---: | --- |
-| Characters and cosmetics | 7 | The avatar-first design removes the biggest risk (awkward custom bodies) and the lineup is strong, but clipping on real avatars and the real preview path are unseen. |
+| Skins and masks | 7 | Full costumes with a clear rarity ladder and tested no-clip/no-float rules, and the lineup reads well in the software preview. They are built from blocks and cylinders: they will look classic Roblox, not sculpted. Never seen on a real avatar or lit. |
+| Trails | 7 | Ten distinct designs on real engine objects with a working, replayable preview and a mobile budget. The preview is an emulation; real textures and blending are unseen. |
+| Emotes | 6 | Seven poses that visibly perform and are checked mathematically; procedural poses are stiffer than authored animation and cannot bend layered clothing. |
+| Shop and previews | 7 | Every category previews, controls and states are tested at three sizes. The real ViewportFrame, fonts and thumbs on a phone are unseen. |
 | Mall art direction | 6 | Palette and storefront identity are a clear step up in previews, but lighting/exposure and materials have never been seen in the engine. |
 | Stores and hiding | 7 | Distinct themes, 130 spots and a validated navigation model. Store *layouts* were kept, not redesigned; no new shortcuts were added. |
 | Hub | 7 | Compact and full of purpose; boards, kiosks and status board are tested for wiring, not for looks. |
@@ -74,12 +101,15 @@ check composition, palette balance, sight lines and UI overlap without Studio. T
 ## Known gaps vs the brief (not done, by choice or limit)
 - No uploaded animations, music or audio (no assets could be created or licensed here); engine fallbacks only.
 - No new store *layouts* or shortcut routes; the 24 existing interiors were restyled and extended with hiding spots.
-- Shop previews depend on a runtime `HumanoidDescription` call that could not be exercised.
+- Shop previews depend on a runtime `HumanoidDescription` call that could not be exercised (a mannequin is shown if it fails).
+- Emotes are procedural poses, not authored animations: they are stiffer, they do not bend layered clothing (costumes hide it), and they are tuned to standard R15 proportions.
+- Cosmetics are blocks and cylinders (no meshes, textures or custom accessories), so they read as classic Roblox rather than sculpted; real authored assets would need licensing and upload outside this repo.
+- **The mall-gameplay request** (fuller store interiors, more shortcut routes, vents, kiosks, obstacles, flat-area polish) was **not started** in this pass: the cosmetics overhaul was prioritized.
 - No HUD scale-up for large monitors: an attempt using `UIScale` was dropped because how `UIScale` treats `Position` offsets could not be confirmed without Studio. Check HUD text size on a 1080p/4K monitor and, if too small, scale the whole HUD through one full-screen container.
 - The two-player Studio checklist (TESTING B) is the list of everything solo practice cannot prove.
 
 ## Owner actions
 1. Open the place, check `Lighting.Technology` reads ShadowMap, and tune `applyLighting()` if needed.
-2. Run TESTING sections A and B. Fix what they find, in this order: Output errors, stuck spots, HUD clipping, performance, look.
+2. Run the cosmetics script, then TESTING sections A and B. Fix what they find, in this order: Output errors, stuck spots, HUD clipping, performance, look.
 3. Create passes and products (`MONETIZATION.md`), paste real IDs, rebuild with `./tools/build.sh`. Never use made-up IDs.
 4. Provide licensed audio IDs in `Config.Audio` if wanted. Publish privately first; set max players to 12 and avatars to R15.
