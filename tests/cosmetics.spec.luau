@@ -511,6 +511,37 @@ for _, id in ipairs(collections) do
 	expect(item.price >= (robux + coins * 0.098) * 0.4, "Collections are a discount, not a giveaway: " .. id)
 	expect(not item.description:lower():find("limited") and not item.description:lower():find("only today") and not item.description:lower():find("last chance"), "No fake scarcity in collection copy: " .. id)
 end
+-- Nothing is locked: every item can be obtained today (free, earned, or bought with coins), and collections are a
+-- discount on the coin prices of their pieces too.
+for _, item in pairs(Catalog.Items) do
+	local coins = Catalog.CoinPrice(item)
+	expect(item.currency == "Free" or item.currency == "Milestone" or (coins ~= nil and coins > 0 and coins % 1 == 0), "Every cosmetic can be obtained right now: " .. item.id)
+	expect(item.currency ~= "Robux" or Catalog.RobuxConfigured(item) == (item.gamePassId > 0), "Robux checkout exists only with a real pass ID: " .. item.id)
+end
+for _, id in ipairs(collections) do
+	local item = Catalog.Get(id)
+	local sum, highest = 0, 0
+	for _, grantedId in ipairs(item.grants) do
+		local price = Catalog.CoinPrice(Catalog.Get(grantedId))
+		expect(price ~= nil, "Every collection piece has a coin price: " .. grantedId)
+		sum += price
+		highest = math.max(highest, price)
+	end
+	local coins = Catalog.CoinPrice(item)
+	expect(coins < sum and coins >= sum * 0.6 and coins > highest, "A collection costs less in coins than its pieces but more than its best piece: " .. id .. " " .. coins .. " vs " .. sum)
+end
+do
+	local function average(category, rarity)
+		local total, count = 0, 0
+		for _, item in ipairs(Catalog.ForCategory(category)) do
+			local coins = Catalog.CoinPrice(item)
+			if item.rarity == rarity and coins then total += coins count += 1 end
+		end
+		return count > 0 and total / count or 0
+	end
+	expect(average("skins", "Legendary") > average("skins", "Epic") and average("skins", "Epic") > average("skins", "Rare") and average("skins", "Rare") > average("skins", "Common"), "Skin coin prices climb with rarity")
+	expect(Catalog.CoinPrice(Catalog.Get("skin_galaxy")) <= 8000 and Catalog.CoinPrice(Catalog.Get("skin_ninja")) <= 3500, "Premium coin prices stay reachable")
+end
 for _, item in pairs(Catalog.Items) do
 	if item.currency == "Robux" then expect(item.gamePassId == 0, "No fake product IDs ship in the catalog: " .. item.id) end
 	local text = (item.description or ""):lower()

@@ -519,6 +519,48 @@ do
 	expect(clean.owned.skin_midnight == nil and clean.owned.skin_removed_long_ago == nil, "Retired ids do not linger in the inventory")
 end
 
+-- Every premium item can be unlocked with coins today; Robux checkout stays off until a real pass exists.
+do
+	local f = fixture(true)
+	f.data:_Load(f.player)
+	local profile = f.data:Get(f.player)
+	local premium = 0
+	for id, item in pairs(Catalog.Items) do
+		if item.currency == "Robux" then
+			premium += 1
+			expect(item.gamePassId == 0 and type(item.coinPrice) == "number" and item.coinPrice > 0 and item.coinPrice % 1 == 0, "Premium item ships unconfigured with a coin price: " .. id)
+			profile.owned[id] = nil -- a collection bought earlier in this loop may already have granted it
+			profile.coins = item.coinPrice - 1
+			expect(not f.shop:Purchase(f.player, id) and not profile.owned[id] and profile.coins == item.coinPrice - 1, "One coin short buys nothing and charges nothing: " .. id)
+			profile.coins = item.coinPrice + 7
+			expect(f.shop:Purchase(f.player, id) and profile.owned[id] and profile.coins == 7, "Coins unlock the premium item and are charged exactly once: " .. id)
+			for _, grantedId in ipairs(item.grants or {}) do expect(profile.owned[grantedId], "A collection grants every piece: " .. id .. "/" .. grantedId) end
+			expect(f.shop:Purchase(f.player, id) and profile.coins == 7, "Buying again never charges twice: " .. id)
+			if Catalog.IsEquippable(item.category) then expect(f.data:Equip(f.player, item.category, id), "A bought premium item equips: " .. id) end
+		end
+	end
+	expect(premium >= 15 and f.marketplace.prompts == 0, "Coin unlocks never open a Robux prompt")
+end
+
+-- Robux checkout is explicit and only exists with a configured pass; coins keep working beside it.
+do
+	local f = fixture(true)
+	f.data:_Load(f.player)
+	local profile = f.data:Get(f.player)
+	profile.coins = 50000
+	local item = Catalog.Get("skin_galaxy")
+	expect(not f.shop:Purchase(f.player, "skin_galaxy", "Robux") and f.marketplace.prompts == 0 and not profile.owned.skin_galaxy and profile.coins == 50000, "Asking for Robux with no pass configured is refused without prompt or charge")
+	item.gamePassId = 987654
+	expect(f.shop:Purchase(f.player, "skin_galaxy") and f.marketplace.prompts == 1 and not profile.owned.skin_galaxy, "With a pass configured the default is the Robux prompt, which grants nothing by itself")
+	f.shop.lastPrompt[f.player] = nil
+	f.shop.pending[f.player] = nil
+	expect(f.shop:Purchase(f.player, "skin_galaxy", "Coins") and profile.owned.skin_galaxy and profile.coins == 50000 - item.coinPrice and f.marketplace.prompts == 1, "Coins still work beside a configured pass and do not prompt")
+	item.gamePassId = 0
+	local free = Catalog.Get("skin_pizza")
+	profile.coins = 10
+	expect(not f.shop:Purchase(f.player, "skin_pizza", "Robux") and not profile.owned.skin_pizza, "A coin item cannot be forced through the Robux path")
+end
+
 -- The server never sells a cosmetic that has no implementation behind it.
 do
 	local f = fixture(true)

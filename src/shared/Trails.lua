@@ -372,7 +372,12 @@ function Emulator.new(id, parent)
 	for index, ribbon in ipairs(def.ribbons or {}) do
 		local maxSegments = math.ceil(ribbon.lifetime / sampleInterval(ribbon)) + 1
 		local segments = {}
-		for s = 1, maxSegments do table.insert(segments, quad(folder, "Ribbon" .. index .. "_" .. s)) end
+		for s = 1, maxSegments do
+			local piece = quad(folder, "Ribbon" .. index .. "_" .. s)
+			-- Glowing ribbons read as light in a viewport the way the real trail's LightEmission does.
+			if (ribbon.emission or 0) >= 0.3 then piece.Material = Enum.Material.Neon end
+			table.insert(segments, piece)
+		end
 		table.insert(self.ribbons, {spec = ribbon, samples = {}, segments = segments, clock = 0, interval = sampleInterval(ribbon)})
 	end
 	local budget = MAX_PARTICLES
@@ -383,6 +388,7 @@ function Emulator.new(id, parent)
 		for p = 1, capacity do
 			local part = quad(folder, "Particle" .. index .. "_" .. p)
 			part.Shape = Enum.PartType.Ball
+			if (emitter.emission or 0) >= 0.4 then part.Material = Enum.Material.Neon end
 			table.insert(self.particles, {part = part, emitter = emitter, index = index, alive = false})
 		end
 	end
@@ -444,7 +450,7 @@ function Emulator:Step(dt, root, velocity, floorY)
 					if across.Magnitude < 1e-3 then across = Vector3.new(0, 1, 0):Cross(forward) end
 					across = across.Unit
 					local normal = forward:Cross(across)
-					part.Size = Vector3.new(math.max(0.03, width), 0.04, span.Magnitude + 0.03)
+					part.Size = Vector3.new(math.max(0.12, width), 0.05, span.Magnitude + 0.04)
 					part.CFrame = CFrame.fromMatrix((c1 + c2) / 2, across, normal, forward)
 					part.Color = sampleColor(spec.color, age)
 					part.Transparency = math.clamp(sampleNumbers(spec.alpha, age), 0, 1)

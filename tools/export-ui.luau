@@ -121,7 +121,7 @@ local function fixture(viewport, inputType)
 	end
 	local player = instance.new("Player")
 	player.Name, player.DisplayName, player.UserId = "TestRunner", "Test Runner", 42
-	player.CharacterAdded, player.CharacterRemoving = signal(), signal()
+	player.CharacterAdded, player.CharacterRemoving, player.CharacterAppearanceLoaded = signal(), signal(), signal()
 	local playerGui = instance.new("PlayerGui"); playerGui.Name = "PlayerGui"; playerGui.Parent = player
 	local function character()
 		local rig = instance.new("Model")
@@ -133,6 +133,11 @@ local function fixture(viewport, inputType)
 		return rig, humanoid
 	end
 	local rig, humanoid = character(); player.Character = rig
+	-- The default PlayerModule's controls, stubbed so tests can see them switched off and on.
+	local playerScripts = instance.new("Folder"); playerScripts.Name = "PlayerScripts"; playerScripts.Parent = player
+	local playerModuleScript = instance.new("ModuleScript"); playerModuleScript.Name = "PlayerModule"; playerModuleScript.Parent = playerScripts
+	local controlState = {enabled = true, disabled = 0, enabledCalls = 0}
+	local playerControls = {Disable = function() controlState.enabled = false controlState.disabled += 1 end, Enable = function() controlState.enabled = true controlState.enabledCalls += 1 end}
 	local players = {LocalPlayer = player, list = {player}}
 	function players:GetPlayers() return self.list end
 	function players:GetPlayerByUserId(id) for _, member in ipairs(self.list) do if member.UserId == id then return member end end end
@@ -177,12 +182,13 @@ local function fixture(viewport, inputType)
 	workspace.CurrentCamera = instance.new("Camera"); workspace.CurrentCamera.CameraSubject = humanoid; workspace.CurrentCamera.Parent = workspace
 	local shared = instance.new("Folder"); shared.Name = "CatchShared"
 	local moduleScripts = {}
-	for _, name in ipairs({"Appearance", "Emotes", "Poses", "Trails", "PreviewStage"}) do
+	for _, name in ipairs({"Appearance", "Emotes", "Poses", "Trails", "PreviewStage", "PreviewScene"}) do
 		local moduleScript = instance.new("ModuleScript"); moduleScript.Name = name; moduleScript.Parent = shared
 		moduleScripts[name] = moduleScript
 	end
 	local replicated = instance.new("ReplicatedStorage"); shared.Parent = replicated
-	local previewCalls = {}
+	local sharedModules = {}
+	local previewCalls, baseCalls, warnings = {}, {}, {}
 	-- A small mannequin built from the fixture's own instances: real CFrames and joints, so previews can be posed.
 	local function fakeRig()
 		local rig = instance.new("Model")
@@ -213,25 +219,40 @@ local function fixture(viewport, inputType)
 		HasSkin = function() return true end, HasMask = function() return true end,
 		BuildPreview = function(skin, mask, extra)
 			table.insert(previewCalls, {skin = skin, mask = mask, extra = extra})
-			return fakeRig()
+			local rig = fakeRig()
+			-- The real trail objects, built from the real definitions, on a mount like the live character's.
+			local Trails = sharedModules[moduleScripts.Trails]
+			if extra and extra.trails and extra.trails ~= "" and Trails and Trails.Has(extra.trails) then
+				local folder = instance.new("Folder"); folder.Name = "CatchAppearance"; folder.Parent = rig
+				local mount = instance.new("Part"); mount.Name = "TrailMount"; mount.Size = Vector3.new(0.05, 0.05, 0.05); mount.Transparency = 1; mount.Anchored = true; mount.Parent = folder
+				Trails.Populate(mount, extra.trails, true)
+				rig:SetAttribute("CatchTrail", extra.trails)
+			end
+			return rig
+		end,
+		BuildAvatarFromCharacter = function(character)
+			table.insert(baseCalls, character)
+			local rig = fakeRig()
+			rig:SetAttribute("CatchPreviewReport", "ok")
+			return rig
 		end,
 	}
 	local services = {Players = players, TweenService = {Create = function(_, object, _, values) return {Play = function() for key, value in pairs(values) do object[key] = value end end} end},
 		RunService = runService, UserInputService = input, GuiService = guiService, ReplicatedStorage = replicated, ContextActionService = cas,
 		ContentProvider = {PreloadAsync = function(_, assets, callback) for _, asset in ipairs(assets) do callback(asset.SoundId, Enum.AssetFetchStatus.Success) end end},
 		SoundService = instance.new("SoundService"), Lighting = instance.new("Lighting"), Debris = {AddItem = function() end}, Workspace = workspace}
-	local sharedModules = {}
-	local environment = {game = {GetService = function(_, name) return assert(services[name], name) end}, workspace = workspace,
+	local environment = {warn = function(...) table.insert(warnings, table.concat({...}, " ")) end, game = {GetService = function(_, name) return assert(services[name], name) end}, workspace = workspace,
 		Instance = instance, task = {spawn = function(fn) fn() end, defer = function(fn) fn() end, delay = function() end},
 		os = {clock = function() return monotonic end},
 		require = function(module)
 			if module == moduleScripts.Appearance then return appearance end
+			if module == playerModuleScript then return {GetControls = function() return playerControls end} end
 			return assert(sharedModules[module], "Controllers may only require shared cosmetics modules")
 		end,
 		TweenInfo = {new = function() return {} end}, Random = {new = function() return {NextInteger = function(_, a, b) return math.floor((a + b) / 2) end, NextNumber = function(_, a, b) return (a + b) / 2 end} end},
 	}
 	for _, name in ipairs({"Enum", "Color3", "ColorSequence", "ColorSequenceKeypoint", "NumberSequence", "NumberSequenceKeypoint", "NumberRange", "UDim", "UDim2", "Vector2", "Vector3", "CFrame"}) do environment[name] = roblox[name] end
-	for _, name in ipairs({"Trails", "Poses", "Emotes", "PreviewStage"}) do
+	for _, name in ipairs({"Trails", "Poses", "Emotes", "PreviewStage", "PreviewScene"}) do
 		local scoped = table.clone(environment)
 		scoped.script = {Parent = {WaitForChild = function(_, sibling) return moduleScripts[sibling] end}}
 		sharedModules[moduleScripts[name]] = luau.load(fs.readFile("src/shared/" .. name .. ".lua"), {environment = scoped, debugName = name})()
@@ -243,7 +264,7 @@ local function fixture(viewport, inputType)
 	local function load(name)
 		return luau.load(fs.readFile("src/client/Controllers/" .. name .. ".lua"), {environment = environment, debugName = name})().new(ctx)
 	end
-	return {load = load, player = player, humanoid = humanoid, character = character, instance = instance, players = players, workspace = workspace,
+	return {warnings = warnings, baseCalls = baseCalls, controlState = controlState, load = load, player = player, humanoid = humanoid, character = character, instance = instance, players = players, workspace = workspace,
 		ctx = ctx, cas = cas, input = input, guiService = guiService, actions = actions, previewCalls = previewCalls, services = services,
 		advance = function(seconds) monotonic += seconds end, renderCallbacks = renderCallbacks}
 end

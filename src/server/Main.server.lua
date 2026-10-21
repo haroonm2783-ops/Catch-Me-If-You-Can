@@ -82,7 +82,7 @@ local function dispatch(player, action, payload)
 	elseif action == "Equip" then
 		if type(payload.category)=="string" and type(payload.id)=="string" then ctx.Services.DataService:Equip(player,payload.category,payload.id) end
 	elseif action == "Buy" then
-		if type(payload.id)=="string" then ctx.Services.ShopService:Purchase(player,payload.id) end
+		if type(payload.id)=="string" then ctx.Services.ShopService:Purchase(player,payload.id,payload.method == "Coins" and "Coins" or payload.method == "Robux" and "Robux" or nil) end
 	elseif action == "BuyCoins" then
 		if type(payload.id)=="string" then ctx.Services.ShopService:PurchaseProduct(player,payload.id) end
 	elseif action == "ClaimQuest" then

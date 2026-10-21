@@ -391,17 +391,18 @@ function DataService:GrantProductCoins(player, purchaseId, coins)
 	return false, "save_failed"
 end
 
+-- Coins unlock any item that has a coin price: coin items and premium (Robux) items that also list a `coinPrice`.
+-- Debit and ownership are one non-yielding transaction and the price always comes from the server's catalog.
 function DataService:_PurchaseWithCoins(player, id)
 	if not self:Ready(player) then return false, "Profile is not ready." end
 	local item = self.ctx.Catalog.Get(id)
-	if not item or item.currency ~= "Coins" or type(item.price) ~= "number"
-		or item.price ~= number(item.price, 0, MAX_COUNTER) then return false, "Item cannot be purchased with coins." end
+	local price = item and self.ctx.Catalog.CoinPrice(item)
+	if not item or type(price) ~= "number" or price ~= number(price, 0, MAX_COUNTER) or price <= 0 then return false, "Item cannot be purchased with coins." end
 	local record = self.records[player]
 	local profile = record.profile
 	if profile.owned[id] then return false, "You already own this cosmetic." end
-	if profile.coins < item.price then return false, "You need " .. (item.price - profile.coins) .. " more coins." end
-	-- Debit and ownership are one non-yielding transaction. Never trust a client price.
-	profile.coins -= item.price
+	if profile.coins < price then return false, "You need " .. (price - profile.coins) .. " more coins." end
+	profile.coins -= price
 	profile.owned[id] = true
 	for _, grantedId in ipairs(item.grants or {}) do
 		if self.ctx.Catalog.Get(grantedId) then profile.owned[grantedId] = true end

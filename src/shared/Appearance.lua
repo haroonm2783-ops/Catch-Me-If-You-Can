@@ -1043,6 +1043,100 @@ local function anchorPreview(rig)
 	end
 end
 
+-- Re-derive every part's position from the model's own joints and welds (Motor6D, Weld, ManualWeld) starting at the
+-- HumanoidRootPart, with every joint at rest. A model that has never been simulated (a freshly built or cloned avatar
+-- that is not in the workspace yet) can have accessory handles sitting wherever they were created, which shows up as
+-- hair floating beside the head. Solving the joints puts every handle exactly where the engine's weld says it goes.
+function Appearance.SolveRig(model)
+	local root = model:FindFirstChild("HumanoidRootPart")
+	if not root or not root:IsA("BasePart") then return 0 end
+	local joints = {}
+	for _, descendant in ipairs(model:GetDescendants()) do
+		if (descendant:IsA("Motor6D") or descendant:IsA("Weld") or descendant:IsA("ManualWeld")) and descendant.Part0 and descendant.Part1
+			and descendant.Part0:IsA("BasePart") and descendant.Part1:IsA("BasePart") then
+			if descendant:IsA("Motor6D") then descendant.Transform = CFrame.new() end
+			table.insert(joints, descendant)
+		end
+	end
+	local placed, solved = {[root] = true}, 0
+	local progress = true
+	while progress do
+		progress = false
+		for _, joint in ipairs(joints) do
+			local first, second = joint.Part0, joint.Part1
+			if placed[first] and not placed[second] then
+				second.CFrame = first.CFrame * joint.C0 * joint.C1:Inverse()
+				placed[second] = true
+				solved += 1
+				progress = true
+			elseif placed[second] and not placed[first] then
+				first.CFrame = second.CFrame * joint.C1 * joint.C0:Inverse()
+				placed[first] = true
+				solved += 1
+				progress = true
+			end
+		end
+	end
+	return solved
+end
+
+-- Checks that every accessory handle sits where its weld says it should. An accessory that cannot be placed
+-- correctly is HIDDEN (never shown floating) and reported. Returns the list of problems (empty when all is well).
+function Appearance.AuditRig(model)
+	local problems = {}
+	local root = model:FindFirstChild("HumanoidRootPart")
+	for _, accessory in ipairs(model:GetChildren()) do
+		if accessory:IsA("Accessory") then
+			local handle = accessory:FindFirstChild("Handle")
+			local drift
+			if handle and handle:IsA("BasePart") then
+				local checked = false
+				for _, child in ipairs(handle:GetChildren()) do
+					if (child:IsA("Weld") or child:IsA("ManualWeld")) and child.Part0 and child.Part1 then
+						local expected
+						if child.Part1 == handle then expected = child.Part0.CFrame * child.C0 * child.C1:Inverse()
+						elseif child.Part0 == handle then expected = child.Part1.CFrame * child.C1 * child.C0:Inverse() end
+						if expected then
+							drift = (expected.Position - handle.CFrame.Position).Magnitude
+							checked = true
+						end
+					end
+				end
+				-- No weld at all: it can only be judged by how far it is from the body.
+				if not checked and root then drift = math.max(0, (handle.CFrame.Position - root.CFrame.Position).Magnitude - 6) end
+			end
+			if drift and drift > 0.15 then
+				table.insert(problems, string.format("%s is %.1f studs off its attachment and was hidden", accessory.Name, drift))
+				for _, part in ipairs(accessory:GetDescendants()) do
+					if part:IsA("BasePart") then
+						if part:GetAttribute("CatchOriginalTransparency") == nil then part:SetAttribute("CatchOriginalTransparency", part.Transparency) end
+						part.Transparency = 1
+					end
+				end
+			end
+		end
+	end
+	return problems
+end
+
+-- Turns an avatar model into a posable showroom base: costume leftovers removed, the player's own hair and clothes
+-- restored, every joint solved, accessories verified, parts anchored and the root placed at the origin facing -Z.
+local function finalizeBase(model)
+	for _, name in ipairs({"CatchAppearance", "CatchRoleAppearance"}) do
+		local folder = model:FindFirstChild(name)
+		if folder then folder:Destroy() end
+	end
+	restoreAvatar(model)
+	Appearance.SolveRig(model)
+	local problems = Appearance.AuditRig(model)
+	anchorPreview(model)
+	if not model.PrimaryPart then model.PrimaryPart = model:FindFirstChild("HumanoidRootPart") end
+	-- Same frame as the mannequin: root at the origin, facing -Z, so previews can share cameras.
+	pcall(function() model:PivotTo(CFrame.new()) end)
+	model:SetAttribute("CatchPreviewReport", #problems == 0 and "ok" or table.concat(problems, "; "))
+	return model, problems
+end
+
 -- Build a standing model of a real avatar from a HumanoidDescription (yields; wrap in pcall + task.spawn).
 function Appearance.BuildAvatar(description, rigType)
 	if description == nil then return nil end
@@ -1051,10 +1145,22 @@ function Appearance.BuildAvatar(description, rigType)
 	end)
 	if not ok or not model then return nil end
 	model.Name = "CatchAvatarBase"
-	anchorPreview(model)
-	-- Same frame as the mannequin: root at the origin, facing -Z, so previews can share cameras.
-	pcall(function() model:PivotTo(CFrame.new()) end)
-	return model
+	return finalizeBase(model)
+end
+
+-- The most faithful base: a clone of the player's own assembled character, so every accessory, body scale and
+-- texture is exactly what the engine already built for them. Costume parts are stripped and their hidden hair and
+-- clothes restored. Returns nil when the character is missing, incomplete or not cloneable.
+function Appearance.BuildAvatarFromCharacter(character)
+	if not character or not character:IsA("Model") then return nil end
+	if not character:FindFirstChildOfClass("Humanoid") or not character:FindFirstChild("HumanoidRootPart") then return nil end
+	local archivable = character.Archivable
+	pcall(function() character.Archivable = true end)
+	local ok, clone = pcall(function() return character:Clone() end)
+	pcall(function() character.Archivable = archivable end)
+	if not ok or not clone then return nil end
+	clone.Name = "CatchAvatarBase"
+	return finalizeBase(clone)
 end
 
 -- Neutral classic-proportion mannequin with the engine's stock face. Used when no real avatar is available.

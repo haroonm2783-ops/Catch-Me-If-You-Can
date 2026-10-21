@@ -39,6 +39,17 @@ function PreviewStage.Kind(item)
 	return "skin"
 end
 
+-- Where an avatar's feet are (a Y relative to its root); falls back to the standard R15 value.
+function PreviewStage.FloorOf(rig)
+	local feet = {}
+	for _, name in ipairs({"LeftFoot", "RightFoot", "Left Leg", "Right Leg"}) do
+		local foot = rig:FindFirstChild(name)
+		if foot and foot:IsA("BasePart") then table.insert(feet, foot.CFrame.Position.Y - foot.Size.Y / 2) end
+	end
+	if #feet > 0 then return math.min(table.unpack(feet)) end
+	return FLOOR
+end
+
 -- World-space bounds of the visible parts of a model (optionally only what is attached to the head).
 local function attachedToHead(part)
 	if part.Name == "Head" then return true end
@@ -89,7 +100,9 @@ function PreviewStage.Fit(lo, hi, fov, aspect, margin)
 end
 
 -- opts: world (parent of the model and effects), camera, rig, kind, id, motion (false = hold a still key pose),
---       aspect (viewport width / height), fov
+--       aspect (viewport width / height), fov, origin (Vector3: where in the world the stage stands; default the origin),
+--       realEffects (true when the stage lives in the real workspace, where the rig's own Trail and ParticleEmitter
+--       objects draw: no emulation, just footprints and clearing on replay)
 function PreviewStage.new(opts)
 	local self = setmetatable({
 		world = opts.world, camera = opts.camera, rig = opts.rig, kind = opts.kind or "skin", id = opts.id,
@@ -98,6 +111,25 @@ function PreviewStage.new(opts)
 	}, PreviewStage)
 	self.pose = Poses.Preview(self.rig)
 	self.root = self.pose and self.pose.restRoot or CFrame.new()
+	self.realEffects = opts.realEffects == true
+	self.origin = opts.origin or Vector3.zero
+	-- Self-test: a pose must actually move the avatar. If it cannot (a rig without joints), say so instead of
+	-- silently showing a frozen model.
+	if not self.pose then
+		self.problem = "the avatar has no HumanoidRootPart to pose"
+	else
+		local probe = self.rig:FindFirstChild("RightHand") or self.rig:FindFirstChild("Right Arm")
+		if probe then
+			self.pose:Set({}, self.root)
+			local before = probe.CFrame.Position
+			self.pose:Set({RightShoulder = A(0, 0, 90), LeftShoulder = A(0, 0, -90)}, self.root)
+			local moved = (probe.CFrame.Position - before).Magnitude
+			self.pose:Set({}, self.root)
+			if moved < 0.5 then self.problem = "the avatar's joints do not respond to poses" end
+		end
+	end
+	-- The floor is where this avatar's feet actually are (taller or shorter bodies differ).
+	self.floor = PreviewStage.FloorOf(self.rig)
 	self.pitch, self.margin = 0.08, 1.14
 	local lo, hi
 	if self.kind == "mask" then
@@ -118,7 +150,7 @@ function PreviewStage.new(opts)
 		self.margin = 1.05
 	elseif self.kind == "trail" then
 		lo, hi = PreviewStage.Bounds(self.rig)
-		lo = Vector3.new(-TRACK_RADIUS - 1.2, math.min(lo.Y, FLOOR - 0.2), -TRACK_RADIUS - 1.2)
+		lo = Vector3.new(-TRACK_RADIUS - 1.2, math.min(lo.Y, self.floor - 0.2), -TRACK_RADIUS - 1.2)
 		hi = Vector3.new(TRACK_RADIUS + 1.2, hi.Y + 0.4, TRACK_RADIUS + 1.2)
 		self.pitch, self.margin, self.fov = 0.42, 0.78, 42
 	else
@@ -127,11 +159,17 @@ function PreviewStage.new(opts)
 	self.bounds = {lo, hi}
 	self.center = (lo + hi) / 2
 	if self.kind == "trail" then self.center = Vector3.new(0, (lo.Y + hi.Y) / 2 - 0.4, 0) end
+	self.focus = self.center + self.origin
 	self.distance = PreviewStage.Fit(lo, hi, self.fov, self.aspect, self.margin)
 	if self.camera then self.camera.FieldOfView = self.fov end
 	if self.kind == "trail" and Trails.Has(self.id) then
-		self.emulator = Trails.Emulator.new(self.id, self.world)
-		if self.emulator then self.emulator.camera = Vector3.new(0, 0, 1) end
+		if self.realEffects then
+			local def = Trails.Defs[self.id]
+			if def.footprints then self.footprints = Trails.Footprints.new(self.world, def.footprints) end
+		else
+			self.emulator = Trails.Emulator.new(self.id, self.world)
+			if self.emulator then self.emulator.camera = Vector3.new(0, 0, 1) end
+		end
 	end
 	self:Replay()
 	return self
@@ -142,22 +180,23 @@ function PreviewStage:_place(clock)
 	if not self.pose then return end
 	if self.kind == "emote" and Emotes.Has(self.id) then
 		local at = self.motion and clock or Emotes.Defs[self.id].duration * 0.4
-		self.pose:Set(Emotes.Sample(self.id, at, true) or {}, self.root)
+		self.pose:Set(Emotes.Sample(self.id, at, true) or {}, CFrame.new(self.origin) * self.root)
 	elseif self.kind == "trail" then
 		local angular = RUN_SPEED / TRACK_RADIUS
 		local theta = clock * angular
-		local position = Vector3.new(math.sin(theta) * TRACK_RADIUS, 0, -math.cos(theta) * TRACK_RADIUS)
+		local position = Vector3.new(math.sin(theta) * TRACK_RADIUS, 0, -math.cos(theta) * TRACK_RADIUS) + self.origin
 		local tangent = Vector3.new(math.cos(theta), 0, math.sin(theta))
 		local frame = CFrame.lookAt(position, position + tangent)
 		self.pose:Set(Poses.Run(clock), frame)
 		self.runnerFrame, self.runnerVelocity = frame, tangent * RUN_SPEED
 	else
 		local sway = self.motion and math.sin(clock * 1.4) * 1.2 or 0
-		self.pose:Set({LeftShoulder = A(0, 0, -5 - sway), RightShoulder = A(0, 0, 5 + sway), Neck = A(0, sway * 2, 0)}, self.root)
+		self.pose:Set({LeftShoulder = A(0, 0, -5 - sway), RightShoulder = A(0, 0, 5 + sway), Neck = A(0, sway * 2, 0)}, CFrame.new(self.origin) * self.root)
 	end
 end
 
 function PreviewStage:_burst(at)
+	at = at + self.origin
 	local palette = BURST[self.id] or {{255, 255, 255}}
 	for index = 1, 22 do
 		local part = Instance.new("Part")
@@ -201,6 +240,13 @@ function PreviewStage:Replay()
 	for _, burst in ipairs(self.bursts) do burst.part:Destroy() end
 	table.clear(self.bursts)
 	if self.emulator then self.emulator:Reset() end
+	if self.footprints then self.footprints:Clear() end
+	if self.realEffects then
+		-- Real engine effects keep their own history; clear it so the lap truly starts over.
+		for _, item in ipairs(self.rig:GetDescendants()) do
+			if item:IsA("Trail") or item:IsA("ParticleEmitter") then pcall(function() item:Clear() end) end
+		end
+	end
 	self.replays = (self.replays or 0) + 1
 	self:_place(0)
 	if self.kind == "trail" and self.emulator and not self.motion then
@@ -208,7 +254,7 @@ function PreviewStage:Replay()
 		for step = 1, 40 do
 			self.time = step / 30
 			self:_place(self.time)
-			self.emulator:Step(1 / 30, self.runnerFrame, self.runnerVelocity, FLOOR)
+			self.emulator:Step(1 / 30, self.runnerFrame, self.runnerVelocity, self.floor + self.origin.Y)
 		end
 	elseif self.kind == "tag" then
 		self:_burst(Vector3.new(0, 0.5, 0))
@@ -221,7 +267,7 @@ function PreviewStage:_aim()
 	local sway = self.motion and self.kind ~= "trail" and self.kind ~= "emote"
 	local a = self.angle + (sway and math.sin(self.time * 0.38) * 0.12 or 0)
 	local direction = Vector3.new(math.sin(a) * math.cos(self.pitch), math.sin(self.pitch), -math.cos(a) * math.cos(self.pitch))
-	self.camera.CFrame = CFrame.lookAt(self.center + direction * self.distance, self.center)
+	self.camera.CFrame = CFrame.lookAt(self.focus + direction * self.distance, self.focus)
 	if self.emulator then self.emulator.camera = self.camera.CFrame.LookVector end
 end
 
@@ -233,7 +279,11 @@ function PreviewStage:Update(dt)
 	if self.motion then
 		self.time += dt
 		self:_place(self.time)
-		if self.emulator and self.runnerFrame then self.emulator:Step(dt, self.runnerFrame, self.runnerVelocity, FLOOR) end
+		if self.emulator and self.runnerFrame then self.emulator:Step(dt, self.runnerFrame, self.runnerVelocity, self.floor + self.origin.Y) end
+		if self.footprints and self.runnerFrame then
+			local at = self.runnerFrame.Position
+			self.footprints:Step(dt, Vector3.new(at.X, self.floor + self.origin.Y + 0.04, at.Z), self.runnerFrame.LookVector, self.runnerVelocity.Magnitude)
+		end
 		if self.kind == "tag" then
 			self.burstClock += dt
 			if self.burstClock > 2.6 then self.burstClock = 0 self:_burst(Vector3.new(0, 0.5, 0)) end
@@ -261,6 +311,7 @@ function PreviewStage:Back() self.targetAngle = math.pi end
 function PreviewStage:Destroy()
 	for _, burst in ipairs(self.bursts) do burst.part:Destroy() end
 	table.clear(self.bursts)
+	if self.footprints then self.footprints:Destroy() self.footprints = nil end
 	if self.emulator then self.emulator:Destroy() self.emulator = nil end
 end
 

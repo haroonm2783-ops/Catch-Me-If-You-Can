@@ -172,27 +172,55 @@ function UIController.new(ctx)
 	}, UIController)
 end
 
--- The shop and locker preview the player's own avatar wearing the chosen cosmetics. The base model is built
--- from their applied HumanoidDescription (async); until it exists, a neutral mannequin stands in.
-function UIController:_loadAvatarBase()
-	if self.avatarLoading or self.destroyed then return end
+-- The shop and locker preview the player's own avatar wearing the chosen cosmetics. The best base is a clone of their
+-- real, already-assembled character (every accessory exactly as the engine built it); failing that, a model built from
+-- their applied HumanoidDescription; failing that, a neutral mannequin. Every base has its joints solved and its
+-- accessories audited (a detached accessory is hidden, never shown floating) before it is used.
+local function accessoryCount(character)
+	local count = 0
+	if character then
+		for _, child in ipairs(character:GetChildren()) do if child:IsA("Accessory") then count += 1 end end
+	end
+	return count
+end
+
+function UIController:_adoptBase(base, character, accessories)
+	if self.destroyed then base:Destroy() return end
+	if self.avatarBase then self.avatarBase:Destroy() end
+	self.avatarBase, self.avatarCharacter, self.avatarAccessories = base, character, accessories
+	self.thumbs, self.thumbCount = {}, 0
+	local report = base:GetAttribute("CatchPreviewReport")
+	if report and report ~= "ok" and report ~= self.lastBaseReport then
+		self.lastBaseReport = report
+		warn("[Catch preview] " .. report)
+	end
+	if self.menu == "Shop" or self.menu == "Inventory" then self:_renderMenu() end
+end
+
+function UIController:_loadAvatarBase(force)
+	if self.destroyed then return end
+	local character = self.player.Character
+	local accessories = accessoryCount(character)
+	if not force and self.avatarBase and self.avatarCharacter == character and self.avatarAccessories == accessories then return end
+	if character and self.Appearance.BuildAvatarFromCharacter then
+		local ok, base = pcall(self.Appearance.BuildAvatarFromCharacter, character)
+		if ok and base then self:_adoptBase(base, character, accessories) return end
+	end
+	if self.avatarLoading then return end
 	self.avatarLoading = true
 	task.spawn(function()
-		local character = self.player.Character
 		local humanoid = character and character:FindFirstChildOfClass("Humanoid")
 		local base
 		if humanoid then
 			local ok, description = pcall(function() return humanoid:GetAppliedDescription() end)
 			if ok and description then base = self.Appearance.BuildAvatar(description, humanoid.RigType) end
 		end
-		self.avatarLoading = false
-		if base and not self.destroyed then
-			if self.avatarBase then self.avatarBase:Destroy() end
-			self.avatarBase, self.thumbs, self.thumbCount = base, {}, 0
-			if self.menu == "Shop" or self.menu == "Inventory" then self:_renderMenu() end
-		elseif base then
-			base:Destroy()
+		if base then
+			-- Textures and meshes load asynchronously; wait so the preview never shows grey placeholder heads.
+			pcall(function() game:GetService("ContentProvider"):PreloadAsync({base}) end)
 		end
+		self.avatarLoading = false
+		if base then self:_adoptBase(base, character, accessories) end
 	end)
 end
 
@@ -226,6 +254,7 @@ function UIController:Start()
 	self.Emotes = require(shared:WaitForChild("Emotes"))
 	self.Poses = require(shared:WaitForChild("Poses"))
 	self.Trails = require(shared:WaitForChild("Trails"))
+	self.PreviewScene = require(shared:WaitForChild("PreviewScene"))
 	self.gui = node("ScreenGui", {
 		Name = "CatchMallUI", ResetOnSpawn = false, IgnoreGuiInset = false,
 		DisplayOrder = 20, ZIndexBehavior = Enum.ZIndexBehavior.Sibling,
@@ -282,12 +311,17 @@ function UIController:Start()
 		accumulated += dt
 		if accumulated >= 0.1 then accumulated = 0 self:_tick() end
 		local motion = self:_motion()
+		if self.studioStage then self.studioStage:Update(dt) end
 		if self.stage then self.stage:SetMotion(motion) self.stage:Update(dt) end
 		if self.inspectStage then self.inspectStage:SetMotion(motion) self.inspectStage:Update(dt) end
 	end)
 	self:_makeRoomForCoreUi()
 	self:_responsive()
-	self:_loadAvatarBase()
+	self:_loadAvatarBase(true)
+	-- A respawn, or accessories arriving after the character spawns, change the avatar the previews must show.
+	if self.player.CharacterAppearanceLoaded then
+		self.connections[#self.connections + 1] = self.player.CharacterAppearanceLoaded:Connect(function() self:_loadAvatarBase(true) end)
+	end
 	self:OnProfile(self.ctx.Profile)
 	self:OnState(self.ctx.State)
 end
@@ -684,7 +718,13 @@ end
 
 function UIController:OpenMenu(name)
 	if not self.ctx.Profile.loaded then return end
+	if self.studioActive then
+		-- Tapping Shop while in the Trail Studio goes back to the Shop; any other menu leaves the studio and opens.
+		self:_exitStudio()
+		if self.menu == name then return end
+	end
 	if self.menu == name then self:CloseMenu() return end
+	if name == "Shop" or name == "Inventory" then self:_loadAvatarBase() end
 	self:CloseMore()
 	self.menu = name
 	self.player:SetAttribute("CatchMenuOpen", true)
@@ -700,6 +740,7 @@ function UIController:OpenMenu(name)
 end
 
 function UIController:CloseMenu()
+	if self.studioActive then self:_exitStudio(true) end
 	self.menu = nil
 	self.player:SetAttribute("CatchMenuOpen", false)
 	self.panel.Visible = false
@@ -735,11 +776,9 @@ function UIController:_renderMenu()
 end
 
 function UIController:_itemPrice(item)
-	if item.currency == "Coins" then return number(item.price) .. " COINS" end
-	if item.currency == "Robux" then
-		if not item.gamePassId or item.gamePassId == 0 then return "COMING SOON" end
-		return "VIEW ROBUX PRICE"
-	end
+	local coins = self.ctx.Catalog.CoinPrice(item)
+	if coins then return number(coins) .. " COINS" end
+	if item.currency == "Robux" then return "VIEW ROBUX PRICE" end
 	if item.currency == "Milestone" then
 		local milestone = item.milestone or {}
 		local names = {rounds = "ROUNDS", wins = "WINS", tags = "TAGS", level = "LEVEL", bestStreak = "WIN STREAK", hunterWins = "HUNTER WINS", survived = "SECONDS SURVIVED", pickups = "COINS COLLECTED", finds = "FINDS"}
@@ -757,13 +796,17 @@ function UIController:_milestone(item)
 	return math.min(progress, milestone.value), milestone.value
 end
 
--- Short card caption. Locked milestones show their progress; unconfigured Robux items say so instead of showing a price.
+-- Short card caption. Locked milestones show their progress. Premium items show their coin price, and the Robux price
+-- as well once a real Game Pass is configured.
 function UIController:_cardStatus(item, owned, equipped)
 	if equipped[item.category] == item.id then return "EQUIPPED", C.green end
 	if owned[item.id] then return "OWNED", C.cyan end
 	if item.currency == "Robux" then
-		if (item.gamePassId or 0) == 0 then return "COMING SOON", C.muted end
-		return "R$ " .. number(item.price), C.amber
+		local coins = self.ctx.Catalog.CoinPrice(item)
+		local robux = self.ctx.Catalog.RobuxConfigured(item) and ("R$ " .. number(item.price)) or nil
+		if coins and robux then return "🪙 " .. number(coins) .. "  ·  " .. robux, C.amber end
+		if coins then return "🪙 " .. number(coins), C.amber end
+		return robux or "UNAVAILABLE", C.muted
 	end
 	local progress, goal = self:_milestone(item)
 	if progress then return "🔒 " .. number(progress) .. "/" .. number(goal) .. " " .. string.gsub(self:_itemPrice(item), "%s%d[%d,]*$", ""), C.amber end
@@ -804,10 +847,10 @@ function UIController:_previewSpec(item)
 	return kind, id, extra
 end
 
-function UIController:_previewRig(extra)
+function UIController:_previewRig(extra, mannequin)
 	local skin = extra.skins ~= "" and extra.skins or "skin_courier"
 	local mask = extra.masks or ""
-	local ok, rig = pcall(self.Appearance.BuildPreview, skin, mask, extra, {userId = self.player.UserId}, self.avatarBase)
+	local ok, rig = pcall(self.Appearance.BuildPreview, skin, mask, extra, {userId = self.player.UserId}, not mannequin and self.avatarBase or nil)
 	if ok and rig then return rig end
 	return nil
 end
@@ -849,7 +892,7 @@ function UIController:_dragToRotate(view, getStage)
 end
 
 -- Rotate / front / back / replay / full-screen controls for a stage. Returns the control bar height.
-function UIController:_previewControls(parent, getStage, animated, onFull, width)
+function UIController:_previewControls(parent, getStage, animated, onFull, width, onStudio)
 	local single = width >= 340
 	local height = single and 32 or 66
 	local controls = frame(parent, {Name = "PreviewControls", AnchorPoint = Vector2.new(0.5, 1), Position = UDim2.new(0.5, 0, 1, 0), Size = UDim2.new(1, -4, 0, height), BackgroundTransparency = 1})
@@ -860,7 +903,8 @@ function UIController:_previewControls(parent, getStage, animated, onFull, width
 		{"PreviewRight", ">", 36, function(stage) stage:Rotate(math.pi / 4) end},
 	}
 	if animated then table.insert(specs, {"PreviewReplay", "REPLAY", 72, function(stage) stage:Replay() end}) end
-	if onFull then table.insert(specs, {"PreviewFullscreen", "FULL", 50, false}) end
+	if onFull then table.insert(specs, {"PreviewFullscreen", "FULL", 50, false, onFull}) end
+	if onStudio then table.insert(specs, {"PreviewStudio", "TEST RUN", 84, false, onStudio}) end
 	local rows = {{}, {}}
 	if single then rows[1] = specs else
 		for index, spec in ipairs(specs) do table.insert(rows[index <= 4 and 1 or 2], spec) end
@@ -872,11 +916,12 @@ function UIController:_previewControls(parent, getStage, animated, onFull, width
 			layout.HorizontalAlignment = Enum.HorizontalAlignment.Center
 			for order, spec in ipairs(row) do
 				local replay = spec[1] == "PreviewReplay"
+				local studio = spec[1] == "PreviewStudio"
 				button(holder, spec[2], function()
 					if spec[4] then local stage = getStage() if stage then spec[4](stage) end
-					elseif onFull then onFull() end
+					elseif spec[5] then spec[5]() end
 				end, {Name = spec[1], LayoutOrder = order, Size = UDim2.fromOffset(spec[3], 32), TextSize = 10,
-					BackgroundColor3 = replay and C.green or C.card, TextColor3 = replay and C.ink or C.text})
+					BackgroundColor3 = replay and C.green or (studio and C.amber or C.card), TextColor3 = (replay or studio) and C.ink or C.text})
 			end
 		end
 	end
@@ -1072,7 +1117,9 @@ function UIController:_renderShop()
 		end, {Name = "Category_" .. category.id, Size = UDim2.fromOffset(math.max(86, #category.label * 8 + 44 + (total > 1 and 40 or 0)), 38), LayoutOrder = index, TextSize = 11,
 			BackgroundColor3 = chosen and C.amber or C.card, TextColor3 = chosen and C.ink or C.text})
 	end
-	if not inventory then
+	local packsAvailable = #self:_configuredPacks() > 0
+	if self.category == "coins" and not packsAvailable then self.category = "skins" end
+	if not inventory and packsAvailable then
 		local chosen = self.category == "coins"
 		button(categories, "💰 COINS", function() self.category = "coins" self.gridScroll = 0 self:_renderMenu() end,
 			{Name = "Category_coins", Size = UDim2.fromOffset(96, 38), LayoutOrder = 99, TextSize = 11,
@@ -1131,24 +1178,247 @@ function UIController:_renderShop()
 	self:_renderItemDetail(detail, selected, compact and not portrait)
 end
 
--- Coin packs are developer products: the server grants coins from the receipt, never from this UI.
+-- Coin packs are developer products: the server grants coins from the receipt, never from this UI. Only packs with a
+-- real Developer Product ID are shown, so there is never a dead buy button.
+function UIController:_configuredPacks()
+	local packs = {}
+	for _, pack in ipairs(self.ctx.Catalog.Products) do
+		if type(pack.productId) == "number" and pack.productId > 0 then table.insert(packs, pack) end
+	end
+	return packs
+end
+
 function UIController:_renderCoinPacks(collection, detail)
 	label(detail, "COINS BUY STYLE, NOT POWER", {Position = UDim2.fromOffset(18, 18), Size = UDim2.new(1, -36, 0, 40), Font = F.title, TextSize = 22, TextWrapped = true, TextColor3 = C.amber})
 	label(detail, "Coins only unlock cosmetics: outfits, masks, trails and titles. No pack changes speed, tagging, hiding or anything else in a round. You also earn coins free by playing, collecting mall coins and claiming daily missions.", {Position = UDim2.fromOffset(18, 66), Size = UDim2.new(1, -36, 1, -90), TextSize = 12, TextColor3 = C.muted, TextWrapped = true, TextYAlignment = Enum.TextYAlignment.Top, Font = F.medium})
 	local grid = scroll(collection, {Name = "CoinPacks", Position = UDim2.fromOffset(0, 52), Size = UDim2.new(1, 0, 1, -52)})
 	list(grid, false, 10)
-	for index, pack in ipairs(self.ctx.Catalog.Products) do
-		local configured = (pack.productId or 0) > 0
+	for index, pack in ipairs(self:_configuredPacks()) do
+		local configured = true
 		local row = frame(grid, {Name = "Pack_" .. pack.id, Size = UDim2.new(1, -8, 0, 78), LayoutOrder = index, BackgroundColor3 = C.card}, 16)
 		stroke(row, C.ink, 0, 3)
 		label(row, "🪙", {Position = UDim2.fromOffset(12, 10), Size = UDim2.fromOffset(52, 52), TextSize = 38, TextXAlignment = Enum.TextXAlignment.Center})
 		label(row, pack.name, {Position = UDim2.fromOffset(72, 12), Size = UDim2.new(1, -230, 0, 22), Font = F.black, TextSize = 15, TextTruncate = Enum.TextTruncate.AtEnd})
 		label(row, number(pack.coins) .. " COINS", {Position = UDim2.fromOffset(72, 38), Size = UDim2.new(1, -230, 0, 24), Font = F.title, TextSize = 20, TextColor3 = C.amber})
-		button(row, configured and ("R$ " .. number(pack.robux)) or "COMING SOON", function()
-			if configured then self:_send("BuyCoins", {id = pack.id}) else self:Toast("Coin packs are not configured for sale yet.") end
-		end, {Name = "BuyPack_" .. pack.id, AnchorPoint = Vector2.new(1, 0.5), Position = UDim2.new(1, -14, 0.5, 0), Size = UDim2.fromOffset(130, 44), TextSize = 13,
-			BackgroundColor3 = configured and C.green or C.card, TextColor3 = configured and C.ink or C.muted})
+		button(row, "R$ " .. number(pack.robux), function() self:_send("BuyCoins", {id = pack.id}) end,
+			{Name = "BuyPack_" .. pack.id, AnchorPoint = Vector2.new(1, 0.5), Position = UDim2.new(1, -14, 0.5, 0), Size = UDim2.fromOffset(130, 44), TextSize = 13,
+			BackgroundColor3 = C.green, TextColor3 = C.ink})
 	end
+end
+
+-- ---------------------------------------------------------------------------------------------------------------------
+-- Trail Studio: the REAL trail on a running avatar. ViewportFrames cannot draw trails or particles, so the studio borrows
+-- the world camera, points it at an isolated stage (PreviewScene) and plays the avatar's actual Trail/ParticleEmitter
+-- objects there. Lobby and results only (never mid-round); the player's steering is switched off while it is open and
+-- restored by every way out (BACK, closing the menu, a round starting, dying, leaving).
+-- ---------------------------------------------------------------------------------------------------------------------
+function UIController:_playerControls()
+	if self.controlsProvider ~= nil then return self.controlsProvider or nil end
+	local ok, controls = pcall(function()
+		local module = require(self.player:WaitForChild("PlayerScripts"):WaitForChild("PlayerModule", 5))
+		return module:GetControls()
+	end)
+	self.controlsProvider = ok and controls or false
+	return self.controlsProvider or nil
+end
+
+function UIController:_myHumanoid()
+	local character = self.player.Character
+	return character and character:FindFirstChildOfClass("Humanoid") or nil
+end
+
+function UIController:_studioAvailable()
+	if self:_inRound() then return false, "The Trail Studio opens between rounds." end
+	local humanoid = self:_myHumanoid()
+	if not humanoid or humanoid.Health <= 0 then return false, "The Trail Studio opens once your avatar is ready." end
+	if not self:_playerControls() then return false, "The Trail Studio is unavailable on this device; use the in-panel preview." end
+	return true
+end
+
+function UIController:_studioClear()
+	if self.studioStage then self.studioStage:Destroy() self.studioStage = nil end
+	if self.studioRig then self.studioRig:Destroy() self.studioRig = nil end
+end
+
+function UIController:_studioShow(item)
+	self:_studioClear()
+	local _, _, extra = self:_previewSpec(item)
+	local rig = self:_previewRig(extra)
+	if not rig then return false end
+	local workspaceService = game:GetService("Workspace")
+	local size = self.root.AbsoluteSize
+	local function build(model)
+		return self.PreviewStage.new({world = self.scene:World(), camera = self.scene:Camera(), rig = model, kind = "trail", id = item.id, realEffects = true,
+			origin = self.PreviewScene.Origin, aspect = size.X / math.max(1, size.Y), motion = true})
+	end
+	local stage = build(rig)
+	if stage.problem and self.avatarBase then
+		warn("[Catch preview] " .. stage.problem .. "; the studio shows the mannequin instead")
+		stage:Destroy()
+		rig:Destroy()
+		rig = self:_previewRig(extra, true)
+		stage = build(rig)
+	end
+	rig.Parent = self.scene:World()
+	self.studioRig, self.studioStage, self.studioId = rig, stage, item.id
+	return true
+end
+
+local function studioTrails(self)
+	local list = {}
+	for _, item in ipairs(self.ctx.Catalog.ForCategory("trails")) do
+		if self:_isReady(item) then table.insert(list, item) end
+	end
+	return list
+end
+
+function UIController:_enterStudio(item)
+	local available, why = self:_studioAvailable()
+	if not available then self:Toast(why) return end
+	self:CloseMore()
+	self:_closeInspect()
+	local scene = self.scene or self.PreviewScene.new({workspace = game:GetService("Workspace"), controls = self:_playerControls(),
+		humanoid = function() return self:_myHumanoid() end})
+	self.scene = scene
+	local floor = self.avatarBase and self.PreviewStage.FloorOf(self.avatarBase) or -3
+	if not scene:Enter(rarityColor(item), floor) then self:Toast("The Trail Studio could not start; use the in-panel preview.") return end
+	self.studioActive = true
+	self.panel.Visible = false
+	if not self:_studioShow(item) then self:_exitStudio() self:Toast("Could not build your avatar for the studio.") return end
+	self:_renderStudioBar()
+end
+
+function UIController:_exitStudio(keepClosed)
+	if not self.studioActive then return end
+	self.studioActive = false
+	self:_studioClear()
+	if self.studioBar then self.studioBar:Destroy() self.studioBar = nil end
+	if self.scene then self.scene:Exit() end
+	if not keepClosed and self.menu then
+		self.panel.Visible = true
+		self:_renderMenu()
+	end
+end
+
+-- Step to the previous or next trail without leaving the studio.
+function UIController:_studioStep(direction)
+	local list = studioTrails(self)
+	if #list == 0 then return end
+	local index = 1
+	for position, item in ipairs(list) do if item.id == self.studioId then index = position end end
+	local item = list[((index - 1 + direction) % #list) + 1]
+	self.selectedItem = item.id
+	if self:_studioShow(item) then self:_renderStudioBar() end
+end
+
+function UIController:_renderStudioBar()
+	local item = self.ctx.Catalog.Get(self.studioId)
+	if not item then return end
+	local size = self.root.AbsoluteSize
+	local width = math.max(220, math.min(640, size.X - (self.rightMargin or 80) - 24))
+	if self.studioBar then self.studioBar:Destroy() end
+	local bar = frame(self.root, {Name = "StudioBar", AnchorPoint = Vector2.new(0.5, 1), Position = UDim2.new(0, (size.X - (self.rightMargin or 80)) / 2, 1, -12),
+		Size = UDim2.fromOffset(width, 152), BackgroundColor3 = C.background, ZIndex = 22}, 16)
+	stroke(bar, rarityColor(item), 0, 3)
+	self.studioBar = bar
+	label(bar, string.upper(item.rarity or "") .. "  ·  TRAIL STUDIO", {Name = "StudioKind", Position = UDim2.fromOffset(14, 8), Size = UDim2.new(1, -28, 0, 14), TextSize = 10, Font = F.black, TextColor3 = rarityColor(item), ZIndex = 23})
+	label(bar, item.name, {Name = "StudioName", Position = UDim2.fromOffset(14, 22), Size = UDim2.new(1, -28, 0, 26), Font = F.title, TextSize = 21, TextTruncate = Enum.TextTruncate.AtEnd, ZIndex = 23})
+	local priceText, priceColor = self:_priceLine(item)
+	label(bar, priceText, {Name = "StudioPrice", Position = UDim2.fromOffset(14, 48), Size = UDim2.new(1, -28, 0, 16), TextSize = 11, Font = F.black, TextColor3 = priceColor, TextTruncate = Enum.TextTruncate.AtEnd, ZIndex = 23})
+	local function row(y)
+		local holder = frame(bar, {Position = UDim2.fromOffset(0, y), Size = UDim2.new(1, 0, 0, 34), BackgroundTransparency = 1, ZIndex = 23})
+		local layout = list(holder, true, 6)
+		layout.HorizontalAlignment = Enum.HorizontalAlignment.Center
+		return holder
+	end
+	local nav = row(70)
+	local function control(parent, name, text, w, order, callback, color, textColor)
+		return button(parent, text, callback, {Name = name, LayoutOrder = order, Size = UDim2.fromOffset(w, 32), TextSize = 10, BackgroundColor3 = color or C.card, TextColor3 = textColor or C.text, ZIndex = 24})
+	end
+	control(nav, "StudioPrev", "< PREV", 62, 1, function() self:_studioStep(-1) end)
+	control(nav, "StudioRotateLeft", "↶", 34, 2, function() if self.studioStage then self.studioStage:Rotate(-math.pi / 4) end end)
+	control(nav, "StudioReplay", "REPLAY", 84, 3, function() if self.studioStage then self.studioStage:Replay() end end, C.green, C.ink)
+	control(nav, "StudioRotateRight", "↷", 34, 4, function() if self.studioStage then self.studioStage:Rotate(math.pi / 4) end end)
+	control(nav, "StudioNext", "NEXT >", 62, 5, function() self:_studioStep(1) end)
+	local act = self:_itemAction(item)
+	local actions = row(108)
+	control(actions, "StudioAction", act.text, math.max(120, width - 168), 1, function() act.run() end, act.can and C.green or C.card, act.can and C.ink or C.muted)
+	control(actions, "StudioBack", "BACK TO SHOP", 126, 2, function() self:_exitStudio() end, C.coral)
+end
+
+-- One plain-words price/state line for an item and its color.
+function UIController:_priceLine(item)
+	local catalog = self.ctx.Catalog
+	local profile = self.ctx.Profile
+	local owned = (profile.owned or {})[item.id] == true
+	local equipped = profile.equipped or {}
+	local ready = self:_isReady(item)
+	local priceText, priceColor
+	local coinsHave = profile.coins or 0
+	local coinPrice = catalog.CoinPrice(item)
+	local robuxOn = catalog.RobuxConfigured(item)
+	if owned then priceText, priceColor = equipped[item.category] == item.id and "Equipped right now" or "In your collection", C.green
+	elseif not ready then priceText, priceColor = "Not available yet", C.muted
+	elseif item.currency == "Free" then priceText, priceColor = "Free", C.green
+	elseif coinPrice then
+		priceText = "🪙 " .. number(coinPrice) .. " coins  (you have " .. number(coinsHave) .. ")" .. (robuxOn and ("   or   R$ " .. number(item.price)) or "")
+		priceColor = coinsHave >= coinPrice and C.amber or C.coral
+	elseif robuxOn then priceText, priceColor = "R$ " .. number(item.price) .. " on Roblox", C.amber
+	elseif item.currency == "Milestone" then
+		local progress, goal = self:_milestone(item)
+		priceText, priceColor = "🔒 " .. self:_itemPrice(item) .. (progress and ("  (" .. number(progress) .. "/" .. number(goal) .. ")") or ""), C.amber
+	else priceText, priceColor = "Not available yet", C.muted end
+	return priceText, priceColor
+end
+
+-- The primary action for an item (buy with coins, claim, equip, unequip...), shared by the detail panel and the
+-- Trail Studio. Returns {text, can, run, affordable, owned}; run() performs it (or explains why it cannot).
+function UIController:_itemAction(item)
+	local catalog = self.ctx.Catalog
+	local profile = self.ctx.Profile
+	local owned = (profile.owned or {})[item.id] == true
+	local equipped = profile.equipped or {}
+	local ready = self:_isReady(item)
+	local coinsHave = profile.coins or 0
+	local coinPrice = catalog.CoinPrice(item)
+	local robuxOn = catalog.RobuxConfigured(item)
+	local canUnequip = owned and equipped[item.category] == item.id
+		and (item.category ~= "skins" or item.id ~= catalog.DefaultEquipment.skins)
+		and catalog.IsEquippable(item.category) and self.menu == "Inventory"
+	local affordable = coinPrice == nil or coinsHave >= coinPrice
+	local obtainable = item.currency == "Free" or item.currency == "Milestone" or coinPrice ~= nil or robuxOn
+	local text
+	if self.pendingId == item.id then text = "WAITING FOR SERVER..."
+	elseif canUnequip then text = item.category == "skins" and "USE DEFAULT LOOK" or "UNEQUIP"
+	elseif owned and equipped[item.category] == item.id then text = "EQUIPPED"
+	elseif owned and catalog.IsEquippable(item.category) then text = "EQUIP"
+	elseif owned then text = "OWNED"
+	elseif not ready or not obtainable then text = "NOT AVAILABLE YET"
+	elseif item.currency == "Milestone" then text = self:_itemPrice(item)
+	elseif coinPrice and not affordable then text = "NEED " .. number(coinPrice - coinsHave) .. " MORE COINS"
+	elseif coinPrice then text = "BUY  ·  " .. number(coinPrice) .. " COINS"
+	else text = item.currency == "Free" and "CLAIM FREE" or self:_itemPrice(item) end
+	local can = not self.pendingId and (canUnequip or (owned and catalog.IsEquippable(item.category) and equipped[item.category] ~= item.id)
+		or (not owned and ready and obtainable and affordable and item.currency ~= "Milestone"))
+	local function run()
+		if not can then
+			if not ready and not owned then self:Toast("This item is not available yet.")
+			elseif coinPrice and not owned and not affordable then self:Toast("Play rounds and collect coins to afford this.") end
+			return
+		end
+		-- Set pending before firing so an immediate profile response wins the race.
+		self.pendingId = item.id
+		if owned then self:_send("Equip", {category = item.category, id = canUnequip and "" or item.id})
+		else self:_send("Buy", {id = item.id, method = coinPrice and "Coins" or nil}) end
+		self:_renderMenu()
+		task.delay(8, function()
+			if self.pendingId == item.id then
+				self.pendingId = nil
+				if self.menu == "Shop" or self.menu == "Inventory" then self:_renderMenu() end
+			end
+		end)
+	end
+	return {text = text, can = can, run = run, affordable = affordable, owned = owned}
 end
 
 function UIController:_renderItemDetail(parent, item, horizontal)
@@ -1168,7 +1438,8 @@ function UIController:_renderItemDetail(parent, item, horizontal)
 	end
 	local stage = frame(parent, {Name = "PreviewStage", Position = UDim2.fromOffset(8, 35), Size = horizontal and UDim2.new(0.46, -8, 1, -43) or UDim2.new(1, -16, 1, -(infoHeight + 52)), BackgroundTransparency = 1})
 	local animated = kind == "emote" or kind == "trail" or kind == "tag"
-	local controlsHeight = self:_previewControls(stage, function() return self.stage end, animated, function() self:_openInspect(item) end, math.floor(stage.AbsoluteSize.X))
+	local controlsHeight = self:_previewControls(stage, function() return self.stage end, animated, function() self:_openInspect(item) end, math.floor(stage.AbsoluteSize.X),
+		kind == "trail" and ready and function() self:_enterStudio(item) end or nil)
 	local view
 	local rig = ready and self:_previewRig(extra) or nil
 	if rig then
@@ -1177,12 +1448,24 @@ function UIController:_renderItemDetail(parent, item, horizontal)
 		view = node("ViewportFrame", {Name = "CharacterPreview", BackgroundTransparency = 1, Size = UDim2.new(1, 0, 1, -(controlsHeight + 4))}, stage)
 		previewLight(view)
 		local world = node("WorldModel", {}, view)
-		rig.Parent = world
 		local camera = node("Camera", {}, view)
 		view.CurrentCamera = camera
-		self.previewModel, self.previewCamera = rig, camera
 		local size = view.AbsoluteSize
-		self.stage = self.PreviewStage.new({world = world, camera = camera, rig = rig, kind = kind, id = previewId, motion = self:_motion(), aspect = size.X / math.max(1, size.Y)})
+		local function make(model)
+			model.Parent = world
+			self.previewModel, self.previewCamera = model, camera
+			return self.PreviewStage.new({world = world, camera = camera, rig = model, kind = kind, id = previewId, motion = self:_motion(), aspect = size.X / math.max(1, size.Y)})
+		end
+		self.stage = make(rig)
+		-- Self-test failed (the avatar could not be posed): fall back to the neutral mannequin so the preview still
+		-- animates, and say so in Output so it can be reported.
+		if self.stage.problem and self.avatarBase then
+			warn("[Catch preview] " .. self.stage.problem .. "; showing the mannequin instead")
+			self.stage:Destroy()
+			rig:Destroy()
+			local fallback = self:_previewRig(extra, true)
+			if fallback then self.stage = make(fallback) end
+		end
 		self:_dragToRotate(view, function() return self.stage end)
 	else
 		label(stage, ready and "PREVIEW UNAVAILABLE" or "NOT READY FOR SALE", {Name = "PreviewMissing", Size = UDim2.new(1, 0, 1, -(controlsHeight + 4)), TextColor3 = C.muted, TextSize = 11, TextXAlignment = Enum.TextXAlignment.Center})
@@ -1220,42 +1503,15 @@ function UIController:_renderItemDetail(parent, item, horizontal)
 		row("INCLUDES (" .. have .. "/" .. #lines .. " yours):  " .. table.concat(lines, "  ·  "), horizontal and 46 or 40, {Name = "Includes", TextSize = 10, TextColor3 = C.text})
 	end
 	-- Price and state, in plain words.
-	local priceText, priceColor
-	local coinsHave = profile.coins or 0
-	if owned then priceText, priceColor = equipped[item.category] == item.id and "Equipped right now" or "In your collection", C.green
-	elseif not ready then priceText, priceColor = "Not available yet", C.muted
-	elseif item.currency == "Free" then priceText, priceColor = "Free", C.green
-	elseif item.currency == "Coins" then
-		priceText, priceColor = "🪙 " .. number(item.price) .. " coins  (you have " .. number(coinsHave) .. ")", coinsHave >= item.price and C.amber or C.coral
-	elseif item.currency == "Robux" then
-		if (item.gamePassId or 0) > 0 then priceText, priceColor = "R$ " .. number(item.price) .. " on Roblox", C.amber
-		else priceText, priceColor = "Planned price R$ " .. number(item.price) .. " · not on sale yet", C.muted end
-	else
-		local progress, goal = self:_milestone(item)
-		priceText, priceColor = "🔒 " .. self:_itemPrice(item) .. (progress and ("  (" .. number(progress) .. "/" .. number(goal) .. ")") or ""), C.amber
-	end
+	local priceText, priceColor = self:_priceLine(item)
+	local coinPrice = catalog.CoinPrice(item)
+	local robuxOn = catalog.RobuxConfigured(item)
 	row(priceText, 16, {Name = "PriceLine", TextColor3 = priceColor, Font = F.black, TextSize = 11})
 	if self:_inRound() and catalog.IsEquippable(item.category) then
 		row("Saves now, shows up after this round.", 14, {Name = "RoundHint", TextSize = 10, TextColor3 = C.amber})
 	end
-	local configured = item.currency ~= "Robux" or (item.gamePassId or 0) > 0
-	local canUnequip = owned and equipped[item.category] == item.id
-		and (item.category ~= "skins" or item.id ~= catalog.DefaultEquipment.skins)
-		and catalog.IsEquippable(item.category) and self.menu == "Inventory"
-	local affordable = item.currency ~= "Coins" or coinsHave >= item.price
-	local actionText
-	if self.pendingId == item.id then actionText = "WAITING FOR SERVER..."
-	elseif canUnequip then actionText = item.category == "skins" and "USE DEFAULT LOOK" or "UNEQUIP"
-	elseif owned and equipped[item.category] == item.id then actionText = "EQUIPPED"
-	elseif owned and catalog.IsEquippable(item.category) then actionText = "EQUIP"
-	elseif owned then actionText = "OWNED"
-	elseif not ready then actionText = "NOT AVAILABLE YET"
-	elseif not configured then actionText = "COMING SOON"
-	elseif item.currency == "Milestone" then actionText = self:_itemPrice(item)
-	elseif item.currency == "Coins" and not affordable then actionText = "NEED " .. number(item.price - coinsHave) .. " MORE COINS"
-	else actionText = item.currency == "Free" and "CLAIM FREE" or self:_itemPrice(item) end
-	local canAct = not self.pendingId and (canUnequip or (owned and catalog.IsEquippable(item.category) and equipped[item.category] ~= item.id)
-		or (not owned and ready and configured and affordable and item.currency ~= "Milestone"))
+	local act = self:_itemAction(item)
+	local actionText, canAct, affordable = act.text, act.can, act.affordable
 	-- Owned emotes can be played right away (lobby and results screen only).
 	if owned and item.category == "emotes" then
 		order += 1
@@ -1266,25 +1522,24 @@ function UIController:_renderItemDetail(parent, item, horizontal)
 			BackgroundColor3 = playable and C.blue or C.card, TextColor3 = playable and C.text or C.muted})
 	end
 	order += 1
-	button(info, actionText, function()
-		if not canAct then
-			if not ready and not owned then self:Toast("This item is not available yet.")
-			elseif not configured and not owned then self:Toast("This item is not on sale yet.")
-			elseif item.currency == "Coins" and not owned and not affordable then self:Toast("Play rounds and collect coins to afford this.") end
-			return
-		end
-		-- Set pending before firing so an immediate profile response wins the race.
-		self.pendingId = item.id
-		if owned then self:_send("Equip", {category = item.category, id = canUnequip and "" or item.id})
-		else self:_send("Buy", {id = item.id}) end
-		self:_renderMenu()
-		task.delay(8, function()
-			if self.pendingId == item.id then
-				self.pendingId = nil
-				if self.menu == "Shop" or self.menu == "Inventory" then self:_renderMenu() end
-			end
-		end)
-	end, {Name = "ItemAction", Size = UDim2.new(1, 0, 0, 44), LayoutOrder = order, TextSize = 13, BackgroundColor3 = canAct and C.green or C.card, TextColor3 = canAct and C.ink or C.muted})
+	button(info, actionText, function() act.run() end, {Name = "ItemAction", Size = UDim2.new(1, 0, 0, 44), LayoutOrder = order, TextSize = 13, BackgroundColor3 = canAct and C.green or C.card, TextColor3 = canAct and C.ink or C.muted})
+	-- Only once a real Game Pass ID is configured does a Robux checkout exist; it never replaces the coin option.
+	if robuxOn and not owned and ready and item.currency == "Robux" then
+		order += 1
+		local waiting = self.pendingId ~= nil
+		button(info, waiting and "WAITING..." or ("BUY WITH ROBUX  ·  R$ " .. number(item.price)), function()
+			if self.pendingId then return end
+			self.pendingId = item.id
+			self:_send("Buy", {id = item.id, method = "Robux"})
+			self:_renderMenu()
+			task.delay(8, function()
+				if self.pendingId == item.id then
+					self.pendingId = nil
+					if self.menu == "Shop" or self.menu == "Inventory" then self:_renderMenu() end
+				end
+			end)
+		end, {Name = "RobuxBuy", Size = UDim2.new(1, 0, 0, 36), LayoutOrder = order, TextSize = 12, BackgroundColor3 = waiting and C.card or C.amber, TextColor3 = waiting and C.muted or C.ink})
+	end
 end
 
 local function progressBar(parent, position, size, ratio, color)
@@ -1638,6 +1893,11 @@ function UIController:_updateObjective(state, role)
 end
 
 function UIController:_tick()
+	if self.studioActive then
+		-- Safety net: never leave the camera and controls borrowed if the avatar is gone.
+		local humanoid = self:_myHumanoid()
+		if not humanoid or humanoid.Health <= 0 then self:_exitStudio() end
+	end
 	local state = self.ctx.State
 	local now = workspace:GetServerTimeNow()
 	local remaining = math.max(0, (state.endsAt or now) - now)
@@ -1674,6 +1934,11 @@ function UIController:OnState(state)
 	local phase = state.phase or "Waiting"
 	local role = myRole(state)
 	local active = phase == "Active" or phase == "HeadStart"
+	-- The Trail Studio only runs between rounds: a round starting hands the camera and controls straight back.
+	if active and self.studioActive then
+		self:_exitStudio()
+		self:Toast("A round is starting, so the Trail Studio closed.")
+	end
 	local labels = {Waiting = "WELCOME TO THE MALL", Intermission = "NEXT CHASE STARTS IN", HeadStart = "RUNNERS GET A HEAD START", Active = "THE CHASE IS ON", Results = "NEXT UP / PODIUM"}
 	local modifier = state.modifier
 	local special = modifier and modifier.id ~= "classic" and not state.practice
@@ -1728,6 +1993,7 @@ function UIController:OnProfile(profile)
 	elseif profile.persistence == "unavailable" then self.saveLabel.Text = profile.saveMessage or "SAVING UNAVAILABLE / THIS SESSION MAY NOT PERSIST" end
 	self.saveLabel.TextColor3 = profile.persistence == "saved" and C.muted or C.amber
 	self.pendingId = nil
+	if self.studioActive then self:_renderStudioBar() end
 	local login = profile.loginStatus
 	local flagged = login ~= nil and login.canClaim == true
 	for _, name in ipairs({"Quests", "More"}) do
@@ -1772,6 +2038,7 @@ end
 
 function UIController:Destroy()
 	self.destroyed = true
+	if self.studioActive then self:_exitStudio(true) end
 	ContextActionService:UnbindAction("CatchCloseMenu")
 	ContextActionService:UnbindAction("CatchOpenMenu")
 	for _, connection in ipairs(self.connections) do connection:Disconnect() end

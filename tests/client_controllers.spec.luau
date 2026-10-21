@@ -123,7 +123,7 @@ local function fixture(viewport, inputType)
 	end
 	local player = instance.new("Player")
 	player.Name, player.DisplayName, player.UserId = "TestRunner", "Test Runner", 42
-	player.CharacterAdded, player.CharacterRemoving = signal(), signal()
+	player.CharacterAdded, player.CharacterRemoving, player.CharacterAppearanceLoaded = signal(), signal(), signal()
 	local playerGui = instance.new("PlayerGui"); playerGui.Name = "PlayerGui"; playerGui.Parent = player
 	local function character()
 		local rig = instance.new("Model")
@@ -135,6 +135,11 @@ local function fixture(viewport, inputType)
 		return rig, humanoid
 	end
 	local rig, humanoid = character(); player.Character = rig
+	-- The default PlayerModule's controls, stubbed so tests can see them switched off and on.
+	local playerScripts = instance.new("Folder"); playerScripts.Name = "PlayerScripts"; playerScripts.Parent = player
+	local playerModuleScript = instance.new("ModuleScript"); playerModuleScript.Name = "PlayerModule"; playerModuleScript.Parent = playerScripts
+	local controlState = {enabled = true, disabled = 0, enabledCalls = 0}
+	local playerControls = {Disable = function() controlState.enabled = false controlState.disabled += 1 end, Enable = function() controlState.enabled = true controlState.enabledCalls += 1 end}
 	local players = {LocalPlayer = player, list = {player}}
 	function players:GetPlayers() return self.list end
 	function players:GetPlayerByUserId(id) for _, member in ipairs(self.list) do if member.UserId == id then return member end end end
@@ -179,12 +184,13 @@ local function fixture(viewport, inputType)
 	workspace.CurrentCamera = instance.new("Camera"); workspace.CurrentCamera.CameraSubject = humanoid; workspace.CurrentCamera.Parent = workspace
 	local shared = instance.new("Folder"); shared.Name = "CatchShared"
 	local moduleScripts = {}
-	for _, name in ipairs({"Appearance", "Emotes", "Poses", "Trails", "PreviewStage"}) do
+	for _, name in ipairs({"Appearance", "Emotes", "Poses", "Trails", "PreviewStage", "PreviewScene"}) do
 		local moduleScript = instance.new("ModuleScript"); moduleScript.Name = name; moduleScript.Parent = shared
 		moduleScripts[name] = moduleScript
 	end
 	local replicated = instance.new("ReplicatedStorage"); shared.Parent = replicated
-	local previewCalls = {}
+	local sharedModules = {}
+	local previewCalls, baseCalls, warnings = {}, {}, {}
 	-- A small mannequin built from the fixture's own instances: real CFrames and joints, so previews can be posed.
 	local function fakeRig()
 		local rig = instance.new("Model")
@@ -215,26 +221,41 @@ local function fixture(viewport, inputType)
 		HasSkin = function() return true end, HasMask = function() return true end,
 		BuildPreview = function(skin, mask, extra)
 			table.insert(previewCalls, {skin = skin, mask = mask, extra = extra})
-			return fakeRig()
+			local rig = fakeRig()
+			-- The real trail objects, built from the real definitions, on a mount like the live character's.
+			local Trails = sharedModules[moduleScripts.Trails]
+			if extra and extra.trails and extra.trails ~= "" and Trails and Trails.Has(extra.trails) then
+				local folder = instance.new("Folder"); folder.Name = "CatchAppearance"; folder.Parent = rig
+				local mount = instance.new("Part"); mount.Name = "TrailMount"; mount.Size = Vector3.new(0.05, 0.05, 0.05); mount.Transparency = 1; mount.Anchored = true; mount.Parent = folder
+				Trails.Populate(mount, extra.trails, true)
+				rig:SetAttribute("CatchTrail", extra.trails)
+			end
+			return rig
+		end,
+		BuildAvatarFromCharacter = function(character)
+			table.insert(baseCalls, character)
+			local rig = fakeRig()
+			rig:SetAttribute("CatchPreviewReport", "ok")
+			return rig
 		end,
 	}
 	local services = {Players = players, TweenService = {Create = function(_, object, _, values) return {Play = function() for key, value in pairs(values) do object[key] = value end end} end},
 		RunService = runService, UserInputService = input, GuiService = guiService, ReplicatedStorage = replicated, ContextActionService = cas,
 		ContentProvider = {PreloadAsync = function(_, assets, callback) for _, asset in ipairs(assets) do callback(asset.SoundId, Enum.AssetFetchStatus.Success) end end},
 		SoundService = instance.new("SoundService"), Lighting = instance.new("Lighting"), Debris = {AddItem = function() end}, Workspace = workspace}
-	local sharedModules = {}
-	local environment = {game = {GetService = function(_, name) return assert(services[name], name) end}, workspace = workspace,
+	local environment = {warn = function(...) table.insert(warnings, table.concat({...}, " ")) end, game = {GetService = function(_, name) return assert(services[name], name) end}, workspace = workspace,
 		Instance = instance, task = {spawn = function(fn) fn() end, defer = function(fn) fn() end, delay = function() end},
 		os = {clock = function() return monotonic end},
 		require = function(module)
 			if module == moduleScripts.Appearance then return appearance end
+			if module == playerModuleScript then return {GetControls = function() return playerControls end} end
 			return assert(sharedModules[module], "Controllers may only require shared cosmetics modules")
 		end,
 		TweenInfo = {new = function() return {} end}, Random = {new = function() return {NextInteger = function(_, a, b) return math.floor((a + b) / 2) end, NextNumber = function(_, a, b) return (a + b) / 2 end} end},
 	}
 	for _, name in ipairs({"Enum", "Color3", "ColorSequence", "ColorSequenceKeypoint", "NumberSequence", "NumberSequenceKeypoint", "NumberRange", "UDim", "UDim2", "Vector2", "Vector3", "CFrame"}) do environment[name] = roblox[name] end
 	-- The real shared cosmetics modules run on the fixture's instances.
-	for _, name in ipairs({"Trails", "Poses", "Emotes", "PreviewStage"}) do
+	for _, name in ipairs({"Trails", "Poses", "Emotes", "PreviewStage", "PreviewScene"}) do
 		local scoped = table.clone(environment)
 		scoped.script = {Parent = {WaitForChild = function(_, sibling) return moduleScripts[sibling] end}}
 		sharedModules[moduleScripts[name]] = luau.load(fs.readFile("src/shared/" .. name .. ".lua"), {environment = scoped, debugName = name})()
@@ -246,7 +267,7 @@ local function fixture(viewport, inputType)
 	local function load(name)
 		return luau.load(fs.readFile("src/client/Controllers/" .. name .. ".lua"), {environment = environment, debugName = name})().new(ctx)
 	end
-	return {load = load, player = player, humanoid = humanoid, character = character, instance = instance, players = players, workspace = workspace,
+	return {warnings = warnings, baseCalls = baseCalls, controlState = controlState, load = load, player = player, humanoid = humanoid, character = character, instance = instance, players = players, workspace = workspace,
 		ctx = ctx, cas = cas, input = input, guiService = guiService, actions = actions, previewCalls = previewCalls, services = services,
 		advance = function(seconds) monotonic += seconds end, renderCallbacks = renderCallbacks}
 end
@@ -336,7 +357,8 @@ do
 	ui.pendingId = nil; ui:CloseMenu(); ui.selectedItem = "mask_phantom"; ui:OpenMenu("Shop")
 	action = ui.panelContent:FindFirstChild("ItemAction", true)
 	local count = #f.actions; action.Activated:Fire()
-	expect(#f.actions == count and action.Text == "COMING SOON", "Unconfigured game pass must not send a purchase")
+	expect(#f.actions == count and action.Text:find("NEED"), "A premium item you cannot afford sends nothing and says how many coins are missing")
+	expect(ui.panelContent:FindFirstChild("RobuxBuy", true) == nil, "No Robux checkout exists while the pass is unconfigured")
 end
 
 -- Coin purchases must wait for ownership; a prompt or local preview never grants it.
@@ -605,6 +627,197 @@ for _, size in ipairs({Vector2.new(1280, 720), Vector2.new(390, 760), Vector2.ne
 	expect(ui.inspect == nil and ui.inspectStage == nil, "Switching menus closes inspection at " .. where)
 end
 
+-- Previews show the player's own assembled avatar: cloned from the live character first, refreshed when it changes.
+do
+	local f = fixture(Vector2.new(1280, 720))
+	local ui = f.load("UIController"); ui:Start()
+	expect(#f.baseCalls == 1 and f.baseCalls[1] == f.player.Character and ui.avatarBase ~= nil, "The preview base is a clone of the player's live character")
+	ui:OpenMenu("Shop"); ui:CloseMenu(); ui:OpenMenu("Inventory"); ui:CloseMenu()
+	expect(#f.baseCalls == 1, "Opening menus does not rebuild an unchanged avatar")
+	local accessory = f.instance.new("Accessory"); accessory.Name = "LateHair"; accessory.Parent = f.player.Character
+	ui:OpenMenu("Shop"); ui:CloseMenu()
+	expect(#f.baseCalls == 2, "An accessory that arrived late (hair, hats) rebuilds the base so previews are never missing it")
+	f.player.CharacterAppearanceLoaded:Fire(f.player.Character)
+	expect(#f.baseCalls == 3, "Roblox finishing the avatar's appearance refreshes the base")
+	local respawn = f.character(); respawn.Parent = f.workspace
+	f.player.Character = respawn
+	ui:OpenMenu("Shop"); ui:CloseMenu()
+	expect(#f.baseCalls == 4 and f.baseCalls[4] == respawn, "A respawned avatar becomes the new base")
+	ui:Destroy()
+end
+
+-- A base that failed its audit is reported in Output, and a preview that cannot pose falls back to the mannequin.
+do
+	local f = fixture(Vector2.new(1280, 720))
+	local ui = f.load("UIController"); ui:Start()
+	ui.avatarBase:SetAttribute("CatchPreviewReport", "Hair is 3.0 studs off its attachment and was hidden")
+	local mannequinBuilds = 0
+	ui:_adoptBase(ui.avatarBase, f.player.Character, 0)
+	expect(f.warnings[#f.warnings] and f.warnings[#f.warnings]:find("Hair is 3.0 studs"), "A hidden detached accessory is reported once in Output")
+	local count = #f.warnings
+	ui:_adoptBase(ui.avatarBase, f.player.Character, 0)
+	expect(#f.warnings == count, "The same report is not repeated")
+	-- A base with no joints cannot be posed: the stage reports it and the Shop switches to the mannequin.
+	local brokenBase = f.instance.new("Model")
+	local root = f.instance.new("Part"); root.Name = "HumanoidRootPart"; root.Size = Vector3.new(2, 2, 1); root.Transparency = 0; root.Parent = brokenBase
+	local hand = f.instance.new("Part"); hand.Name = "RightHand"; hand.Size = Vector3.new(1, 0.3, 1); hand.Transparency = 0; hand.Parent = brokenBase
+	local appearance = f.services.ReplicatedStorage.CatchShared.Appearance
+	local calls = {}
+	ui.avatarBase = brokenBase
+	local real = ui.Appearance.BuildPreview
+	ui.Appearance.BuildPreview = function(skin, mask, extra, identity, base)
+		table.insert(calls, base ~= nil)
+		if base then return brokenBase end
+		return real(skin, mask, extra, identity, base)
+	end
+	ui.category, ui.selectedItem = "emotes", "emote_dance"; ui:OpenMenu("Shop")
+	local retried = false
+	for _, usedBase in ipairs(calls) do if usedBase == false then retried = true end end
+	expect(retried, "A preview that cannot pose retries with the mannequin")
+	expect(ui.stage and not ui.stage.problem, "The retried preview is healthy")
+	expect(f.warnings[#f.warnings]:find("showing the mannequin"), "The fallback is reported in Output")
+	local arm = ui.previewModel.RightLowerArm.CFrame
+	for _ = 1, 20 do f.services.RunService.Heartbeat:Fire(1 / 30) end
+	expect(ui.previewModel.RightLowerArm.CFrame ~= arm, "The fallback preview animates")
+end
+
+-- Trail Studio: the REAL trail on a running avatar, in an isolated scene, with controls handed back every way out.
+local function studioFixture(size)
+	local f = fixture(size or Vector2.new(1280, 720))
+	f.player.Character.Parent = f.workspace
+	local ui = f.load("UIController"); ui:Start()
+	ui.category, ui.selectedItem = "trails", "trail_stardust"
+	ui:OpenMenu("Shop")
+	return f, ui
+end
+for _, size in ipairs({Vector2.new(1280, 720), Vector2.new(390, 760), Vector2.new(844, 350)}) do
+	local f, ui = studioFixture(size)
+	local where = tostring(size)
+	local camera = f.workspace.CurrentCamera
+	expect(find(ui, "PreviewStudio") ~= nil and find(ui, "PreviewStudio").Text == "TEST RUN", "Trails offer a TEST RUN button at " .. where)
+	find(ui, "PreviewStudio").Activated:Fire()
+	expect(ui.studioActive and not ui.panel.Visible, "The studio replaces the panel at " .. where)
+	expect(camera.CameraType == Enum.CameraType.Scriptable and f.controlState.disabled == 1 and not f.controlState.enabled, "The studio borrows the camera and switches steering off at " .. where)
+	local scene = f.workspace:FindFirstChild("CatchTrailStudio")
+	expect(scene ~= nil and scene:FindFirstChild("Ground") and scene:FindFirstChild("Pennant14"), "An isolated stage is built in the workspace at " .. where)
+	expect(scene:FindFirstChild("Ground").CFrame.Position.Y > 3000, "The stage is far above the mall at " .. where)
+	local stage = ui.studioStage
+	expect(stage and stage.kind == "trail" and stage.realEffects and stage.emulator == nil and stage.id == "trail_stardust", "The studio plays the real effect, not the emulation, at " .. where)
+	local trailCount, emitterCount = 0, 0
+	for _, item in ipairs(ui.studioRig:GetDescendants()) do
+		if item.ClassName == "Trail" then trailCount += 1 elseif item.ClassName == "ParticleEmitter" then emitterCount += 1 end
+	end
+	expect(trailCount == 1 and emitterCount == 2, "The avatar wears the actual Trail and ParticleEmitter objects at " .. where)
+	expect(ui.studioRig.Parent == scene, "The avatar runs inside the isolated stage")
+	-- It is a running lap well above the mall, with the camera on it.
+	for _ = 1, 90 do f.services.RunService.Heartbeat:Fire(1 / 30) end
+	local at = stage.runnerFrame.Position
+	expect(at.Y > 4000 - 1 and math.abs(at.X) <= 3.2 and math.abs(at.Z) <= 3.2, "The avatar laps the stage track at " .. where)
+	expect((camera.CFrame.Position - stage.focus).Magnitude > 6 and (camera.CFrame.Position.Y > 4000), "The camera frames the stage at " .. where)
+	expect(stage.problem == nil, "The studio avatar passes its self-test at " .. where)
+	-- Controls on screen and inside the space left of the dock.
+	local bar = ui.studioBar
+	expect(bar and bar.Position.X.Offset + bar.Size.X.Offset / 2 <= size.X - ui.rightMargin + 1 and bar.Size.X.Offset <= size.X, "The studio bar leaves the Shop and Locker dock clickable at " .. where)
+	for _, name in ipairs({"StudioPrev", "StudioReplay", "StudioNext", "StudioAction", "StudioBack", "StudioRotateLeft", "StudioRotateRight"}) do
+		expect(bar:FindFirstChild(name, true) ~= nil, name .. " exists at " .. where)
+	end
+	expect(bar:FindFirstChild("StudioName", true).Text == "Cosmic Stardust", "The studio names the trail at " .. where)
+	-- Replay restarts the lap; rotating turns the camera; PREV/NEXT browse trails with real effects.
+	local replays = stage.replays
+	bar:FindFirstChild("StudioReplay", true).Activated:Fire()
+	expect(ui.studioStage.replays == replays + 1 and ui.studioStage.time == 0, "REPLAY restarts the real demonstration at " .. where)
+	local angle = stage.targetAngle
+	bar:FindFirstChild("StudioRotateRight", true).Activated:Fire()
+	expect(math.abs(stage.targetAngle - angle - math.pi / 4) < 1e-6, "Rotate turns the studio camera at " .. where)
+	local before = ui.studioId
+	bar:FindFirstChild("StudioNext", true).Activated:Fire()
+	expect(ui.studioId ~= before and ui.studioStage.id == ui.studioId and ui.studioStage ~= stage, "NEXT shows the next trail with its own real effect at " .. where)
+	expect(ui.studioRig.Parent == scene and f.workspace:FindFirstChild("CatchTrailStudio") == scene, "Browsing reuses the same stage at " .. where)
+	local seen = {}
+	for _ = 1, 10 do
+		seen[ui.studioId] = true
+		bar = ui.studioBar
+		bar:FindFirstChild("StudioNext", true).Activated:Fire()
+	end
+	local trails = 0
+	for _ in pairs(seen) do trails += 1 end
+	expect(trails == 10, "NEXT visits every one of the ten trails at " .. where)
+	bar = ui.studioBar
+	bar:FindFirstChild("StudioPrev", true).Activated:Fire()
+	-- BACK restores everything.
+	ui.studioBar:FindFirstChild("StudioBack", true).Activated:Fire()
+	expect(not ui.studioActive and ui.panel.Visible and ui.studioBar == nil and ui.studioStage == nil and ui.studioRig == nil, "BACK returns to the Shop at " .. where)
+	expect(camera.CameraType == Enum.CameraType.Custom and f.controlState.enabled and f.workspace:FindFirstChild("CatchTrailStudio") == nil, "BACK hands the camera and controls back and removes the stage at " .. where)
+end
+
+do
+	-- Buying from inside the studio uses the same server path as the Shop.
+	local f, ui = studioFixture()
+	f.ctx.Profile.coins = 6000
+	ui:OnProfile(f.ctx.Profile)
+	find(ui, "PreviewStudio").Activated:Fire()
+	local action = ui.studioBar:FindFirstChild("StudioAction", true)
+	expect(action.Text == "BUY  ·  5,000 COINS", "The studio offers the coin purchase")
+	action.Activated:Fire()
+	expect(f.actions[#f.actions].action == "Buy" and f.actions[#f.actions].payload.id == "trail_stardust" and f.actions[#f.actions].payload.method == "Coins", "The studio buys through the validated Buy action")
+	f.ctx.Profile.owned.trail_stardust = true
+	ui:OnProfile(f.ctx.Profile)
+	expect(ui.studioBar:FindFirstChild("StudioAction", true).Text == "EQUIP", "After the server confirms, the studio offers EQUIP")
+	ui.studioBar:FindFirstChild("StudioAction", true).Activated:Fire()
+	expect(f.actions[#f.actions].action == "Equip" and f.actions[#f.actions].payload.id == "trail_stardust", "EQUIP uses the validated equip action")
+	-- Every way out hands control back.
+	ui:CloseMenu()
+	expect(not ui.studioActive and f.controlState.enabled and f.workspace.CurrentCamera.CameraType == Enum.CameraType.Custom, "Closing the menu leaves the studio")
+end
+
+do
+	local f, ui = studioFixture()
+	find(ui, "PreviewStudio").Activated:Fire()
+	f.ctx.State = {phase = "HeadStart", roundId = 5, endsAt = 120, players = {{userId = 42, role = "Runner", alive = true}}}
+	ui:OnState(f.ctx.State)
+	expect(not ui.studioActive and f.controlState.enabled and f.workspace.CurrentCamera.CameraType == Enum.CameraType.Custom, "A round starting closes the studio and returns control immediately")
+	expect(ui.panel.Visible, "The Shop is still there, as the drawer, after the studio closes")
+	find(ui, "PreviewStudio").Activated:Fire()
+	expect(not ui.studioActive and f.workspace:FindFirstChild("CatchTrailStudio") == nil, "The studio refuses to open mid-round")
+	f.ctx.State = {phase = "Waiting", roundId = 0, players = {}}
+	ui:OnState(f.ctx.State)
+end
+
+do
+	local f, ui = studioFixture()
+	find(ui, "PreviewStudio").Activated:Fire()
+	f.humanoid.Health = 0
+	ui:_tick()
+	expect(not ui.studioActive and f.controlState.enabled, "A fallen avatar leaves the studio")
+	f.humanoid.Health = 100
+	-- Tapping Shop inside the studio goes back to the Shop; tapping Locker switches menus.
+	find(ui, "PreviewStudio").Activated:Fire()
+	ui:OpenMenu("Shop")
+	expect(not ui.studioActive and ui.menu == "Shop" and ui.panel.Visible, "Tapping SHOP in the studio returns to the Shop")
+	find(ui, "PreviewStudio").Activated:Fire()
+	ui:OpenMenu("Inventory")
+	expect(not ui.studioActive and ui.menu == "Inventory" and f.controlState.enabled, "Tapping LOCKER in the studio opens the Locker")
+	-- If steering cannot be switched off, the studio never opens (the player must not steer blind).
+	ui:CloseMenu()
+	f.controlState.enabled = true
+	ui.controlsProvider = {Disable = function() error("controls unavailable") end, Enable = function() end}
+	ui.scene = nil
+	ui.category, ui.selectedItem = "trails", "trail_cyan"; ui:OpenMenu("Shop")
+	local camera = f.workspace.CurrentCamera
+	local type = camera.CameraType
+	find(ui, "PreviewStudio").Activated:Fire()
+	expect(not ui.studioActive and camera.CameraType == type and ui.panel.Visible, "A device that cannot disable controls never loses its camera")
+	ui:Destroy()
+	expect(f.workspace:FindFirstChild("CatchTrailStudio") == nil, "Nothing is left behind")
+end
+
+do
+	local f, ui = studioFixture()
+	find(ui, "PreviewStudio").Activated:Fire()
+	ui:Destroy()
+	expect(f.controlState.enabled and f.workspace.CurrentCamera.CameraType == Enum.CameraType.Custom and f.workspace:FindFirstChild("CatchTrailStudio") == nil, "Destroying the interface mid-studio restores the camera, controls and world")
+end
+
 -- CosmeticsController: emotes announced by attributes play on every character; footprints; particle level of detail.
 do
 	local f = fixture(Vector2.new(1280, 720))
@@ -743,16 +956,30 @@ do
 	expect(#f.actions == count, "An unaffordable purchase sends nothing")
 	f.ctx.Profile.coins = 5000; ui:OnProfile(f.ctx.Profile)
 	action = open("skins", "skin_streetwear")
-	expect(action.Text == "1,800 COINS", "An affordable purchase shows its coin price")
+	expect(action.Text == "BUY  ·  1,800 COINS", "An affordable purchase shows its coin price")
 	action, price = open("skins", "skin_galaxy")
-	expect(action.Text == "COMING SOON" and price.Text:find("Planned price R%$ 699") and price.Text:find("not on sale"), "Unconfigured Robux items are honest: no price prompt, no purchase")
-	expect(find(ui, "Item_skin_galaxy"):FindFirstChild("Status", true).Text == "COMING SOON", "Unconfigured Robux cards say coming soon")
+	expect(action.Text == "NEED 2,500 MORE COINS" and price.Text:find("7,500 coins") and not price.Text:find("R%$"), "A premium item shows its coin price and no Robux price while checkout is unconfigured")
+	expect(find(ui, "Item_skin_galaxy"):FindFirstChild("Status", true).Text == "🪙 7,500", "Premium cards show the coin price")
+	expect(find(ui, "RobuxBuy") == nil, "No Robux button without a pass ID")
 	count = #f.actions; action.Activated:Fire()
-	expect(#f.actions == count, "An unconfigured Robux item never sends a purchase")
+	expect(#f.actions == count, "An unaffordable premium item sends nothing")
+	f.ctx.Profile.coins = 8000; ui:OnProfile(f.ctx.Profile)
+	action = open("skins", "skin_galaxy")
+	expect(action.Text == "BUY  ·  7,500 COINS", "A premium item is buyable with coins today")
+	action.Activated:Fire()
+	expect(f.actions[#f.actions].action == "Buy" and f.actions[#f.actions].payload.id == "skin_galaxy" and f.actions[#f.actions].payload.method == "Coins", "The coin purchase names its method so the server never guesses")
+	ui.pendingId = nil
 	Catalog.Get("skin_galaxy").gamePassId = 4242
 	action, price = open("skins", "skin_galaxy")
-	expect(action.Text == "VIEW ROBUX PRICE" and price.Text == "R$ 699 on Roblox", "A configured pass shows the Robux price")
+	expect(price.Text:find("7,500 coins") and price.Text:find("R%$ 699"), "A configured pass adds the Robux price beside the coin price")
+	expect(find(ui, "Item_skin_galaxy"):FindFirstChild("Status", true).Text:find("R%$ 699"), "The card shows both prices")
+	local robux = find(ui, "RobuxBuy")
+	expect(robux and robux.Text:find("R%$ 699"), "A configured pass adds a separate Robux button")
+	robux.Activated:Fire()
+	expect(f.actions[#f.actions].payload.method == "Robux", "The Robux button asks for the Robux checkout")
+	ui.pendingId = nil
 	Catalog.Get("skin_galaxy").gamePassId = 0
+	f.ctx.Profile.coins = 5000; ui:OnProfile(f.ctx.Profile)
 	f.ctx.Profile.owned.skin_bunny = true
 	action, price = open("skins", "skin_bunny")
 	expect(action.Text == "EQUIP" and price.Text == "In your collection", "An owned item can be equipped")
@@ -1165,18 +1392,16 @@ do
 	local f = fixture(Vector2.new(1280, 720))
 	f.ctx.Profile.settings.tutorialDone = true
 	local ui = f.load("UIController"); ui:Start(); ui:OpenMenu("Shop")
-	local tab = ui.panelContent:FindFirstChild("Category_coins", true)
-	expect(tab ~= nil, "The shop offers a coins tab")
-	tab.Activated:Fire()
-	expect(ui.category == "coins" and ui.panelContent:FindFirstChild("Pack_coins_bag", true), "The coins tab lists the packs")
-	local buy = ui.panelContent:FindFirstChild("BuyPack_coins_bag", true)
-	expect(buy.Text == "COMING SOON", "Unconfigured packs say so")
-	local count = #f.actions; buy.Activated:Fire()
-	expect(#f.actions == count, "An unconfigured pack never contacts the server")
+	expect(ui.panelContent:FindFirstChild("Category_coins", true) == nil, "No coins tab (and no dead buy button) while no Developer Product is configured")
 	local pack = Catalog.Products[2]
 	pack.productId = 4242
 	ui:_renderMenu()
-	buy = ui.panelContent:FindFirstChild("BuyPack_coins_bag", true)
+	local tab = ui.panelContent:FindFirstChild("Category_coins", true)
+	expect(tab ~= nil, "The shop offers a coins tab once a pack is configured")
+	tab.Activated:Fire()
+	expect(ui.category == "coins" and ui.panelContent:FindFirstChild("Pack_coins_bag", true), "The coins tab lists the configured pack")
+	expect(not ui.panelContent:FindFirstChild("Pack_coins_pocket", true), "Unconfigured packs are not listed")
+	local buy = ui.panelContent:FindFirstChild("BuyPack_coins_bag", true)
 	expect(string.find(buy.Text, "R$ 99", 1, true), "Configured packs show their Robux price")
 	buy.Activated:Fire()
 	pack.productId = 0

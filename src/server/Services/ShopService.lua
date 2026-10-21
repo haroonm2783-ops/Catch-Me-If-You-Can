@@ -51,7 +51,8 @@ function ShopService:_Verify(player, passId, afterPurchase)
 	return false, successfulQuery and "not_owned" or "unavailable"
 end
 
-function ShopService:Purchase(player, id)
+-- method: "Coins" or "Robux" (optional). With no method, a configured Robux pass uses Robux, otherwise coins.
+function ShopService:Purchase(player, id, method)
 	local data = self.ctx.Services.DataService
 	if not data:Ready(player) then self:_Notice(player, "Your profile is still loading."); return false end
 	local item = type(id) == "string" and self.ctx.Catalog.Get(id)
@@ -81,8 +82,19 @@ function ShopService:Purchase(player, id)
 		self:_Notice(player, "This item is unavailable.")
 		return false
 	end
+	-- Premium items: coins always work (when priced); Robux checkout only exists once a real Game Pass ID is configured.
+	local coinPrice = self.ctx.Catalog.CoinPrice(item)
+	if method == "Coins" or (not validPass(item.gamePassId) and method ~= "Robux") then
+		if not coinPrice then
+			self:_Notice(player, "This item cannot be bought with coins.")
+			return false
+		end
+		local ok, message = data:_PurchaseWithCoins(player, id)
+		self:_Notice(player, message, ok)
+		return ok
+	end
 	if not validPass(item.gamePassId) then
-		self:_Notice(player, "This Robux cosmetic is not configured for sale yet.")
+		self:_Notice(player, "Robux checkout is not set up for this item. Use coins instead.")
 		return false
 	end
 	if self.busy[player] or self.pending[player] then self:_Notice(player, "Finish your current purchase first."); return false end

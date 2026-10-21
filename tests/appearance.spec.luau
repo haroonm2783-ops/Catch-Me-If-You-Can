@@ -293,6 +293,86 @@ roblox.implementMethod("Model","PivotTo",function(rig, destination)
 		if part:IsA("BasePart") then part.CFrame = delta*part.CFrame end
 	end
 end)
+-- Detached accessories: a model that was never simulated has accessory handles wherever they were created (hair
+-- floating beside the head). Solving the joints puts every handle where its weld says; the audit hides what cannot be placed.
+do
+	local CF, V3 = roblox.CFrame, roblox.Vector3
+	local function accessory(rig, name, kind, partName, c0, c1, size, created)
+		local acc = roblox.Instance.new("Accessory")
+		acc.Name, acc.AccessoryType = name, kind
+		local handle = roblox.Instance.new("Part")
+		handle.Name, handle.Size, handle.CFrame, handle.Parent = "Handle", size, created, acc
+		local weld = roblox.Instance.new("Weld")
+		weld.Name, weld.Part0, weld.Part1, weld.C0, weld.C1, weld.Parent = "AccessoryWeld", rig[partName], handle, c0, c1, handle
+		acc.Parent = rig
+		return acc, handle
+	end
+	local function liveAvatar()
+		local rig = Appearance.BuildMannequin({userId = 5})
+		rig.Name = "LiveAvatar"
+		local hairAcc, hair = accessory(rig, "Hair", roblox.Enum.AccessoryType.Hair, "Head", CF.new(0, 0.6, 0), CF.new(0, -0.3, 0), V3.new(1.3, 0.8, 1.3), CF.new(5, 0, 3))
+		local _, hat = accessory(rig, "Cap", roblox.Enum.AccessoryType.Hat, "Head", CF.new(0, 0.5, 0), CF.new(0, 0, 0), V3.new(1.2, 0.5, 1.2), CF.new(-4, 8, 0))
+		local _, backpack = accessory(rig, "Pack", roblox.Enum.AccessoryType.Back, "UpperTorso", CF.new(0, 0, 0.5), CF.new(0, 0, -0.5), V3.new(1.2, 1.6, 0.6), CF.new(0, -6, 0))
+		return rig, hair, hat, backpack
+	end
+	local rig, hair, hat, backpack = liveAvatar()
+	rig:SetAttribute("CatchPreview", nil)
+	local expectedHair = rig.Head.CFrame * CF.new(0, 0.6, 0) * CF.new(0, -0.3, 0):Inverse()
+	expect((hair.CFrame.Position - expectedHair.Position).Magnitude > 4, "Before solving, the hair really is detached (the bug)")
+	local solved = Appearance.SolveRig(rig)
+	expect(solved >= 18, "Every joint and accessory weld is solved")
+	expect((hair.CFrame.Position - expectedHair.Position).Magnitude < 1e-3, "After solving, the hair sits on the head")
+	local expectedHat = rig.Head.CFrame * CF.new(0, 0.5, 0)
+	expect((hat.CFrame.Position - expectedHat.Position).Magnitude < 1e-3, "A hat sits on the head")
+	expect((backpack.CFrame.Position - (rig.UpperTorso.CFrame * CF.new(0, 0, 0.5) * CF.new(0, 0, -0.5):Inverse()).Position).Magnitude < 1e-3, "A back item sits on the back")
+	expect(#Appearance.AuditRig(rig) == 0, "A correctly welded avatar passes the audit")
+	-- A handle whose weld is missing cannot be placed: hidden, reported, never shown floating.
+	local orphanAcc = roblox.Instance.new("Accessory")
+	orphanAcc.Name, orphanAcc.AccessoryType, orphanAcc.Parent = "Orphan", roblox.Enum.AccessoryType.Hair, rig
+	local orphan = roblox.Instance.new("Part")
+	orphan.Name, orphan.CFrame, orphan.Parent = "Handle", CF.new(40, 0, 0), orphanAcc
+	local problems = Appearance.AuditRig(rig)
+	expect(#problems == 1 and problems[1]:find("Orphan") and orphan.Transparency == 1 and orphan:GetAttribute("CatchOriginalTransparency") == 0, "An unplaceable accessory is hidden and reported")
+	-- A drifted weld is caught too.
+	orphanAcc:Destroy()
+	hair.CFrame = hair.CFrame * CF.new(3, 0, 0)
+	problems = Appearance.AuditRig(rig)
+	expect(#problems == 1 and problems[1]:find("Hair") and hair.Transparency == 1, "A drifted accessory is hidden instead of floating")
+	rig:Destroy()
+
+	-- From the live character: costume leftovers removed, hair restored, everything solved, anchored and at the origin.
+	local live, liveHair = liveAvatar()
+	live.Parent = roblox.Instance.new("Folder")
+	Appearance.Apply(live, "skin_dragon", "mask_street", {})
+	for _, part in ipairs(live:GetChildren()) do if part:IsA("BasePart") then part.Anchored = false end end
+	live.HumanoidRootPart.CFrame = CF.new(30, 5, -12)
+	local handleBefore = liveHair.Transparency
+	local base = Appearance.BuildAvatarFromCharacter(live)
+	expect(base ~= nil and base ~= live and base.Name == "CatchAvatarBase", "A clone of the live character becomes the showroom base")
+	expect(base:FindFirstChild("CatchAppearance") == nil and base:FindFirstChild("CatchRoleAppearance") == nil, "The live costume is stripped from the base")
+	expect(live:FindFirstChild("CatchAppearance") ~= nil and liveHair.Transparency == 1, "The live character is untouched")
+	local baseHair = base.Hair.Handle
+	expect(baseHair.Transparency == 0, "The player's own hair, hidden under a worn costume, is restored on the base")
+	expect((baseHair.CFrame.Position - (base.Head.CFrame * CF.new(0, 0.6, 0) * CF.new(0, -0.3, 0):Inverse()).Position).Magnitude < 1e-3, "The cloned hair sits on the cloned head")
+	expect(base.HumanoidRootPart.CFrame.Position.Magnitude < 1e-3 and base:GetAttribute("CatchPreviewReport") == "ok", "The base is at the origin and audited clean")
+	for _, part in ipairs(base:GetDescendants()) do
+		if part:IsA("BasePart") then expect(part.Anchored, "Every base part is anchored: " .. part.Name) end
+	end
+	-- Wearing a costume on the base: the hair is hidden for outfit skins, shown for Original You, and follows poses.
+	local original = Appearance.BuildPreview("skin_courier", "", {}, {userId = 5}, base)
+	expect(original.Hair.Handle.Transparency == 0, "Original You shows the player's own hair in the preview")
+	local pv = Poses.Preview(original)
+	local relative = original.Head.CFrame:ToObjectSpace(original.Hair.Handle.CFrame)
+	pv:Set(Emotes.Sample("emote_flip", 0.7, true), CF.new(2, 3, 1))
+	expect((original.Head.CFrame:ToObjectSpace(original.Hair.Handle.CFrame).Position - relative.Position).Magnitude < 1e-3, "The hair stays on the head through a backflip")
+	pv:Set(Emotes.Sample("emote_drama", 2.5, true), CF.new())
+	expect((original.Head.CFrame:ToObjectSpace(original.Hair.Handle.CFrame).Position - relative.Position).Magnitude < 1e-3, "The hair stays on the head while fainting")
+	local costume = Appearance.BuildPreview("skin_dragon", "mask_smile", {}, {userId = 5}, base)
+	expect(costume.Hair.Handle.Transparency == 1 and costume.Pack.Handle.Transparency == 1, "Costumes hide the player's hair and back item so nothing clips")
+	original:Destroy() costume:Destroy() live:Destroy() base:Destroy()
+	expect(Appearance.BuildAvatarFromCharacter(nil) == nil and Appearance.BuildAvatarFromCharacter(roblox.Instance.new("Model")) == nil, "Incomplete characters yield no base")
+end
+
 local function signal()
 	local listeners = {}
 	return {
