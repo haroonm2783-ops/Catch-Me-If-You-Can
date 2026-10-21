@@ -246,6 +246,13 @@ function DataService:Ready(player)
 	return record ~= nil and record.loaded and record.accepting and not self.closing
 end
 
+-- True when what the player earns or buys now will really be written: a normal saved profile, or an intentional
+-- Studio session. Real-money purchases must not be taken while this is false.
+function DataService:CanSave(player)
+	local record = self.records[player]
+	return record ~= nil and record.loaded and (self.sessionOnly or record.writable == true)
+end
+
 function DataService:Snapshot(player)
 	local record = self.records[player]
 	if not record or not record.loaded then return { loaded = false, persistence = "unavailable", saveMessage = "Loading profile…" } end
@@ -368,6 +375,8 @@ end
 -- balance is durable (or the server is intentionally session-only, as in Studio).
 function DataService:GrantProductCoins(player, purchaseId, coins)
 	if not self:Ready(player) then return false, "not_ready" end
+	-- A session that cannot save would show coins that vanish; leave the receipt unprocessed so Roblox re-sends it.
+	if not self:CanSave(player) then return false, "not_writable" end
 	if type(purchaseId) ~= "string" or #purchaseId == 0 or #purchaseId > 100 then return false, "invalid" end
 	coins = number(coins, 0, MAX_COUNTER)
 	if coins <= 0 then return false, "invalid" end

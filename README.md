@@ -55,7 +55,7 @@ need two or more real players.
 2. In Roblox Studio, choose **File → Open from File** and select the downloaded
    place. Catch Mall is already present in the editor; it is not an empty place
    that requires pasting scripts. The map is reused at runtime.
-3. Press **Play**. Output should say `CATCH MALL initialized. 0.6.0`; if it
+3. Press **Play**. Output should say `CATCH MALL initialized. 0.7.0`; if it
    shows an older version, download and open the updated file. A solo Studio
    session enters a clearly labeled practice round
    after the 16-second intermission and 5-second head start. Practice awards no

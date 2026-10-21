@@ -1,35 +1,45 @@
 # Cosmetics and Robux setup
 
-The shop, locker, previews, coin purchases, equipment, and server-side pass checks
-are implemented. **Real Roblox purchases have not been tested.** Every Robux item
-currently has `gamePassId = 0`, so its purchase button says **NOT CONFIGURED** and
-cannot open a paid prompt. No fake product IDs are supplied.
+**Status:** the Shop, Locker, coin purchases, equipment, server-side pass checks and the coin-pack receipt handler are
+implemented and covered by mocked tests. **Real Roblox purchases have never been tested** (no Studio in the build
+environment). No product IDs exist in the repository: every `gamePassId` and `productId` is `0`, and I will not invent them.
 
-## Activate passes
+## What players can do today (before you configure anything)
 
-1. Open the generated place in Roblox Studio and publish it to the intended
-   experience. Use a private test experience first.
-2. In [Creator Dashboard](https://create.roblox.com/dashboard/creations), select
-   that experience, then **Monetization → Passes → Create a Pass**. Create a pass
-   for each collection or cosmetic you want to sell. Use artwork you own and a
-   description that accurately lists the cosmetic entitlement.
-3. Open each pass's sales settings, enable sale, and set the desired Robux price.
-   Copy its **pass ID**, not the experience ID, place ID, asset image ID, or a
-   developer product ID. Dashboard navigation labels can change.
-4. Replace the corresponding `gamePassId = 0` in
-   [`src/shared/Catalog.lua`](../src/shared/Catalog.lua). Use a distinct pass per
-   item unless you deliberately want one pass to grant multiple catalog entries.
-5. Run `./tools/check.sh` and `./tools/build.sh`, then open and publish the rebuilt
-   `dist/CatchMeIfYouCan.rbxl` or `dist/CatchMeIfYouCan.rbxlx`. Ensure published
-   servers use this version before testing purchases.
-6. Follow the real-service checks below. Keep the experience private until the
-   entitlement, saving, and cancellation cases pass.
+- **Every cosmetic is obtainable and equippable now.** Premium (Robux-tier) items show a coin price (`coinPrice`) and
+  are bought with earned coins. Nothing says "coming soon".
+- **No Robux prompt can open** for an item whose pass ID is 0, and coin packs are hidden until a product ID is set.
+- Once you enter a pass ID, that item's detail panel gets a second button: **BUY WITH ROBUX** (the coin button stays).
+  Robux and coin buyers receive the identical item; nothing is gameplay-affecting.
 
-The catalog's `price` field is a design reference for Robux items; changing it
-does not change Roblox's charge. Configured shop cards say **VIEW ROBUX PRICE**.
-The Roblox purchase prompt supplies the authoritative current price, including
-any applicable regional or dynamic pricing. Do not replace this with an assumed
-fixed charge. Coin prices are enforced from the server's catalog.
+## Step by step: turn Robux sales on
+
+You can do this for one item, a few, or all 22 products. Items you skip keep working with coins.
+
+1. **Publish the place privately first.** Studio > File > Publish to Roblox (as a *private* experience while testing).
+   Passes and developer products belong to an experience, so this must happen before step 2.
+2. **Create each Game Pass.** [create.roblox.com/dashboard/creations](https://create.roblox.com/dashboard/creations) >
+   your experience > **Monetization > Passes > Create a Pass**. Upload artwork you own, name it exactly like the catalog
+   name below, and describe it as appearance-only. Save, then open the pass > **Sales** > turn **Item for Sale** on and
+   set the Robux price (the design prices below are suggestions; you set the real ones).
+3. **Copy the Pass ID** from the pass page URL (`.../passes/<ID>/...`). It is *not* the experience ID, place ID or image ID.
+4. **Create the coin packs.** Same dashboard > **Monetization > Developer Products > Create**. Name them like the
+   table at the bottom, set prices, copy each **Product ID**.
+5. **Paste the IDs** into the two tables at the very top of
+   [`src/shared/Catalog.lua`](../src/shared/Catalog.lua): `PASS_IDS` (keyed by catalog ID, e.g. `skin_golden = 1234567`)
+   and `PRODUCT_IDS` (keyed by pack ID, e.g. `coins_bag = 7654321`). **Also set that item's `price=` (and each pack's
+   `robux=`) in the same file to the exact Robux price you chose in the Dashboard**: the Shop displays the catalog
+   number, while Roblox's prompt shows the real one, and the two must match or players see two different prices.
+6. Run `./tools/check.sh` (it rebuilds `dist/Catch-Me-If-You-Can-Final.rbxl`), open that file, publish over the private
+   experience, then run the real-service checks at the bottom of this page before making the experience public.
+7. A pass is only offered for sale when its ID is a valid positive whole number *and* the item's skin/mask/trail/emote is
+   implemented (`Catalog.IsReady`). If a purchase prompt looks wrong, set that ID back to `0` and republish.
+
+Until an ID is set the catalog `price` is only a design reference and is not shown to players. Once an ID is set the Shop
+displays it, so keep it identical to the Dashboard price; the Roblox prompt is always the authoritative charge. Coin
+prices are enforced by the server from the catalog and cannot be set by a client.
+
+### The 18 Game Passes (paste each ID into `PASS_IDS`)
 
 | Catalog ID | Cosmetic entitlement | Design price (Robux) |
 | --- | --- | ---: |
@@ -56,7 +66,7 @@ Each Robux row is its own game pass (18 passes); collections are separate passes
 a piece already is fine: only the missing ownership flags are added, with no automatic refund, so say so in the pass
 description). The sale gate (`Catalog.IsReady`) means an item is never offered if its skin, mask, trail or emote is not
 implemented, and tests enforce that every collection costs less than its pieces and uses no fake-scarcity wording.
-Until a pass ID is entered, the Shop shows the item as **COMING SOON** with the planned price and sends nothing.
+Until a pass ID is entered, the item is bought with coins only and no Robux prompt can open.
 
 Free and earnable (no Robux needed): **Original You** (free), **Pizza Courier** (500 coins), **Skate Kid** (level 5),
 **Bunny Hop** (900), **Bamboo Panda** (1,200), **Street Legend** (1,800), **Candy Pop** (2,600), **Jet Runner**
@@ -99,8 +109,8 @@ tagging, or competitive advantage.
 ## Coin packs (developer products)
 
 Coins only buy cosmetics, so packs are a convenience and never a gameplay advantage.
-All four packs ship with `productId = 0`: the shop shows **COMING SOON** and nothing can
-prompt. To activate one:
+All four packs ship with `productId = 0`: the pack is hidden in the Shop and nothing can
+prompt. To activate one (this is the same as step 4-5 above):
 
 1. In Creator Dashboard, **Monetization → Developer Products → Create**. Set the Robux
    price and copy the **product ID** (not a pass or asset ID).
@@ -120,6 +130,8 @@ How it stays safe (covered by `tests/data_service.spec.luau` against mocks):
   throttles prompts. The prompt is intent only.
 - `ProcessReceipt` validates the receipt, resolves the product by ID, and credits coins
   exactly once per `PurchaseId` (stored with the profile's receipt list).
+- Packs are paused (no prompt, receipt left unprocessed) on a profile that cannot save, such as one locked by another
+  server, so a player never pays for coins that would vanish.
 - It returns `PurchaseGranted` only after the balance is saved (or, in Studio, when the
   server is intentionally session-only). A failed save returns `NotProcessedYet`, and the
   retry will not credit twice. Players who left get the receipt on their next join.

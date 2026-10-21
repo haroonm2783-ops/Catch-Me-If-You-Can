@@ -1,7 +1,7 @@
 -- Shared tunables. Prices and pass IDs live in Catalog.lua.
 local Config = {
 	GameName = "CATCH ME IF YOU CAN",
-	Version = "0.6.0",
+	Version = "0.7.0",
 	-- "Mall" (default) or "NeonHeights" (the earlier rooftop map, kept as an alternate).
 	Map = "Mall",
 	Round = {

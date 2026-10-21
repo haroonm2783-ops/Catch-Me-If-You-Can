@@ -17,10 +17,10 @@ the new slide, appearance, map decoration, or UI changes.
 
 Nothing below has been run by the authors: there is no Roblox Studio in the build environment, and the automated
 suites only prove geometry, pose math, definitions, budgets and data contracts. Open
-`dist/Catch-Me-If-You-Can-Final.rbxl`, press Play and confirm Output says `[Catch] CATCH MALL initialized. 0.6.0`
+`dist/Catch-Me-If-You-Can-Final.rbxl`, press Play and confirm Output says `[Catch] CATCH MALL initialized. 0.7.0`
 with no red errors and no `[Catch] Cosmetic ... has no implementation` warnings. To try Robux-priced items on your own avatar before real passes exist, use a Studio-only scratch change (for
 example, temporarily mark the item owned in `DataService` for your session). Do not commit fake pass IDs; the shipped
-catalog keeps every `gamePassId` at 0 so those items show COMING SOON.
+catalog keeps every `gamePassId` at 0; those items are bought with coins (give yourself coins in Studio to test).
 
 ### A. Solo checks (one Studio client)
 1. **Skins on your real avatar (R15).** Equip every skin from the Locker. For each, look at front, side and back and
@@ -52,8 +52,7 @@ catalog keeps every `gamePassId` at 0 so those items show COMING SOON.
 9. **Podium.** Win or fake a results phase: the winners' avatars wear their costumes and perform their equipped
    victory pose without the costume separating from the limbs.
 10. **Shop states.** Check card status text and the detail button for: owned, equipped, locked milestone (progress
-    shown), affordable, short of coins (exact shortfall), and every Robux item (must say COMING SOON with the planned
-    price and send nothing). Buy one coin item and one free item end to end; confirm the wallet and inventory update
+    shown), affordable, short of coins (exact shortfall), and every premium item (must show its coin price and a working coin button, no Robux button while its pass ID is 0). Buy one coin item and one free item end to end; confirm the wallet and inventory update
     once, and that nothing is charged twice if you press quickly.
 11. **Framing.** In the detail panel and full-screen inspect, confirm no model is cut off at the head or feet at any
     rotation (Dragon Racer wings, Galaxy hat, jester crown, bunny ears, flip and faint emotes) and that the model is

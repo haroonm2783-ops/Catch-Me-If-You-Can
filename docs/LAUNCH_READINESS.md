@@ -1,11 +1,20 @@
-# Launch readiness — version 0.6.0 (cosmetics and Shop overhaul, on the Sunburst art direction)
+# Launch readiness — version 0.7.0 (launch sprint)
 
-**Verdict: NOT ready to publish.** Every automated check passes, but **nothing has been run in Roblox Studio**, on a
-phone, with real players, with a real DataStore or with real Robux. The green checks prove logic, geometry, pose math
-and layout contracts with mocked Roblox boundaries; they do not prove the cosmetics *look* good, that the previews
-match the engine, or that the Shop feels right. This report deliberately does not claim 9/10 or "launch ready". Run
-[the cosmetics acceptance script](TESTING.md#060-cosmetics-acceptance-script-start-here) first, then the
-[0.5.0 script](TESTING.md#050-acceptance-script-art-direction-hub-ui).
+**Verdict: code-complete candidate, NOT verified for launch.** All ten automated suites pass, but nothing has run in Roblox
+Studio, on a phone, with real players, a real DataStore or real Robux. Complete [LAUNCH_CHECKLIST.md](LAUNCH_CHECKLIST.md)
+before making the experience public. I do not claim multiplayer, Marketplace or mobile-performance results.
+
+## 0.7.0 launch sprint, in priority order
+1. **Saving/security.** Audited remotes, rewards, purchases and persistence (rate limits, payload validation, server-side
+   prices, receipt dedupe, session leases). Fix: coin packs are paused and unprocessed receipts are left for Roblox to
+   re-send on a profile that cannot save (locked/unavailable), so nobody pays for coins that vanish (new tests).
+2. **Cosmetics.** Every skin, mask, trail, emote and collection is implemented and obtainable with coins now; Robux checkout
+   exists only for items whose pass ID you enter. Premium skins redesigned (Shadow Runner, Mall Phantom, Golden Champion
+   sunburst and more). Previews: joint/weld solving, live-avatar clone, audit with mannequin fallback, trail run on a track,
+   a real-effect "Trail Studio" stage, emotes that play at once. All of this is **unverified until you look in Studio**.
+3. **Monetization.** Step-by-step Creator Dashboard instructions and exactly where IDs go: [MONETIZATION.md](MONETIZATION.md).
+4. **Gameplay/mall/UI.** Reviewed, no logic defects found beyond the above; tuned values unchanged. Mall (24 stores, 130
+   hiding spots, 6,479 parts) and hub tests pass. Balance and feel need real playtests.
 
 ## What changed in 0.6.0 (cosmetics and the Shop; the rest of the game is unchanged)
 | Area | Before (0.5.0) | Now |

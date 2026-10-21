@@ -56,11 +56,11 @@ Studio (acceptance script step 6).
 | Epic | **Street Legend** (varsity jacket, cargo pants, sneakers, bucket hat, chain, bag, gold dust) | 1,800 coins |
 | Epic | **Jet Runner** (flight suit, steel boots and gauntlets, goggles, jet pack with flames) | win 25 rounds |
 | Epic | **Candy Pop** (peppermint outfit, cotton-candy shoulders, ice-cream hat, lollipop) | 2,600 coins |
-| Epic | **Shadow Runner** (hooded parkour kit, violet trim, wrapped shins, scarf, shadow smoke) | Robux (pass not configured) |
-| Epic | **Mall Phantom** (tailcoat, lined opera cape, top hat, white gloves, wisps) | Robux (pass not configured) |
-| Epic | **Royal Trickster** (purple-and-gold motley, ruffle, three-horned crown, belled shoes, confetti) | Robux (pass not configured) |
-| Legendary | **Galaxy Escape Artist** (star suit, 3-layer cosmic cape, planet top hat, moon clasp, stardust) | Robux (pass not configured) |
-| Legendary | **Golden Champion** (solid gold body, crown, armor, royal cape) | Robux (pass not configured) |
+| Epic | **Shadow Runner** (hooded parkour kit, violet trim, wrapped shins, scarf, shadow smoke) | 2,800 coins, or Robux once its pass is set up |
+| Epic | **Mall Phantom** (tailcoat, lined opera cape, top hat, white gloves, wisps) | 3,200 coins, or Robux once its pass is set up |
+| Epic | **Royal Trickster** (purple-and-gold motley, ruffle, three-horned crown, belled shoes, confetti) | 3,400 coins, or Robux once its pass is set up |
+| Legendary | **Galaxy Escape Artist** (star suit, 3-layer cosmic cape, planet top hat, moon clasp, stardust) | 7,500 coins, or Robux once its pass is set up |
+| Legendary | **Golden Champion** (solid gold body, crown, armor, royal cape) | 6,500 coins, or Robux once its pass is set up |
 | Legendary | **Dragon Racer** (scale armor, horns, wings, spiked tail, embers) | win 60 rounds |
 
 Premium looks are measurably more elaborate (a test compares average piece counts per tier). Epic and Legendary
@@ -96,8 +96,8 @@ dock's EMOTE button (the equipped one).
 | Superstar Club | Street Legend, Cool Shades, Speed Streaks, Food Court Shuffle | R$ 349 |
 
 A test enforces that a collection never costs more than its pieces would and that no copy uses fake scarcity.
-**All Robux items are unconfigured (`gamePassId = 0`)**: the Shop shows them as COMING SOON with the planned price and
-sends no purchase. Enter real pass IDs (see [MONETIZATION.md](MONETIZATION.md)) and set matching prices in the Creator
+**All Robux items are unconfigured (`gamePassId = 0`)**: until you enter a pass ID the item is unlocked with coins
+(`coinPrice`) and sends no Robux purchase. Enter real pass IDs (see [MONETIZATION.md](MONETIZATION.md)) and set matching prices in the Creator
 Dashboard; the Robux prices in `Catalog.lua` are design references only.
 
 ## The Shop

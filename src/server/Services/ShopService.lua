@@ -135,6 +135,10 @@ function ShopService:PurchaseProduct(player, id)
 		self:_Notice(player, "Coin packs are not configured for sale yet.")
 		return false
 	end
+	if not data:CanSave(player) then
+		self:_Notice(player, "Your progress is not saving on this server, so coin packs are paused. Rejoin and try again.")
+		return false
+	end
 	if os.clock() - (self.lastPrompt[player] or -100) < 3 then self:_Notice(player, "Please wait a moment before trying again."); return false end
 	self.lastPrompt[player] = os.clock()
 	local ok = pcall(function() MarketplaceService:PromptProductPurchase(player, product.productId) end)

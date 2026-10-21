@@ -665,6 +665,17 @@ do
 		expect(f.marketplace.ProcessReceipt(retry) == "Granted", "The retry completes once storage recovers")
 		expect(profile.coins == before + original.coins * 2, "The retry must not credit a second time")
 		expect(f.store.values.player_42.profile.coins == before + original.coins * 2, "The retried grant is durable")
+		-- A profile that cannot save (live lease on another server) must never take Robux or grant unsaved coins.
+		local locked = fixture(false)
+		locked.store.values.player_42 = { _format = "CatchMeIfYouCan.profile.v1", profile = Rules.NewProfile(), session = { id = "another_server", expiresAt = os.time() + 180 } }
+		locked.data:_Load(locked.player)
+		locked.shop:Start()
+		local lockedProfile = locked.data:Get(locked.player)
+		local lockedBefore, lockedPrompts = lockedProfile.coins, locked.marketplace.productPrompts or 0
+		expect(not locked.data:CanSave(locked.player), "A foreign lease means the profile cannot save")
+		expect(not locked.shop:PurchaseProduct(locked.player, original.id) and (locked.marketplace.productPrompts or 0) == lockedPrompts, "No coin-pack prompt on a profile that cannot save")
+		expect(locked.marketplace.ProcessReceipt({ PlayerId = 42, ProductId = 777, PurchaseId = "locked-1" }) == "NotYet" and lockedProfile.coins == lockedBefore, "A receipt on a non-saving profile is left for Roblox to re-send")
+		expect(f.data:CanSave(f.player), "A normal profile can save")
 		local snapshot = f.data:Snapshot(f.player)
 		expect(snapshot.coins == profile.coins, "The client sees the new balance")
 		-- Studio sessions are explicitly non-persistent, so a receipt there is grantable.
